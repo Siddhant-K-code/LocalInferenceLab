@@ -1,0 +1,103 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "localinferencelab"
+version = "0.1.0"
+description = "Evidence-first local inference determinism contracts and offline replay"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [{ name = "LocalInferenceLab contributors" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = []
+
+[project.scripts]
+localinferencelab = "localinferencelab.cli:main"
+
+[dependency-groups]
+dev = [
+  "build==1.3.0",
+  "mypy==1.18.2",
+  "pytest==8.4.2",
+  "pytest-cov==7.0.0",
+  "ruff==0.13.2",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/tests",
+  "/docs",
+  "/README.md",
+  "/LICENSE",
+  "/Makefile",
+  "/pyproject.toml",
+  "/uv.lock",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/localinferencelab"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers -ra"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["localinferencelab"]
+omit = ["src/localinferencelab/__main__.py"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  "C901",
+  "COM812",
+  "D203",
+  "D213",
+  "D102",
+  "D103",
+  "EM101",
+  "EM102",
+  "FBT003",
+  "INP001",
+  "PT018",
+  "PLR0912",
+  "PLR0913",
+  "PLR0915",
+  "RUF005",
+  "S105",
+  "T201",
+  "TC003",
+  "TRY003",
+  "UP040",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["PLR2004", "S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+pretty = true
+packages = ["localinferencelab"]
+mypy_path = "src"
