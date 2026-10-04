@@ -83,6 +83,7 @@ Runs are grouped into exactly one of:
 | Cohort | Meaning |
 |---|---|
 | `cold_process_model` | New process or runtime and cold model state |
+| `cold_model_warm_process` | Already-running runtime, exact model absent before request, and model absent again after `keep_alive=0` |
 | `warm_model_cold_prompt_cache` | Model resident, prompt or KV reuse disabled or empty |
 | `warm_prompt_kv_cache` | Prompt or KV state reused and identified |
 | `unsupported` | Backend cannot establish a requested cache state |
@@ -100,6 +101,12 @@ every run also binds:
 Analysis keys include all four identities plus backend, runtime, model, host, protocol, request,
 and cohort. Exact schedule order remains independently enforced.
 
+For Ollama, cold process/model is unsupported because the runner never starts or restarts the
+runtime. Warm-model/cold-prompt and warm-prompt/KV are also unsupported in the pinned version:
+prompt caching is always enabled internally and the public API cannot prove an empty or reusable KV
+identity. Only `cold_model_warm_process` is executable, and only with exact `/api/ps` absence before
+and after, `keep_alive=0`, no warm-up calls, `shift=false`, and `truncate=false`.
+
 ## Run observations
 
 A valid run binds exact request bytes and digest, raw response bytes, UTF-8 text, token IDs when
@@ -109,6 +116,35 @@ digest. Observed runs also account for one inference request and zero or one mod
 
 An invalid run carries the request digest and an error digest, but no partially trusted output.
 This permits custody without turning malformed backend output into a successful observation.
+
+Ollama does not expose a trustworthy generated-token sequence. Its deprecated `context` array is
+not projected into `token_ids`. Valid runs preserve the exact response envelope in the run.
+Malformed output or post-request identity/cache drift closes as digest-safe invalid run custody;
+the untrusted exact transport bytes remain separately preserved and action-linked. Every
+dispatched identity or generation action retains an indexed bounded response artifact, including
+empty and partial transport failures. Replay reconstructs both identity snapshots from those raw
+envelopes rather than trusting the stored projections. Native `eval_count` must be less than or
+equal to the frozen output limit; no context/token equivalence is inferred.
+
+## Ollama request and authorization protocol
+
+The backend-specific package contains one run and exactly nine ordered calls: four read-only
+identity calls, one `/api/generate`, and the same four identity calls immediately afterward. The
+request body is generated from a closed allowlist and fixes `stream=false`, `raw=true`,
+`shift=false`, `truncate=false`, an explicit `think` decision (or version-pinned omission),
+`keep_alive=0`, seed, temperature, top-p, top-k, min-p, repetition penalty, context, and output
+limit.
+
+An explicit `:local` request name blocks Ollama's remote-manifest proxy path. Runtime binary bytes,
+local manifest/config/layers, endpoint, mechanically derived canonical model name, output-root
+instance, process/model/cache/concurrency identities, `/api/show` projection, request bytes, and
+all budgets are fixed before authorization. Identity and generation require distinct one-shot
+artifacts whose nonce hashes were already committed in the declaration. Action counts, request
+bytes, and complete bounded-read allowances are reserved before their side effects; received bytes
+are recorded separately. The timeout is one monotonic absolute deadline for the complete HTTP call,
+not a renewed socket-operation timeout. Failures are never retried. Production generation is additionally
+disabled until the loopback listener process and active runner/Metal state can be mechanically
+attested.
 
 ## Equality semantics
 

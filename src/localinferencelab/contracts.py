@@ -21,6 +21,7 @@ SCHEMA_VERSION = "1.0"
 Backend: TypeAlias = Literal["mlx-lm", "llama.cpp", "ollama"]
 CacheCohort: TypeAlias = Literal[
     "cold_process_model",
+    "cold_model_warm_process",
     "warm_model_cold_prompt_cache",
     "warm_prompt_kv_cache",
     "unsupported",
@@ -760,6 +761,7 @@ class CachePreparation:
             _string(data["cache_cohort"], "cache_preparation.cache_cohort"),
             {
                 "cold_process_model",
+                "cold_model_warm_process",
                 "warm_model_cold_prompt_cache",
                 "warm_prompt_kv_cache",
                 "unsupported",
@@ -815,6 +817,11 @@ class CachePreparation:
                 "load_model",
                 "clear_prompt_cache",
             ),
+            "cold_model_warm_process": (
+                "reuse_process",
+                "load_model",
+                "clear_prompt_cache",
+            ),
             "warm_model_cold_prompt_cache": (
                 "reuse_process",
                 "reuse_model",
@@ -840,6 +847,16 @@ class CachePreparation:
             or "load_model" not in record.preparation_actions
         ):
             raise ContractError("cold process/model preparation must begin with empty cache state")
+        if record.cache_cohort == "cold_model_warm_process" and (
+            record.parent_preparation_id is not None
+            or record.warmup_request_sha256
+            or record.context_shift_count
+            or record.prompt_cache_tokens
+            or record.kv_cache_tokens
+        ):
+            raise ContractError(
+                "cold model/warm process preparation must begin without model cache"
+            )
         if record.cache_cohort == "warm_prompt_kv_cache" and (
             record.parent_preparation_id is None
             or not record.warmup_request_sha256
@@ -978,6 +995,7 @@ class RunScheduleEntry:
             _string(data["cache_cohort"], "protocol.run_schedule[].cache_cohort"),
             {
                 "cold_process_model",
+                "cold_model_warm_process",
                 "warm_model_cold_prompt_cache",
                 "warm_prompt_kv_cache",
                 "unsupported",
@@ -1110,6 +1128,7 @@ class Protocol:
                 cohort,
                 {
                     "cold_process_model",
+                    "cold_model_warm_process",
                     "warm_model_cold_prompt_cache",
                     "warm_prompt_kv_cache",
                     "unsupported",
@@ -1661,6 +1680,7 @@ class RunRecord:
             _string(data["cache_cohort"], "run_record.cache_cohort"),
             {
                 "cold_process_model",
+                "cold_model_warm_process",
                 "warm_model_cold_prompt_cache",
                 "warm_prompt_kv_cache",
                 "unsupported",

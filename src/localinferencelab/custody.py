@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import errno
 import os
+import secrets
 import shutil
 import stat
 import tempfile
@@ -216,6 +217,113 @@ def _rename_no_replace(source: Path, destination: Path) -> None:
         raise OSError(error_number, os.strerror(error_number), destination)
 
 
+def _rename_no_replace_at(
+    parent_descriptor: int,
+    source_name: str,
+    destination_name: str,
+) -> None:
+    libc = ctypes.CDLL(None, use_errno=True)
+    source_bytes = os.fsencode(source_name)
+    destination_bytes = os.fsencode(destination_name)
+    if hasattr(libc, "renameat2"):
+        function = libc.renameat2
+        function.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        function.restype = ctypes.c_int
+        result = function(
+            parent_descriptor,
+            source_bytes,
+            parent_descriptor,
+            destination_bytes,
+            RENAME_NOREPLACE,
+        )
+    elif hasattr(libc, "renameatx_np"):
+        function = libc.renameatx_np
+        function.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        function.restype = ctypes.c_int
+        result = function(
+            parent_descriptor,
+            source_bytes,
+            parent_descriptor,
+            destination_bytes,
+            RENAME_EXCL,
+        )
+    else:
+        raise ContractError("descriptor-relative atomic no-replace rename is unavailable")
+    if result != 0:
+        error_number = ctypes.get_errno()
+        if error_number in {errno.EEXIST, errno.ENOTEMPTY}:
+            raise FileExistsError(error_number, os.strerror(error_number), destination_name)
+        raise OSError(error_number, os.strerror(error_number), destination_name)
+
+
+def _write_fsynced_at(parent_descriptor: int, name: str, data: bytes) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(name, flags, 0o600, dir_fd=parent_descriptor)
+    try:
+        view = memoryview(data)
+        written = 0
+        while written < len(data):
+            written += os.write(descriptor, view[written:])
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _write_relative_at(root_descriptor: int, relative: PurePosixPath, data: bytes) -> None:
+    descriptor = os.dup(root_descriptor)
+    try:
+        for part in relative.parts[:-1]:
+            try:
+                os.mkdir(part, 0o700, dir_fd=descriptor)
+                os.fsync(descriptor)
+            except FileExistsError:
+                pass
+            child = os.open(part, _directory_flags(), dir_fd=descriptor)
+            _require_trusted_directory(
+                child,
+                part,
+                expected_owner=os.fstat(root_descriptor).st_uid,
+            )
+            os.close(descriptor)
+            descriptor = child
+        _write_fsynced_at(descriptor, relative.parts[-1], data)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _remove_tree_at(parent_descriptor: int, name: str) -> None:
+    descriptor = os.open(name, _directory_flags(), dir_fd=parent_descriptor)
+    try:
+        for child_name in os.listdir(descriptor):  # noqa: PTH208
+            metadata = os.stat(child_name, dir_fd=descriptor, follow_symlinks=False)
+            if stat.S_ISDIR(metadata.st_mode):
+                _remove_tree_at(descriptor, child_name)
+            else:
+                os.unlink(child_name, dir_fd=descriptor)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    os.rmdir(name, dir_fd=parent_descriptor)
+    os.fsync(parent_descriptor)
+
+
 def make_index(
     content_files: dict[str, bytes],
 ) -> tuple[dict[str, JsonValue], dict[str, JsonValue]]:
@@ -293,6 +401,89 @@ def publish_bundle(
         if renamed and not complete and destination.exists():
             shutil.rmtree(destination)
             _fsync_directory(root)
+
+
+def publish_bundle_at(
+    content_files: dict[str, bytes],
+    output_root: Path,
+    output_root_descriptor: int,
+    *,
+    name_prefix: str,
+) -> Path:
+    """Publish relative to one retained output-root descriptor."""
+    metadata = os.fstat(output_root_descriptor)
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or metadata.st_uid != os.geteuid()
+        or metadata.st_mode & 0o022
+    ):
+        raise ContractError("untrusted descriptor-relative output root")
+    prefix = _safe_relative(name_prefix)
+    if len(prefix.parts) != 1:
+        raise ContractError("bundle name prefix must be one canonical basename")
+    index, receipt = make_index(content_files)
+    content_root = cast("str", index["content_root"])
+    destination_name = f"{name_prefix}-{content_root[7:]}"
+    stage_name = ""
+    for _attempt in range(32):
+        candidate = f".localinferencelab-stage-{secrets.token_hex(16)}"
+        try:
+            os.mkdir(candidate, 0o700, dir_fd=output_root_descriptor)
+        except FileExistsError:
+            continue
+        stage_name = candidate
+        break
+    if not stage_name:
+        raise ContractError("could not allocate a private publication stage")
+    renamed = False
+    complete = False
+    try:
+        stage_descriptor = os.open(
+            stage_name,
+            _directory_flags(),
+            dir_fd=output_root_descriptor,
+        )
+        try:
+            staged_files = dict(content_files)
+            staged_files["index.json"] = canonical_json(index)
+            for relative_name, data in sorted(staged_files.items()):
+                _write_relative_at(
+                    stage_descriptor,
+                    _safe_relative(relative_name),
+                    data,
+                )
+            os.fsync(stage_descriptor)
+        finally:
+            os.close(stage_descriptor)
+        _rename_no_replace_at(
+            output_root_descriptor,
+            stage_name,
+            destination_name,
+        )
+        renamed = True
+        os.fsync(output_root_descriptor)
+        destination_descriptor = os.open(
+            destination_name,
+            _directory_flags(),
+            dir_fd=output_root_descriptor,
+        )
+        try:
+            _write_fsynced_at(
+                destination_descriptor,
+                "receipt.json",
+                canonical_json(receipt),
+            )
+            os.fsync(destination_descriptor)
+        finally:
+            os.close(destination_descriptor)
+        os.fsync(output_root_descriptor)
+        complete = True
+        return output_root.absolute() / destination_name
+    finally:
+        if not renamed:
+            _remove_tree_at(output_root_descriptor, stage_name)
+        elif not complete:
+            _remove_tree_at(output_root_descriptor, destination_name)
 
 
 def _directory_flags() -> int:
@@ -571,8 +762,8 @@ def _verify_closed_set(
     return file_bytes
 
 
-def replay_bundle(bundle: Path) -> ReplayResult:
-    """Strictly verify and recompute a closed bundle without network or model access."""
+def read_closed_bundle(bundle: Path) -> tuple[str, dict[str, bytes]]:
+    """Read one descriptor-relative, indexed, receipt-closed bundle snapshot."""
     root_descriptor = _open_bundle_root(bundle)
     try:
         try:
@@ -589,6 +780,14 @@ def replay_bundle(bundle: Path) -> ReplayResult:
         )
     finally:
         os.close(root_descriptor)
+    return cast("str", index["content_root"]), file_bytes
+
+
+def replay_bundle(bundle: Path) -> ReplayResult:
+    """Strictly verify and recompute a closed fixture bundle without side effects."""
+    content_root, file_bytes = read_closed_bundle(bundle)
+    index_value = _read_canonical_json(file_bytes["index.json"], "index.json")
+    index = _object(index_value, "index")
 
     protocol: Protocol | None = None
     source: FixtureSource | None = None
@@ -1048,7 +1247,7 @@ def replay_bundle(bundle: Path) -> ReplayResult:
     ):
         raise ContractError("fixture source intent does not match replayed evidence")
     return ReplayResult(
-        cast("str", index["content_root"]),
+        content_root,
         protocol_id,
         len(runs),
         len(groups),

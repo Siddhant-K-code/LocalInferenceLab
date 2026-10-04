@@ -14,12 +14,18 @@ Every trust transition is represented by immutable canonical data.
 | `contracts.py` | Versioned dataclasses with unknown-key rejection and semantic validation | None |
 | `host.py` | Privacy-preserving host probe through Python APIs, procfs, or `sysctlbyname` | Read-only |
 | `backends.py` | Static artifact digest and non-executable backend plans | Read-only |
+| `ollama.py` | Prospective package, direct numeric-loopback transport, one-shot authorization, bounded execution, terminal custody/replay | Explicit output-root writes; loopback calls only after authorization |
+| `ollama_fixture.py` | Deterministic accepted/invalid/refused sealed-script evidence | Writes synthetic inputs and closed bundles; no socket or model |
 | `analysis.py` | Cohort-isolated exact equality and native metric summaries | None |
 | `custody.py` | Closed-set index, atomic publication, verification, replay | Writes only an explicit output root |
 | `fixture.py` | Source-custodied synthetic records for two backends | Publishes through custody |
 | `cli.py` | Narrow command routing and fail-closed errors | Command-dependent |
 
-No module imports an ML framework, starts a process, opens a socket, or downloads a model.
+No module imports an ML framework, starts a process, or downloads/mutates a model. Only
+`LoopbackHTTPTransport` can open a socket. An explicit, separately authorized Ollama `preflight`
+may use it after output-root and artifact validation. The `execute` surface validates its package
+and artifacts but production-refuses before authorization consumption or socket access until the
+listening process and active runner/Metal state can be mechanically attested.
 
 ## Identity graph
 
@@ -78,22 +84,29 @@ An execution declaration names one protocol, backend, runtime, model, host polic
 identity, and action budget. `model_execution_forbidden` requires every budget field to be zero.
 Eligibility is separately recorded against exact identities.
 
-V1 action names are closed to `model_process_start` and `inference_request`. Network and download
-budgets must always be zero. Observed run records account for each request and process start, and
-replay rejects totals above the declaration. Eligibility actions must exactly match positive
-budgets rather than caller-provided labels.
+Foundation fixture action names remain closed to `model_process_start` and `inference_request`, with
+zero network/download budgets. Ollama adds a versioned backend-specific declaration rather than
+weakening that schema. It binds eight identity requests, one inference, nine loopback requests,
+total request/response bytes, one end-to-end absolute deadline per call,
+zero starts/downloads/retries, and one exact schedule.
 
-The package contains no live execution implementation. This makes accidental execution impossible
-rather than merely discouraged. A future runner must:
+Two separate one-shot artifacts authorize identity and generation phases. A third phase can
+authorize a read-only four-call preflight. The prospective declaration commits distinct nonce
+digests before the owner-only nonce files are revealed. Each artifact is content-addressed and
+contains the committed nonce preimage; a package exposes only its digest and cannot self-mint the
+artifact. One validated output-root descriptor is retained while the artifact is consumed and the
+receipt-closed bundle is published. The output marker identity includes local owner/device/inode
+state so a copied marker or same-nonce second directory is invalid. Generation is not consumed
+until the pre-check passes. Missing or mismatched artifacts fail before output mutation or sockets;
+there is no ambient environment or generic network bypass.
 
-1. accept a declaration as a separate input;
-2. recompute every referenced identity before any model process or API action;
-3. reject wildcard identities, ambient environment overrides, and output-root drift;
-4. account for every process start, inference request, network request, and download before action;
-5. support only preinstalled, local resources;
-6. emit digest-safe invalid records on failure.
-
-Adding a runner is a protocol change and requires dedicated threat review.
+The production preflight transport accepts only literal IPv4/IPv6 loopback, direct standard-library
+HTTP, fixed paths, one connected peer, no proxy, no redirect, pre-reserved bounded reads, and
+one monotonic absolute deadline across connect, peer verification, request send, headers, and body.
+It never starts Ollama or mutates a model. The connected-address check is not treated as
+listener-process authentication; observed generation remains disabled for that reason.
+See
+[Ollama runner contract](ollama-runner-contract.md) for the dedicated threat boundary.
 
 ## Atomic publication
 
@@ -139,6 +152,17 @@ for FIFOs and rejects sockets, devices, symlinks, replaced path ancestors, forei
 group/world-writable bundle directories at every level. Each file is read once, and digest plus
 semantic verification use the same byte snapshot. Replay performs no network calls, process
 starts, model imports, or model access.
+
+Ollama evidence replay uses the same descriptor-relative `read_closed_bundle` snapshot. It then
+rebuilds the request, verifies embedded one-shot authorizations against prospective nonce
+commitments, enforces the accepted/invalid/refused state machine and exact schedule, recomputes
+reserved/read action totals, requires exactly one indexed bounded response artifact per dispatched
+action, reconstructs both identity snapshots from all eight raw identity envelopes, validates every
+run identity, regenerates valid response projections, rejects non-producer-reachable invalid
+analysis, and checks synthetic side-effect/timing zeros. It also replays preflight bundles as an
+exact four-call, zero-generation state machine. The current schema rejects `observed_execution`
+generation bundles entirely; a future schema may admit them only when listener-process and active
+runner/Metal attestation is required and validated.
 
 ## Privacy boundary
 
