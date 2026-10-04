@@ -28,7 +28,8 @@ flowchart LR
 
 The current `G` node is intentionally absent. Backend surfaces only hash preinstalled artifacts and
 produce non-executable plans. There is no environment-variable bypass, localhost call, runtime
-startup, model pull, or implicit authorization path.
+startup, model pull, or implicit authorization path. Future observed records must account for every
+process start and inference request within the declaration budget.
 
 ## Benchmark matrix
 
