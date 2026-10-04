@@ -51,7 +51,10 @@ def validate_json_value(value: object, path: str = "$") -> JsonValue:
         for key, item in value.items():
             if not isinstance(key, str):
                 raise ContractError(f"{path}: object keys must be strings")
-            output[key] = validate_json_value(item, f"{path}.{key}")
+            checked_key = validate_json_value(key, f"{path}.<key>")
+            if not isinstance(checked_key, str):
+                raise ContractError(f"{path}: object keys must be strings")
+            output[checked_key] = validate_json_value(item, f"{path}.{checked_key}")
         return output
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return [validate_json_value(item, f"{path}[{index}]") for index, item in enumerate(value)]

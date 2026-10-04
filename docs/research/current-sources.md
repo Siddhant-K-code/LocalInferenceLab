@@ -116,12 +116,13 @@ state or chip families. The protocol measures that property rather than assuming
 ## Design consequences
 
 1. Primary analysis is within one backend, runtime identity, model representation, host identity,
-   protocol, and cache cohort.
+   protocol, process/model instance, cache preparation, effective concurrency state, exact request,
+   and cache cohort.
 2. Exact hardware, runtime build, model bytes or manifest, prompt/template bytes, sampler controls,
    context, concurrency, and order are bound before execution.
 3. Cache state and context shifting are explicit experimental variables.
 4. Native counters retain backend names and units. Missing metrics remain unavailable.
 5. Seed is a control. It is never the conclusion.
-6. Cross-backend analysis is descriptive. Representation equivalence remains `unproven` without a
-   separate mapping artifact.
+6. Cross-backend analysis is descriptive. V1 fixes representation equivalence to `unproven` until
+   a future typed, indexed mapping-artifact record is defined.
 7. CUDA deterministic-mode work is not generalized to Metal.

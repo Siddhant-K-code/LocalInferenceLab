@@ -28,6 +28,10 @@ flowchart TD
     H[Host identity]
     R[Runtime identity]
     M[Model representation identity]
+    X[Process instance]
+    Y[Model instance]
+    K[Cache preparation lineage]
+    Q[Concurrency identity]
     P[Protocol]
     D[Execution declaration]
     E[Eligibility]
@@ -39,6 +43,15 @@ flowchart TD
     H --> P
     R --> P
     M --> P
+    R --> X
+    H --> X
+    X --> Y
+    M --> Y
+    Y --> K
+    X --> P
+    Y --> P
+    K --> P
+    Q --> P
     P --> D
     H --> D
     R --> D
@@ -111,20 +124,27 @@ indexed set plus `index.json` and `receipt.json`, with no extra empty directorie
 - expected record paths so swapped valid records cannot pass;
 - strict fixture-source intent and zero-action non-claims;
 - protocol allowlists and all identity references;
+- exact process/model instances, cache-preparation ancestry, and effective concurrency identity;
 - one eligibility result for each declaration;
-- contiguous run order and protocol cache cohorts;
+- every exact protocol schedule slot exactly once, with no relabelling, reordering, duplication, or
+  omission;
 - forbidden declarations never custody observed execution;
 - complete request, host, runtime, model, and action-budget isolation for repeat groups;
 - recomputed analysis and receipt summary semantics.
 
-Replay opens each file without following its final symlink, reads it once, and performs digest and
-semantic verification from the same byte snapshot. It performs no network calls, process starts,
-model imports, or model access.
+Replay opens the bundle root through descriptor-relative no-follow traversal, then walks and opens
+every nested component relative to verified directory descriptors. File opens include nonblocking
+and no-follow flags, and `fstat` must identify a regular file before any read. This bounds failure
+for FIFOs and rejects sockets, devices, symlinks, replaced path ancestors, foreign ownership, and
+group/world-writable bundle directories at every level. Each file is read once, and digest plus
+semantic verification use the same byte snapshot. Replay performs no network calls, process
+starts, model imports, or model access.
 
 ## Privacy boundary
 
 Host identity admits architecture, chip name or family, core counts, memory bytes, OS version and
-build, and reviewed device facts. It rejects private fact names and common home-path prefixes. It
+build, and reviewed device facts. It rejects private fact names, absolute or relative home-path
+components, and tilde-prefixed home paths. It
 does not record usernames, hostnames, home directories, serial numbers, or UUIDs.
 
 Runtime artifact records store a basename and digest, never the source path. Published test data is

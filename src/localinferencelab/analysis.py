@@ -42,12 +42,23 @@ def _throughput(run: RunRecord) -> int | None:
     return count * 1_000_000_000_000_000 // duration_ns
 
 
+def _projection(values: list[str | None], *, all_valid: bool) -> str:
+    if not all_valid:
+        return "incomplete"
+    if not values or any(value is None for value in values):
+        return "not_comparable"
+    return "equal" if len(set(values)) == 1 else "different"
+
+
 def analyze_runs(
     runs: list[RunRecord],
     models: dict[str, ModelIdentity],
 ) -> dict[str, JsonValue]:
     """Compute deterministic cohort-isolated repeatability and performance summaries."""
-    groups: dict[tuple[str, str, str, str, str, str, str], list[RunRecord]] = defaultdict(list)
+    groups: dict[
+        tuple[str, str, str, str, str, str, str, str, str, str, str],
+        list[RunRecord],
+    ] = defaultdict(list)
     for run in runs:
         group_key = (
             run.backend,
@@ -55,6 +66,10 @@ def analyze_runs(
             run.model_id,
             run.host_id,
             run.protocol_id,
+            run.process_instance_id,
+            run.model_instance_id,
+            run.cache_preparation_id,
+            run.concurrency_id,
             run.cache_cohort,
             run.request_sha256,
         )
@@ -76,14 +91,34 @@ def analyze_runs(
             metric_summaries[name] = _metric_summary(named)
 
         all_valid = len(valid) == len(ordered)
-        token_sets = [run.token_ids_sha256 for run in valid]
-        token_status: str
-        if not token_sets or any(value is None for value in token_sets):
-            token_status = "unavailable"
-        elif len(set(token_sets)) == 1:
-            token_status = "equal"
+
+        exact_repeatability: dict[str, JsonValue] = {
+            "raw_response": _projection(
+                [run.raw_response_sha256 for run in valid],
+                all_valid=all_valid,
+            ),
+            "text": _projection([run.text_sha256 for run in valid], all_valid=all_valid),
+            "token_ids": _projection(
+                [run.token_ids_sha256 for run in valid],
+                all_valid=all_valid,
+            ),
+            "finish_reason": _projection(
+                [run.finish_reason for run in valid],
+                all_valid=all_valid,
+            ),
+            "structured_envelope": _projection(
+                [run.envelope_sha256 for run in valid],
+                all_valid=all_valid,
+            ),
+        }
+        if not all_valid:
+            group_classification = "incomplete"
+        elif "not_comparable" in exact_repeatability.values():
+            group_classification = "not_comparable"
+        elif all(value == "equal" for value in exact_repeatability.values()):
+            group_classification = "exact"
         else:
-            token_status = "different"
+            group_classification = "divergent"
 
         throughputs = [value for run in valid if (value := _throughput(run)) is not None]
         key_record: dict[str, JsonValue] = {
@@ -92,8 +127,12 @@ def analyze_runs(
             "model_id": key[2],
             "host_id": key[3],
             "protocol_id": key[4],
-            "cache_cohort": key[5],
-            "request_sha256": key[6],
+            "process_instance_id": key[5],
+            "model_instance_id": key[6],
+            "cache_preparation_id": key[7],
+            "concurrency_id": key[8],
+            "cache_cohort": key[9],
+            "request_sha256": key[10],
         }
         group_records.append(
             {
@@ -102,29 +141,8 @@ def analyze_runs(
                 "run_ids": [run.run_id for run in ordered],
                 "run_count": len(ordered),
                 "all_valid": all_valid,
-                "exact_repeatability": {
-                    "raw_response": (
-                        "equal"
-                        if all_valid and len({run.raw_response_sha256 for run in valid}) == 1
-                        else "different"
-                    ),
-                    "text": (
-                        "equal"
-                        if all_valid and len({run.text_sha256 for run in valid}) == 1
-                        else "different"
-                    ),
-                    "token_ids": token_status,
-                    "finish_reason": (
-                        "equal"
-                        if all_valid and len({run.finish_reason for run in valid}) == 1
-                        else "different"
-                    ),
-                    "structured_envelope": (
-                        "equal"
-                        if all_valid and len({run.envelope_sha256 for run in valid}) == 1
-                        else "different"
-                    ),
-                },
+                "group_classification": group_classification,
+                "exact_repeatability": exact_repeatability,
                 "semantic_projection": {
                     "status": "not_defined",
                     "reason": "v1 fixture evaluates exact outputs without an LLM judge",
@@ -145,18 +163,13 @@ def analyze_runs(
         for right_id, right in model_records[left_index + 1 :]:
             if left.backend == right.backend:
                 continue
-            mapped = (
-                left.cross_representation_equivalence == "mapped"
-                and right.cross_representation_equivalence == "mapped"
-                and left.mapping_artifact_sha256 == right.mapping_artifact_sha256
-            )
             representation_pairs.append(
                 {
                     "left_model_id": left_id,
                     "right_model_id": right_id,
                     "left_representation": left.representation,
                     "right_representation": right.representation,
-                    "equivalence": "mapped" if mapped else "unproven",
+                    "equivalence": "unproven",
                 },
             )
 
@@ -174,6 +187,6 @@ def analyze_runs(
             "seed controls do not prove determinism",
             "process RSS does not measure Metal or GPU memory",
             "energy is unavailable in v1",
-            "different model representations are not equivalent without a mapping artifact",
+            "v1 does not define or accept cross-representation mapping artifacts",
         ],
     }

@@ -14,6 +14,7 @@ from localinferencelab.canonical import (
     canonical_json,
     decode_bytes,
     digest_bytes,
+    validate_json_value,
 )
 
 SCHEMA_VERSION = "1.0"
@@ -45,6 +46,18 @@ _PRIVATE_TOKEN_PATTERN = re.compile(
     r"(^|[_\s-])(home|host_?name|serial|user_?name|uuid)([_\s:=.-]|$)",
     re.IGNORECASE,
 )
+_PRIVATE_PATH_COMPONENT_PATTERN = re.compile(
+    r"(^|[/\\])(?:users|home)(?:[/\\])",
+    re.IGNORECASE,
+)
+_UNOBSERVED_VALUES = {
+    "n/a",
+    "none",
+    "not_observed",
+    "unavailable",
+    "unknown",
+    "unobserved",
+}
 
 
 def _mapping(value: JsonValue, label: str) -> dict[str, JsonValue]:
@@ -100,14 +113,16 @@ def _strings(value: JsonValue, label: str) -> tuple[str, ...]:
 
 def _public_text(value: JsonValue, label: str) -> str:
     text = _string(value, label)
+    validate_json_value(text, label)
     lowered = text.lower()
     if (
         any(ord(character) < _CONTROL_CHARACTER_LIMIT for character in text)
-        or text.startswith(("/", "\\"))
+        or text.startswith(("/", "\\", "~/", "~\\"))
         or "/users/" in lowered
         or "/home/" in lowered
         or "\\users\\" in lowered
         or "file://" in lowered
+        or _PRIVATE_PATH_COMPONENT_PATTERN.search(text)
         or _PRIVATE_TOKEN_PATTERN.search(text)
     ):
         raise ContractError(f"{label} contains private or path-like data")
@@ -151,6 +166,13 @@ def _versioned(data: dict[str, JsonValue], record_type: str, required: set[str])
         raise ContractError(f"{record_type} schema_version must be {SCHEMA_VERSION}")
     if data["record_type"] != record_type:
         raise ContractError(f"record_type must be {record_type}")
+
+
+def _record_dict(record: object) -> dict[str, JsonValue]:
+    value = validate_json_value(asdict(cast("Any", record)))
+    if not isinstance(value, dict):
+        raise ContractError("record serialization must produce an object")
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,7 +267,38 @@ class HostIdentity:
         return record
 
     def to_dict(self) -> dict[str, JsonValue]:
-        return cast("dict[str, JsonValue]", asdict(self))
+        return _record_dict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeFact:
+    """One structured runtime capability selection."""
+
+    name: Literal["runner", "metal", "build_info", "mlx_version", "mlx_lm_version"]
+    value: str
+
+    def __post_init__(self) -> None:
+        """Validate direct construction as strictly as loaded JSON."""
+        if self.name not in {
+            "runner",
+            "metal",
+            "build_info",
+            "mlx_version",
+            "mlx_lm_version",
+        }:
+            raise ContractError("runtime fact name is not supported")
+        _public_text(self.value, "runtime_fact.value")
+
+    @classmethod
+    def from_value(cls, value: JsonValue, label: str) -> RuntimeFact:
+        data = _mapping(value, label)
+        _keys(data, {"name", "value"}, label)
+        name = _literal(
+            _string(data["name"], f"{label}.name"),
+            {"runner", "metal", "build_info", "mlx_version", "mlx_lm_version"},
+            f"{label}.name",
+        )
+        return cls(cast("Any", name), _public_text(data["value"], f"{label}.value"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,9 +315,32 @@ class RuntimeIdentity:
     commit: str | None
     artifact_sha256: str | None
     install_manifest_sha256: str | None
-    backend_flags: tuple[str, ...]
-    capability_evidence: tuple[str, ...]
+    capability_facts: tuple[RuntimeFact, ...]
     identity_complete: bool
+
+    def __post_init__(self) -> None:
+        """Validate direct construction as strictly as loaded JSON."""
+        for label, value in (
+            ("runtime_identity.executable_name", self.executable_name),
+            ("runtime_identity.package_name", self.package_name),
+            ("runtime_identity.version", self.version),
+            ("runtime_identity.commit", self.commit),
+        ):
+            if value is not None:
+                _public_text(value, label)
+        if self.executable_name is not None and (
+            "/" in self.executable_name or "\\" in self.executable_name
+        ):
+            raise ContractError("runtime_identity.executable_name must not contain a path")
+        if not all(isinstance(fact, RuntimeFact) for fact in self.capability_facts):
+            raise ContractError("runtime_identity.capability_facts must contain runtime facts")
+        _validate_runtime_facts(self)
+        if self.identity_complete != _runtime_identity_complete(self):
+            raise ContractError(
+                "runtime_identity.identity_complete does not match supplied evidence"
+            )
+        if self.evidence_kind == "observed_execution" and not self.identity_complete:
+            raise ContractError("observed execution requires a complete runtime identity")
 
     @classmethod
     def from_dict(cls, data: dict[str, JsonValue]) -> RuntimeIdentity:
@@ -277,8 +353,7 @@ class RuntimeIdentity:
             "commit",
             "artifact_sha256",
             "install_manifest_sha256",
-            "backend_flags",
-            "capability_evidence",
+            "capability_facts",
             "identity_complete",
         }
         _versioned(data, "runtime_identity", fields)
@@ -326,13 +401,16 @@ class RuntimeIdentity:
                 data["install_manifest_sha256"],
                 "runtime_identity.install_manifest_sha256",
             ),
-            _public_strings(data["backend_flags"], "runtime_identity.backend_flags"),
-            _public_strings(
-                data["capability_evidence"],
-                "runtime_identity.capability_evidence",
+            tuple(
+                RuntimeFact.from_value(item, "runtime_identity.capability_facts[]")
+                for item in _as_list(
+                    data["capability_facts"],
+                    "runtime_identity.capability_facts",
+                )
             ),
             _boolean(data["identity_complete"], "runtime_identity.identity_complete"),
         )
+        _validate_runtime_facts(record)
         computed_complete = _runtime_identity_complete(record)
         if record.identity_complete != computed_complete:
             raise ContractError(
@@ -343,32 +421,78 @@ class RuntimeIdentity:
         return record
 
     def to_dict(self) -> dict[str, JsonValue]:
-        return cast("dict[str, JsonValue]", asdict(self))
+        return _record_dict(self)
+
+
+def _runtime_fact(record: RuntimeIdentity, name: str) -> str | None:
+    return next((fact.value for fact in record.capability_facts if fact.name == name), None)
+
+
+def _validate_runtime_facts(record: RuntimeIdentity) -> None:
+    names = [fact.name for fact in record.capability_facts]
+    if len(names) != len(set(names)):
+        raise ContractError("runtime_identity.capability_facts names must be unique")
+    required = {"runner", "metal"}
+    if not required.issubset(names):
+        raise ContractError("runtime identity requires exactly one runner and one Metal fact")
+    allowed_names = {
+        "mlx-lm": {"runner", "metal", "mlx_version", "mlx_lm_version"},
+        "llama.cpp": {"runner", "metal", "build_info"},
+        "ollama": {"runner", "metal", "build_info"},
+    }[record.backend]
+    if not set(names).issubset(allowed_names):
+        raise ContractError(f"runtime identity contains facts unsupported by {record.backend}")
+    runner = _runtime_fact(record, "runner")
+    allowed_runners = {
+        "mlx-lm": {"mlx", "unobserved"},
+        "llama.cpp": {"llama.cpp", "unobserved"},
+        "ollama": {"mlx", "llama.cpp", "unobserved"},
+    }[record.backend]
+    if runner not in allowed_runners:
+        raise ContractError(f"runtime identity has an invalid runner for {record.backend}")
+    if _runtime_fact(record, "metal") not in {
+        "enabled",
+        "disabled",
+        "not_applicable",
+        "unobserved",
+    }:
+        raise ContractError("runtime identity has an invalid Metal state")
 
 
 def _runtime_identity_complete(record: RuntimeIdentity) -> bool:
     if record.evidence_kind != "observed_execution":
         return False
+    if not _is_observed_value(record.version):
+        return False
     if record.backend == "mlx-lm":
         return bool(
             record.package_name == "mlx-lm"
             and record.install_manifest_sha256
-            and any(item.startswith("mlx_version=") for item in record.capability_evidence)
-            and any(item.startswith("mlx_lm_version=") for item in record.capability_evidence)
+            and _runtime_fact(record, "runner") == "mlx"
+            and _runtime_fact(record, "metal") in {"enabled", "disabled"}
+            and _is_observed_value(_runtime_fact(record, "mlx_version"))
+            and _is_observed_value(_runtime_fact(record, "mlx_lm_version"))
         )
     if record.backend == "llama.cpp":
         return bool(
             record.executable_name
             and record.artifact_sha256
-            and record.commit
-            and any(item.startswith("build_info=") for item in record.capability_evidence)
-            and any(item in {"metal=enabled", "metal=disabled"} for item in record.backend_flags)
+            and _is_observed_value(record.commit)
+            and _runtime_fact(record, "runner") == "llama.cpp"
+            and _runtime_fact(record, "metal") in {"enabled", "disabled"}
+            and _is_observed_value(_runtime_fact(record, "build_info"))
         )
     return bool(
         (record.executable_name or record.package_name)
         and (record.artifact_sha256 or record.install_manifest_sha256)
-        and any(item in {"runner=mlx", "runner=llama.cpp"} for item in record.capability_evidence)
+        and _runtime_fact(record, "runner") in {"mlx", "llama.cpp"}
+        and _runtime_fact(record, "metal") in {"enabled", "disabled", "not_applicable"}
+        and _is_observed_value(_runtime_fact(record, "build_info"))
     )
+
+
+def _is_observed_value(value: str | None) -> bool:
+    return value is not None and value.strip().casefold() not in _UNOBSERVED_VALUES
 
 
 @dataclass(frozen=True, slots=True)
@@ -390,8 +514,12 @@ class ModelIdentity:
     config_sha256: str | None
     tokenizer_sha256: str | None
     metadata_sha256: str | None
-    cross_representation_equivalence: Literal["unproven", "mapped"]
-    mapping_artifact_sha256: str | None
+    cross_representation_equivalence: Literal["unproven"]
+
+    def __post_init__(self) -> None:
+        """Keep cross-representation mapping unavailable in v1."""
+        if self.cross_representation_equivalence != "unproven":
+            raise ContractError("v1 model representation equivalence is always unproven")
 
     @classmethod
     def from_dict(cls, data: dict[str, JsonValue]) -> ModelIdentity:
@@ -406,7 +534,6 @@ class ModelIdentity:
             "tokenizer_sha256",
             "metadata_sha256",
             "cross_representation_equivalence",
-            "mapping_artifact_sha256",
         }
         _versioned(data, "model_identity", fields)
         backend = _literal(
@@ -436,17 +563,9 @@ class ModelIdentity:
                 data["cross_representation_equivalence"],
                 "model_identity.cross_representation_equivalence",
             ),
-            {"unproven", "mapped"},
+            {"unproven"},
             "model_identity.cross_representation_equivalence",
         )
-        mapping = _optional_sha256(
-            data["mapping_artifact_sha256"],
-            "model_identity.mapping_artifact_sha256",
-        )
-        if equivalence == "mapped" and mapping is None:
-            raise ContractError("mapped equivalence requires a mapping artifact")
-        if equivalence == "unproven" and mapping is not None:
-            raise ContractError("unproven equivalence cannot name a mapping artifact")
         record = cls(
             "model_identity",
             SCHEMA_VERSION,
@@ -460,7 +579,6 @@ class ModelIdentity:
             _optional_sha256(data["tokenizer_sha256"], "model_identity.tokenizer_sha256"),
             _optional_sha256(data["metadata_sha256"], "model_identity.metadata_sha256"),
             cast("Any", equivalence),
-            mapping,
         )
         if record.representation == "mlx_snapshot" and not all(
             (record.manifest_sha256, record.config_sha256, record.tokenizer_sha256),
@@ -475,7 +593,425 @@ class ModelIdentity:
         return record
 
     def to_dict(self) -> dict[str, JsonValue]:
-        return cast("dict[str, JsonValue]", asdict(self))
+        return _record_dict(self)
+
+
+StateEvidence: TypeAlias = Literal["synthetic_fixture", "observed_execution"]
+
+
+@dataclass(frozen=True, slots=True)
+class ProcessInstance:
+    """Exact process instance used by one or more scheduled runs."""
+
+    record_type: Literal["process_instance"]
+    schema_version: str
+    backend: Backend
+    runtime_id: str
+    host_id: str
+    evidence_kind: StateEvidence
+    instance_label: str
+    max_concurrency: int
+
+    @classmethod
+    def from_dict(cls, data: dict[str, JsonValue]) -> ProcessInstance:
+        fields = {
+            "backend",
+            "runtime_id",
+            "host_id",
+            "evidence_kind",
+            "instance_label",
+            "max_concurrency",
+        }
+        _versioned(data, "process_instance", fields)
+        backend = _literal(
+            _string(data["backend"], "process_instance.backend"),
+            {"mlx-lm", "llama.cpp", "ollama"},
+            "process_instance.backend",
+        )
+        evidence = _literal(
+            _string(data["evidence_kind"], "process_instance.evidence_kind"),
+            {"synthetic_fixture", "observed_execution"},
+            "process_instance.evidence_kind",
+        )
+        return cls(
+            "process_instance",
+            SCHEMA_VERSION,
+            cast("Any", backend),
+            _sha256(data["runtime_id"], "process_instance.runtime_id"),
+            _sha256(data["host_id"], "process_instance.host_id"),
+            cast("Any", evidence),
+            _public_text(data["instance_label"], "process_instance.instance_label"),
+            _integer(data["max_concurrency"], "process_instance.max_concurrency", minimum=1),
+        )
+
+    def to_dict(self) -> dict[str, JsonValue]:
+        return _record_dict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class ModelInstance:
+    """Exact loaded model instance within a process."""
+
+    record_type: Literal["model_instance"]
+    schema_version: str
+    backend: Backend
+    process_instance_id: str
+    model_id: str
+    evidence_kind: StateEvidence
+    instance_label: str
+    context_tokens: int
+    batch_size: int
+    gpu_layers: int | None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, JsonValue]) -> ModelInstance:
+        fields = {
+            "backend",
+            "process_instance_id",
+            "model_id",
+            "evidence_kind",
+            "instance_label",
+            "context_tokens",
+            "batch_size",
+            "gpu_layers",
+        }
+        _versioned(data, "model_instance", fields)
+        backend = _literal(
+            _string(data["backend"], "model_instance.backend"),
+            {"mlx-lm", "llama.cpp", "ollama"},
+            "model_instance.backend",
+        )
+        evidence = _literal(
+            _string(data["evidence_kind"], "model_instance.evidence_kind"),
+            {"synthetic_fixture", "observed_execution"},
+            "model_instance.evidence_kind",
+        )
+        return cls(
+            "model_instance",
+            SCHEMA_VERSION,
+            cast("Any", backend),
+            _sha256(data["process_instance_id"], "model_instance.process_instance_id"),
+            _sha256(data["model_id"], "model_instance.model_id"),
+            cast("Any", evidence),
+            _public_text(data["instance_label"], "model_instance.instance_label"),
+            _integer(data["context_tokens"], "model_instance.context_tokens", minimum=1),
+            _integer(data["batch_size"], "model_instance.batch_size", minimum=1),
+            _optional_integer(data["gpu_layers"], "model_instance.gpu_layers"),
+        )
+
+    def to_dict(self) -> dict[str, JsonValue]:
+        return _record_dict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class CachePreparation:
+    """Content-addressed cache state preparation and lineage."""
+
+    record_type: Literal["cache_preparation"]
+    schema_version: str
+    backend: Backend
+    model_instance_id: str
+    evidence_kind: StateEvidence
+    cache_cohort: CacheCohort
+    parent_preparation_id: str | None
+    preparation_actions: tuple[
+        Literal[
+            "new_process",
+            "load_model",
+            "reuse_process",
+            "reuse_model",
+            "clear_prompt_cache",
+            "prefill_prompt_cache",
+            "reuse_prompt_kv_cache",
+        ],
+        ...,
+    ]
+    warmup_request_sha256: tuple[str, ...]
+    context_shift_count: int
+    prompt_cache_tokens: int
+    kv_cache_tokens: int
+
+    @classmethod
+    def from_dict(cls, data: dict[str, JsonValue]) -> CachePreparation:
+        fields = {
+            "backend",
+            "model_instance_id",
+            "evidence_kind",
+            "cache_cohort",
+            "parent_preparation_id",
+            "preparation_actions",
+            "warmup_request_sha256",
+            "context_shift_count",
+            "prompt_cache_tokens",
+            "kv_cache_tokens",
+        }
+        _versioned(data, "cache_preparation", fields)
+        backend = _literal(
+            _string(data["backend"], "cache_preparation.backend"),
+            {"mlx-lm", "llama.cpp", "ollama"},
+            "cache_preparation.backend",
+        )
+        evidence = _literal(
+            _string(data["evidence_kind"], "cache_preparation.evidence_kind"),
+            {"synthetic_fixture", "observed_execution"},
+            "cache_preparation.evidence_kind",
+        )
+        cohort = _literal(
+            _string(data["cache_cohort"], "cache_preparation.cache_cohort"),
+            {
+                "cold_process_model",
+                "warm_model_cold_prompt_cache",
+                "warm_prompt_kv_cache",
+                "unsupported",
+            },
+            "cache_preparation.cache_cohort",
+        )
+        actions = _strings(
+            data["preparation_actions"],
+            "cache_preparation.preparation_actions",
+        )
+        allowed_actions = {
+            "new_process",
+            "load_model",
+            "reuse_process",
+            "reuse_model",
+            "clear_prompt_cache",
+            "prefill_prompt_cache",
+            "reuse_prompt_kv_cache",
+        }
+        if not actions or len(actions) != len(set(actions)):
+            raise ContractError("cache preparation actions must be non-empty and unique")
+        for action in actions:
+            _literal(action, allowed_actions, "cache_preparation.preparation_actions[]")
+        warmups = tuple(
+            _sha256(item, "cache_preparation.warmup_request_sha256[]")
+            for item in _as_list(
+                data["warmup_request_sha256"],
+                "cache_preparation.warmup_request_sha256",
+            )
+        )
+        if len(warmups) != len(set(warmups)):
+            raise ContractError("cache preparation warm-up requests must be unique")
+        record = cls(
+            "cache_preparation",
+            SCHEMA_VERSION,
+            cast("Any", backend),
+            _sha256(data["model_instance_id"], "cache_preparation.model_instance_id"),
+            cast("Any", evidence),
+            cast("Any", cohort),
+            _optional_sha256(
+                data["parent_preparation_id"],
+                "cache_preparation.parent_preparation_id",
+            ),
+            cast("Any", actions),
+            warmups,
+            _integer(data["context_shift_count"], "cache_preparation.context_shift_count"),
+            _integer(data["prompt_cache_tokens"], "cache_preparation.prompt_cache_tokens"),
+            _integer(data["kv_cache_tokens"], "cache_preparation.kv_cache_tokens"),
+        )
+        expected_actions = {
+            "cold_process_model": (
+                "new_process",
+                "load_model",
+                "clear_prompt_cache",
+            ),
+            "warm_model_cold_prompt_cache": (
+                "reuse_process",
+                "reuse_model",
+                "clear_prompt_cache",
+            ),
+            "warm_prompt_kv_cache": (
+                "reuse_process",
+                "reuse_model",
+                "prefill_prompt_cache",
+                "reuse_prompt_kv_cache",
+            ),
+            "unsupported": ("clear_prompt_cache",),
+        }[record.cache_cohort]
+        if record.preparation_actions != expected_actions:
+            raise ContractError("cache preparation actions do not match the declared cache cohort")
+        if record.cache_cohort == "cold_process_model" and (
+            record.parent_preparation_id is not None
+            or record.warmup_request_sha256
+            or record.context_shift_count
+            or record.prompt_cache_tokens
+            or record.kv_cache_tokens
+            or "new_process" not in record.preparation_actions
+            or "load_model" not in record.preparation_actions
+        ):
+            raise ContractError("cold process/model preparation must begin with empty cache state")
+        if record.cache_cohort == "warm_prompt_kv_cache" and (
+            record.parent_preparation_id is None
+            or not record.warmup_request_sha256
+            or "reuse_prompt_kv_cache" not in record.preparation_actions
+            or record.prompt_cache_tokens == 0
+            or record.kv_cache_tokens == 0
+        ):
+            raise ContractError("warm prompt/KV preparation requires parent and warm-up lineage")
+        if record.cache_cohort == "warm_model_cold_prompt_cache" and (
+            record.parent_preparation_id is None
+            or record.warmup_request_sha256
+            or record.prompt_cache_tokens
+            or record.kv_cache_tokens
+        ):
+            raise ContractError("warm model/cold prompt preparation requires empty prompt/KV state")
+        if record.cache_cohort == "unsupported" and (
+            record.parent_preparation_id is not None
+            or record.warmup_request_sha256
+            or record.context_shift_count
+            or record.prompt_cache_tokens
+            or record.kv_cache_tokens
+        ):
+            raise ContractError("unsupported cache preparation cannot claim cache state")
+        return record
+
+    def to_dict(self) -> dict[str, JsonValue]:
+        return _record_dict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class ConcurrencyIdentity:
+    """Effective concurrency state shared by comparable runs."""
+
+    record_type: Literal["concurrency_identity"]
+    schema_version: str
+    max_concurrency: int
+    active_peers: int
+    worker_slot: int
+    scheduling_policy: Literal["serial", "fixed_wave"]
+    peer_request_sha256: tuple[str, ...]
+
+    @classmethod
+    def from_dict(cls, data: dict[str, JsonValue]) -> ConcurrencyIdentity:
+        fields = {
+            "max_concurrency",
+            "active_peers",
+            "worker_slot",
+            "scheduling_policy",
+            "peer_request_sha256",
+        }
+        _versioned(data, "concurrency_identity", fields)
+        max_concurrency = _integer(
+            data["max_concurrency"],
+            "concurrency_identity.max_concurrency",
+            minimum=1,
+        )
+        active_peers = _integer(data["active_peers"], "concurrency_identity.active_peers")
+        worker_slot = _integer(data["worker_slot"], "concurrency_identity.worker_slot")
+        if active_peers >= max_concurrency or worker_slot >= max_concurrency:
+            raise ContractError("concurrency identity exceeds its maximum concurrency")
+        policy = _literal(
+            _string(data["scheduling_policy"], "concurrency_identity.scheduling_policy"),
+            {"serial", "fixed_wave"},
+            "concurrency_identity.scheduling_policy",
+        )
+        if policy == "serial" and (max_concurrency != 1 or active_peers != 0 or worker_slot != 0):
+            raise ContractError("serial concurrency identity must have one unopposed worker")
+        peer_requests = tuple(
+            _sha256(item, "concurrency_identity.peer_request_sha256[]")
+            for item in _as_list(
+                data["peer_request_sha256"],
+                "concurrency_identity.peer_request_sha256",
+            )
+        )
+        if peer_requests != tuple(sorted(peer_requests)) or len(peer_requests) != active_peers:
+            raise ContractError(
+                "concurrency identity peer requests must be sorted and match active peers"
+            )
+        return cls(
+            "concurrency_identity",
+            SCHEMA_VERSION,
+            max_concurrency,
+            active_peers,
+            worker_slot,
+            cast("Any", policy),
+            peer_requests,
+        )
+
+    def to_dict(self) -> dict[str, JsonValue]:
+        return _record_dict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class RunScheduleEntry:
+    """One exact planned run slot embedded in the protocol."""
+
+    sequence: int
+    run_id: str
+    backend: Backend
+    runtime_id: str
+    model_id: str
+    host_id: str
+    process_instance_id: str
+    model_instance_id: str
+    cache_preparation_id: str
+    concurrency_id: str
+    concurrency_wave: int
+    cache_cohort: CacheCohort
+    request_sha256: str
+
+    @classmethod
+    def from_value(cls, value: JsonValue) -> RunScheduleEntry:
+        data = _mapping(value, "protocol.run_schedule[]")
+        fields = {
+            "sequence",
+            "run_id",
+            "backend",
+            "runtime_id",
+            "model_id",
+            "host_id",
+            "process_instance_id",
+            "model_instance_id",
+            "cache_preparation_id",
+            "concurrency_id",
+            "concurrency_wave",
+            "cache_cohort",
+            "request_sha256",
+        }
+        _keys(data, fields, "protocol.run_schedule[]")
+        backend = _literal(
+            _string(data["backend"], "protocol.run_schedule[].backend"),
+            {"mlx-lm", "llama.cpp", "ollama"},
+            "protocol.run_schedule[].backend",
+        )
+        cohort = _literal(
+            _string(data["cache_cohort"], "protocol.run_schedule[].cache_cohort"),
+            {
+                "cold_process_model",
+                "warm_model_cold_prompt_cache",
+                "warm_prompt_kv_cache",
+                "unsupported",
+            },
+            "protocol.run_schedule[].cache_cohort",
+        )
+        return cls(
+            _integer(data["sequence"], "protocol.run_schedule[].sequence", minimum=1),
+            _public_text(data["run_id"], "protocol.run_schedule[].run_id"),
+            cast("Any", backend),
+            _sha256(data["runtime_id"], "protocol.run_schedule[].runtime_id"),
+            _sha256(data["model_id"], "protocol.run_schedule[].model_id"),
+            _sha256(data["host_id"], "protocol.run_schedule[].host_id"),
+            _sha256(
+                data["process_instance_id"],
+                "protocol.run_schedule[].process_instance_id",
+            ),
+            _sha256(
+                data["model_instance_id"],
+                "protocol.run_schedule[].model_instance_id",
+            ),
+            _sha256(
+                data["cache_preparation_id"],
+                "protocol.run_schedule[].cache_preparation_id",
+            ),
+            _sha256(data["concurrency_id"], "protocol.run_schedule[].concurrency_id"),
+            _integer(
+                data["concurrency_wave"],
+                "protocol.run_schedule[].concurrency_wave",
+                minimum=1,
+            ),
+            cast("Any", cohort),
+            _sha256(data["request_sha256"], "protocol.run_schedule[].request_sha256"),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -537,6 +1073,7 @@ class Protocol:
     allowed_runtime_ids: tuple[str, ...]
     allowed_model_ids: tuple[str, ...]
     allowed_host_ids: tuple[str, ...]
+    run_schedule: tuple[RunScheduleEntry, ...]
 
     @classmethod
     def from_dict(cls, data: dict[str, JsonValue]) -> Protocol:
@@ -558,6 +1095,7 @@ class Protocol:
             "allowed_runtime_ids",
             "allowed_model_ids",
             "allowed_host_ids",
+            "run_schedule",
         }
         _versioned(data, "protocol", fields)
         prompt_base64 = _string(data["prompt_base64"], "protocol.prompt_base64", empty=True)
@@ -607,6 +1145,63 @@ class Protocol:
         ):
             if not identities or identities != tuple(sorted(set(identities))):
                 raise ContractError(f"protocol.{label} must be non-empty, unique, and sorted")
+        schedule = tuple(
+            RunScheduleEntry.from_value(item)
+            for item in _as_list(data["run_schedule"], "protocol.run_schedule")
+        )
+        if not schedule:
+            raise ContractError("protocol.run_schedule must be non-empty")
+        if tuple(entry.sequence for entry in schedule) != tuple(range(1, len(schedule) + 1)):
+            raise ContractError("protocol.run_schedule sequences must be ordered and contiguous")
+        run_ids = tuple(entry.run_id for entry in schedule)
+        if len(run_ids) != len(set(run_ids)):
+            raise ContractError("protocol.run_schedule run IDs must be unique")
+        waves = tuple(entry.concurrency_wave for entry in schedule)
+        if waves != tuple(sorted(waves)) or set(waves) != set(range(1, max(waves) + 1)):
+            raise ContractError(
+                "protocol.run_schedule concurrency waves must be ordered and contiguous"
+            )
+        if {entry.runtime_id for entry in schedule} != set(allowed_runtime_ids):
+            raise ContractError("protocol schedule runtime identities must match its allowlist")
+        if {entry.model_id for entry in schedule} != set(allowed_model_ids):
+            raise ContractError("protocol schedule model identities must match its allowlist")
+        if {entry.host_id for entry in schedule} != set(allowed_host_ids):
+            raise ContractError("protocol schedule host identities must match its allowlist")
+        if {entry.cache_cohort for entry in schedule} != set(cohorts):
+            raise ContractError("protocol schedule cache cohorts must match its declared cohorts")
+        if {entry.backend for entry in schedule} != set(backends):
+            raise ContractError("protocol schedule backends must match its backend order")
+        backend_positions = {backend: index for index, backend in enumerate(backends)}
+        if [entry.backend for entry in schedule] != sorted(
+            (entry.backend for entry in schedule),
+            key=backend_positions.__getitem__,
+        ):
+            raise ContractError("protocol schedule violates backend_blocked ordering")
+        repeat_counts: dict[
+            tuple[str, str, str, str, str, str, str, str, str, str],
+            int,
+        ] = {}
+        for entry in schedule:
+            repeat_key = (
+                entry.backend,
+                entry.runtime_id,
+                entry.model_id,
+                entry.host_id,
+                entry.process_instance_id,
+                entry.model_instance_id,
+                entry.cache_preparation_id,
+                entry.concurrency_id,
+                entry.cache_cohort,
+                entry.request_sha256,
+            )
+            repeat_counts[repeat_key] = repeat_counts.get(repeat_key, 0) + 1
+        repeats = _integer(
+            data["repeats_per_cohort"],
+            "protocol.repeats_per_cohort",
+            minimum=2,
+        )
+        if any(count != repeats for count in repeat_counts.values()):
+            raise ContractError("protocol schedule repeat count does not match its declaration")
         return cls(
             "protocol",
             SCHEMA_VERSION,
@@ -618,7 +1213,7 @@ class Protocol:
             _integer(data["max_output_tokens"], "protocol.max_output_tokens", minimum=1),
             _integer(data["context_tokens"], "protocol.context_tokens", minimum=1),
             cast("Any", cohorts),
-            _integer(data["repeats_per_cohort"], "protocol.repeats_per_cohort", minimum=2),
+            repeats,
             cast("Any", ordering),
             cast("Any", backends),
             _integer(data["concurrency"], "protocol.concurrency", minimum=1),
@@ -627,10 +1222,11 @@ class Protocol:
             allowed_runtime_ids,
             allowed_model_ids,
             allowed_host_ids,
+            schedule,
         )
 
     def to_dict(self) -> dict[str, JsonValue]:
-        return cast("dict[str, JsonValue]", asdict(self))
+        return _record_dict(self)
 
 
 def _as_list(value: JsonValue, label: str) -> list[JsonValue]:
@@ -737,7 +1333,7 @@ class ExecutionDeclaration:
         )
 
     def to_dict(self) -> dict[str, JsonValue]:
-        return cast("dict[str, JsonValue]", asdict(self))
+        return _record_dict(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -801,7 +1397,7 @@ class Eligibility:
         )
 
     def to_dict(self) -> dict[str, JsonValue]:
-        return cast("dict[str, JsonValue]", asdict(self))
+        return _record_dict(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -820,7 +1416,9 @@ class FixtureSource:
     expected_run_count: int
     expected_exact_groups: int
     expected_divergent_groups: int
-    expected_representation_equivalence: tuple[Literal["unproven", "mapped"], ...]
+    expected_incomplete_groups: int
+    expected_not_comparable_groups: int
+    expected_representation_equivalence: tuple[Literal["unproven"], ...]
 
     @classmethod
     def from_dict(cls, data: dict[str, JsonValue]) -> FixtureSource:
@@ -835,6 +1433,8 @@ class FixtureSource:
             "expected_run_count",
             "expected_exact_groups",
             "expected_divergent_groups",
+            "expected_incomplete_groups",
+            "expected_not_comparable_groups",
             "expected_representation_equivalence",
         }
         _versioned(data, "fixture_source", fields)
@@ -853,7 +1453,7 @@ class FixtureSource:
         for item in equivalence:
             _literal(
                 item,
-                {"unproven", "mapped"},
+                {"unproven"},
                 "fixture_source.expected_representation_equivalence[]",
             )
         record = cls(
@@ -872,6 +1472,14 @@ class FixtureSource:
                 data["expected_divergent_groups"],
                 "fixture_source.expected_divergent_groups",
             ),
+            _integer(
+                data["expected_incomplete_groups"],
+                "fixture_source.expected_incomplete_groups",
+            ),
+            _integer(
+                data["expected_not_comparable_groups"],
+                "fixture_source.expected_not_comparable_groups",
+            ),
             cast("Any", equivalence),
         )
         if any(
@@ -886,7 +1494,7 @@ class FixtureSource:
         return record
 
     def to_dict(self) -> dict[str, JsonValue]:
-        return cast("dict[str, JsonValue]", asdict(self))
+        return _record_dict(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -982,6 +1590,11 @@ class RunRecord:
     model_id: str
     host_id: str
     declaration_id: str
+    process_instance_id: str
+    model_instance_id: str
+    cache_preparation_id: str
+    concurrency_id: str
+    concurrency_wave: int
     cache_cohort: CacheCohort
     evidence_kind: Literal["synthetic_fixture", "observed_execution"]
     validity: Literal["valid", "invalid"]
@@ -1013,6 +1626,11 @@ class RunRecord:
             "model_id",
             "host_id",
             "declaration_id",
+            "process_instance_id",
+            "model_instance_id",
+            "cache_preparation_id",
+            "concurrency_id",
+            "concurrency_wave",
             "cache_cohort",
             "evidence_kind",
             "validity",
@@ -1094,6 +1712,7 @@ class RunRecord:
         token_value = data["token_ids"]
         tokens = None if token_value is None else _integers(token_value, "run_record.token_ids")
         token_sha = _optional_sha256(data["token_ids_sha256"], "run_record.token_ids_sha256")
+        finish_reason = _optional_string(data["finish_reason"], "run_record.finish_reason")
         invalid_sha = _optional_sha256(
             data["invalid_reason_sha256"],
             "run_record.invalid_reason_sha256",
@@ -1104,6 +1723,8 @@ class RunRecord:
             required_values = (raw_base64, raw_sha, text, text_sha, envelope_base64, envelope_sha)
             if any(value is None for value in required_values):
                 raise ContractError("valid run requires raw, text, and envelope custody")
+            if finish_reason is None:
+                raise ContractError("valid run requires a finish reason")
             if digest_bytes(decode_bytes(cast("str", raw_base64))) != raw_sha:
                 raise ContractError("raw response digest mismatch")
             if digest_bytes(cast("str", text).encode("utf-8")) != text_sha:
@@ -1126,6 +1747,7 @@ class RunRecord:
                     text_sha,
                     tokens,
                     token_sha,
+                    finish_reason,
                     envelope_base64,
                     envelope_sha,
                 )
@@ -1161,6 +1783,17 @@ class RunRecord:
             _sha256(data["model_id"], "run_record.model_id"),
             _sha256(data["host_id"], "run_record.host_id"),
             _sha256(data["declaration_id"], "run_record.declaration_id"),
+            _sha256(
+                data["process_instance_id"],
+                "run_record.process_instance_id",
+            ),
+            _sha256(data["model_instance_id"], "run_record.model_instance_id"),
+            _sha256(
+                data["cache_preparation_id"],
+                "run_record.cache_preparation_id",
+            ),
+            _sha256(data["concurrency_id"], "run_record.concurrency_id"),
+            _integer(data["concurrency_wave"], "run_record.concurrency_wave", minimum=1),
             cast("Any", cohort),
             cast("Any", evidence),
             cast("Any", validity),
@@ -1175,7 +1808,7 @@ class RunRecord:
             text_sha,
             tokens,
             token_sha,
-            _optional_string(data["finish_reason"], "run_record.finish_reason"),
+            finish_reason,
             envelope_base64,
             envelope_sha,
             metrics,
@@ -1183,13 +1816,17 @@ class RunRecord:
         )
 
     def to_dict(self) -> dict[str, JsonValue]:
-        return cast("dict[str, JsonValue]", asdict(self))
+        return _record_dict(self)
 
 
 Record: TypeAlias = (
     HostIdentity
     | RuntimeIdentity
     | ModelIdentity
+    | ProcessInstance
+    | ModelInstance
+    | CachePreparation
+    | ConcurrencyIdentity
     | Protocol
     | ExecutionDeclaration
     | Eligibility
@@ -1202,6 +1839,10 @@ RECORD_LOADERS: dict[str, type[Record]] = {
     "host_identity": HostIdentity,
     "runtime_identity": RuntimeIdentity,
     "model_identity": ModelIdentity,
+    "process_instance": ProcessInstance,
+    "model_instance": ModelInstance,
+    "cache_preparation": CachePreparation,
+    "concurrency_identity": ConcurrencyIdentity,
     "protocol": Protocol,
     "execution_declaration": ExecutionDeclaration,
     "eligibility": Eligibility,

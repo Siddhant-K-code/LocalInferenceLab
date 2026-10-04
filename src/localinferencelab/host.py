@@ -149,7 +149,7 @@ def probe_host() -> HostIdentity:
             Fact("probe_method", "python-platform-and-procfs"),
             Fact("apple_silicon_eligible", "false"),
         )
-    return HostIdentity(
+    record = HostIdentity(
         "host_identity",
         "1.0",
         "safe_host_probe",
@@ -164,3 +164,4 @@ def probe_host() -> HostIdentity:
         os_build,
         facts,
     )
+    return HostIdentity.from_dict(record.to_dict())

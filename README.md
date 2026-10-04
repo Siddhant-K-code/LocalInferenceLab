@@ -3,9 +3,9 @@
 **Evidence-first determinism experiments for local LLM inference on Apple Silicon.**
 
 LocalInferenceLab treats repeatability as a provenance and custody problem. It binds exact inputs,
-runtime and model identities, host class, cache state, execution order, native metrics, and raw
-outputs before it compares runs. It is not a tokens-per-second leaderboard and it does not infer
-determinism from a seed.
+runtime and model identities, process and model instances, cache-preparation lineage, effective
+concurrency, exact execution order, native metrics, and raw outputs before it compares runs. It is
+not a tokens-per-second leaderboard and it does not infer determinism from a seed.
 
 > The foundation release contains no live model runner. Its complete synthetic fixture exercises
 > contracts, analysis, durable publication, and offline replay without a model, network request, or
@@ -35,7 +35,7 @@ process start and inference request within the declaration budget.
 
 | Surface | MLX-LM | llama.cpp with Metal | Ollama |
 |---|---|---|---|
-| Runtime identity schema | Package or immutable install manifest | Binary digest, build version, commit, flags | Binary or package digest, version, runner capability evidence |
+| Runtime identity schema | Package or immutable install manifest plus structured runner and Metal facts | Binary digest, build version, commit, runner, and Metal state | Binary or package digest, version, selected internal runner, and Metal state |
 | Model identity schema | Snapshot file manifest, config, tokenizer | GGUF bytes and metadata | Manifest and layer digests |
 | Cache cohort contract | Prompt and KV cache state | Process, model, prompt/KV, context shift | Outer API state plus active runner and cache state |
 | Native metrics | Preserved when exposed | Preserved when exposed | Durations and token counts in native nanosecond units |
@@ -44,7 +44,8 @@ process start and inference request within the declaration budget.
 
 MLX snapshots, GGUF files, and Ollama manifests are separate representations. A shared marketing
 name does not establish byte or behavioral equivalence. Cross-representation equivalence remains
-`unproven` unless a separate mapping artifact is supplied.
+`unproven` in v1. Mapping digests and mapped states are rejected until a typed, indexed mapping
+artifact contract exists.
 
 ## Quickstart
 
@@ -61,9 +62,10 @@ The committed fixture deterministically produces:
 
 | Result | Value |
 |---|---:|
-| Bundle content root | `sha256:9eb7a18c03e89a09ae4edf2d1b206a1629f5dafa08e0f0a35cbcf42deac5988d` |
-| Protocol identity | `sha256:aaec03109045825b589f5a05714aa2fd19abebffe0d1dfcd4d04e2abb2108c8f` |
+| Bundle content root | `sha256:c4401fe71dee474a610eb95cf071fea72a0c09a3b221d80bd023c603f618617e` |
+| Protocol identity | `sha256:a23da6973f43faa2a9ae5e3d9bb912a43434f185507760e9363689956dfa5df5` |
 | Runs | 4 |
+| Exact scheduled slots | 4 |
 | Isolated cache cohorts | 2 |
 | Exactly repeatable groups | 1 |
 | Divergent text/token groups | 1 |
@@ -87,12 +89,17 @@ localinferencelab backend probe BACKEND ARTIFACT --version VERSION [--commit COM
 Linux output is portability evidence only and never claims Apple Silicon eligibility. `backend
 probe` hashes one no-follow file descriptor without executing it and records only its basename.
 Static probes remain explicitly incomplete until backend-specific observed capability evidence
-exists.
+exists. Literal absence markers such as `unobserved`, `unknown`, and `unavailable` never satisfy an
+observed identity requirement.
 
 ## Measurement semantics
 
 - Exact repeatability compares raw response, UTF-8 text, observable token IDs, finish reason, and
-  structured envelope digests inside one backend, identity set, protocol, and cache cohort.
+  structured envelope digests inside one backend, identity set, protocol, process instance, model
+  instance, cache preparation, effective concurrency state including peer request shape, request,
+  and cache cohort. The exact schedule separately binds ordered concurrency waves.
+- A valid output requires a finish reason. Missing token IDs make the group `not_comparable`;
+  invalid output makes it `incomplete`. Neither state is reported as exact or divergent.
 - Performance keeps backend-native names and units. Derived throughput is integer fixed-point and
   only exists when generation count and duration are available.
 - TTFT, prompt evaluation, generation, total, and load measurements carry explicit availability
@@ -104,12 +111,16 @@ exists.
 
 ## Durable custody
 
-Bundles contain source fixture intent, protocol, identities, declarations, eligibility decisions,
+Bundles contain source fixture intent, protocol and exact run schedule, identities, process/model
+instances, cache-preparation lineage, concurrency identity, declarations, eligibility decisions,
 ordered run records, analysis, index, and receipt. Publication uses fsynced staged files, fsynced
 directories, a platform no-replace rename, destination-parent fsync, and receipt-last exclusive
-creation. Replay rejects symlinks, traversal, non-canonical JSON, unknown keys, identity drift,
-extra or missing paths, swapped records, action-budget drift, source-intent drift, analysis drift,
-and absent receipts. Digest and semantic checks use the same single-read byte snapshot.
+creation. Replay opens a verified bundle-root descriptor, traverses each component relative to
+directory descriptors with no-follow and nonblocking flags, requires regular files before reading,
+and rejects symlinks, traversal, special files, non-canonical JSON, unknown keys, identity drift,
+extra or missing paths, swapped records, schedule drift, writable or foreign-owned bundle
+directories, action-budget drift, source-intent drift, analysis drift, and absent receipts. Digest
+and semantic checks use the same single-read byte snapshot.
 
 See [Architecture](docs/architecture.md), [Protocol](docs/protocol.md), and
 [Current source research](docs/research/current-sources.md).
@@ -129,9 +140,9 @@ The project does not claim that:
 
 1. Review and freeze the v1 records and execution declaration.
 2. Add separately authorized, preinstalled-resource runners one backend at a time.
-3. Capture backend-specific cache lifecycle evidence and tokenizer identity.
+3. Capture observed backend-specific cache lifecycle evidence and tokenizer identity.
 4. Publish observed Apple Silicon bundles only after provenance and privacy review.
-5. Add mapped cross-representation studies without weakening within-backend primary analysis.
+5. Define a typed, indexed mapping-artifact protocol before any mapped cross-representation study.
 
 ## Development
 

@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import socket
+import subprocess
+import sys
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -16,7 +22,12 @@ from localinferencelab.canonical import (
     encode_bytes,
     load_json_bytes,
 )
-from localinferencelab.custody import publish_bundle, replay_bundle
+from localinferencelab.contracts import HostIdentity, ModelIdentity, RuntimeIdentity, parse_record
+from localinferencelab.custody import (
+    _fixture_evidence_is_synthetic,
+    publish_bundle,
+    replay_bundle,
+)
 from localinferencelab.fixture import compile_fixture, fixture_content
 
 
@@ -57,17 +68,19 @@ def test_fixture_is_byte_deterministic_and_replays(tmp_path: Path) -> None:
     assert first_summary["bundle_root"] == second_summary["bundle_root"]
     assert (
         first_summary["bundle_root"]
-        == "sha256:9eb7a18c03e89a09ae4edf2d1b206a1629f5dafa08e0f0a35cbcf42deac5988d"
+        == "sha256:c4401fe71dee474a610eb95cf071fea72a0c09a3b221d80bd023c603f618617e"
     )
     assert (
         first_summary["protocol_id"]
-        == "sha256:aaec03109045825b589f5a05714aa2fd19abebffe0d1dfcd4d04e2abb2108c8f"
+        == "sha256:a23da6973f43faa2a9ae5e3d9bb912a43434f185507760e9363689956dfa5df5"
     )
     result = replay_bundle(first)
     assert result.run_count == 4
     assert result.group_count == 2
     assert result.exactly_repeatable_groups == 1
     assert result.divergent_groups == 1
+    assert result.incomplete_groups == 0
+    assert result.not_comparable_groups == 0
     assert result.representation_equivalence == ("unproven",)
 
 
@@ -129,9 +142,9 @@ def test_identity_drift_is_rejected_after_valid_republication(tmp_path: Path) ->
     def drift(value: dict[str, JsonValue]) -> None:
         value["model_id"] = "sha256:" + ("0" * 64)
 
-    _mutate_json(content, "runs/0001-mlx-cold-001.json", drift)
+    _mutate_json(content, "runs/0001-mlx-warm-model-001.json", drift)
     bundle = _publish_mutation(tmp_path, content, "identity-drift")
-    with pytest.raises(ContractError, match="unknown identity"):
+    with pytest.raises(ContractError, match="exact protocol schedule"):
         replay_bundle(bundle)
 
 
@@ -148,7 +161,7 @@ def test_forbidden_observed_execution_is_rejected(tmp_path: Path) -> None:
             if metric["availability"] == "synthetic":
                 metric["availability"] = "observed"
 
-    _mutate_json(content, "runs/0001-mlx-cold-001.json", claim_observed)
+    _mutate_json(content, "runs/0001-mlx-warm-model-001.json", claim_observed)
     bundle = _publish_mutation(tmp_path, content, "forbidden")
     with pytest.raises(ContractError, match="cannot custody observed"):
         replay_bundle(bundle)
@@ -191,10 +204,72 @@ def test_request_drift_cannot_be_pooled_as_a_repeat(tmp_path: Path) -> None:
         value["request_base64"] = encode_bytes(request)
         value["request_sha256"] = digest_bytes(request)
 
-    _mutate_json(content, "runs/0001-mlx-cold-001.json", change_request)
+    _mutate_json(content, "runs/0001-mlx-warm-model-001.json", change_request)
     bundle = _publish_mutation(tmp_path, content, "request-drift")
-    with pytest.raises(ContractError, match="repeat count"):
+    with pytest.raises(ContractError, match="exact protocol schedule"):
         replay_bundle(bundle)
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("cache_cohort", "cold_process_model"),
+        ("process_instance_id", "sha256:" + ("0" * 64)),
+        ("model_instance_id", "sha256:" + ("1" * 64)),
+        ("cache_preparation_id", "sha256:" + ("2" * 64)),
+        ("concurrency_id", "sha256:" + ("3" * 64)),
+        ("concurrency_wave", 99),
+    ],
+)
+def test_replay_rejects_relabelled_schedule_state(
+    tmp_path: Path,
+    field: str,
+    replacement: JsonValue,
+) -> None:
+    content = fixture_content()
+
+    def relabel(value: dict[str, JsonValue]) -> None:
+        value[field] = replacement
+
+    _mutate_json(content, "runs/0001-mlx-warm-model-001.json", relabel)
+    bundle = _publish_mutation(tmp_path, content, f"schedule-relabel-{field}")
+    with pytest.raises(ContractError, match="exact protocol schedule"):
+        replay_bundle(bundle)
+
+
+def test_replay_rejects_reordered_runs(tmp_path: Path) -> None:
+    content = fixture_content()
+    first_name = "runs/0001-mlx-warm-model-001.json"
+    second_name = "runs/0002-mlx-warm-model-002.json"
+    first = load_json_bytes(content.pop(first_name))
+    second = load_json_bytes(content.pop(second_name))
+    assert isinstance(first, dict)
+    assert isinstance(second, dict)
+    first["run_order"] = 2
+    second["run_order"] = 1
+    content["runs/0002-mlx-warm-model-001.json"] = canonical_json(first)
+    content["runs/0001-mlx-warm-model-002.json"] = canonical_json(second)
+    bundle = _publish_mutation(tmp_path, content, "schedule-reordered")
+    with pytest.raises(ContractError, match="exact protocol schedule"):
+        replay_bundle(bundle)
+
+
+def test_replay_rejects_duplicate_and_missing_runs(tmp_path: Path) -> None:
+    duplicate = fixture_content()
+    second_name = "runs/0002-mlx-warm-model-002.json"
+    second = load_json_bytes(duplicate.pop(second_name))
+    assert isinstance(second, dict)
+    second["run_id"] = "mlx-warm-model-001"
+    duplicate["runs/0002-mlx-warm-model-001.json"] = canonical_json(second)
+    duplicate_bundle = _publish_mutation(tmp_path, duplicate, "schedule-duplicate")
+    with pytest.raises(ContractError, match="exact protocol schedule"):
+        replay_bundle(duplicate_bundle)
+
+    missing = fixture_content()
+    missing.pop("runs/0002-mlx-warm-model-002.json")
+    missing_bundle = _publish_mutation(tmp_path, missing, "schedule-missing")
+    with pytest.raises(ContractError, match="run count"):
+        replay_bundle(missing_bundle)
 
 
 def test_path_traversal_and_symlink_roots_are_rejected(tmp_path: Path) -> None:
@@ -215,6 +290,111 @@ def test_path_traversal_and_symlink_roots_are_rejected(tmp_path: Path) -> None:
         publish_bundle(fixture_content(), tmp_path, name_prefix="../escape")
     with pytest.raises(ContractError, match="reserved bundle path"):
         publish_bundle({"receipt.json": b"{}"}, tmp_path, name_prefix="reserved")
+
+
+def test_replay_rejects_symlinked_bundle_ancestor(tmp_path: Path) -> None:
+    bundle, _summary = compile_fixture(tmp_path)
+    external = tmp_path / "external-runs"
+    shutil.copytree(bundle / "runs", external)
+    shutil.rmtree(bundle / "runs")
+    (bundle / "runs").symlink_to(external, target_is_directory=True)
+    with pytest.raises(ContractError, match="symlink"):
+        replay_bundle(bundle)
+
+
+def test_replay_rejects_writable_nested_directory(tmp_path: Path) -> None:
+    bundle, _summary = compile_fixture(tmp_path)
+    (bundle / "runs").chmod(0o777)
+    with pytest.raises(ContractError, match="group/world writable"):
+        replay_bundle(bundle)
+
+
+def test_fixture_evidence_requires_synthetic_top_level_identities() -> None:
+    content = fixture_content()
+    host = parse_record(load_json_bytes(content["identities/host.json"]))
+    runtime = parse_record(load_json_bytes(content["identities/runtime-mlx-lm.json"]))
+    model = parse_record(load_json_bytes(content["identities/model-mlx-lm.json"]))
+    assert isinstance(host, HostIdentity)
+    assert isinstance(runtime, RuntimeIdentity)
+    assert isinstance(model, ModelIdentity)
+    assert _fixture_evidence_is_synthetic(
+        {"host": host},
+        {"runtime": runtime},
+        {"model": model},
+        {},
+        {},
+        {},
+        [],
+    )
+    assert not _fixture_evidence_is_synthetic(
+        {"host": replace(host, evidence_kind="safe_host_probe")},
+        {"runtime": runtime},
+        {"model": model},
+        {},
+        {},
+        {},
+        [],
+    )
+    assert not _fixture_evidence_is_synthetic(
+        {"host": host},
+        {"runtime": replace(runtime, evidence_kind="static_artifact_probe")},
+        {"model": model},
+        {},
+        {},
+        {},
+        [],
+    )
+    assert not _fixture_evidence_is_synthetic(
+        {"host": host},
+        {"runtime": runtime},
+        {"model": replace(model, evidence_kind="static_artifact_probe")},
+        {},
+        {},
+        {},
+        [],
+    )
+
+
+def test_replay_fifo_failure_is_bounded(tmp_path: Path) -> None:
+    bundle, _summary = compile_fixture(tmp_path)
+    analysis = bundle / "analysis.json"
+    analysis.unlink()
+    os.mkfifo(analysis)
+    script = (
+        "from pathlib import Path\n"
+        "from localinferencelab.canonical import ContractError\n"
+        "from localinferencelab.custody import replay_bundle\n"
+        f"bundle = Path({str(bundle)!r})\n"
+        "try:\n"
+        "    replay_bundle(bundle)\n"
+        "except ContractError:\n"
+        "    raise SystemExit(0)\n"
+        "raise SystemExit(1)\n"
+    )
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        timeout=3,
+    )
+    assert result.returncode == 0
+
+
+def test_replay_rejects_socket_bundle_entry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle, _summary = compile_fixture(tmp_path)
+    analysis = bundle / "analysis.json"
+    analysis.unlink()
+    monkeypatch.chdir(bundle)
+    server = socket.socket(socket.AF_UNIX)
+    try:
+        server.bind("analysis.json")
+        with pytest.raises(ContractError, match="non-regular"):
+            replay_bundle(bundle)
+    finally:
+        server.close()
 
 
 def test_publication_collision_is_no_clobber(tmp_path: Path) -> None:

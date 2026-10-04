@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import cast
 
 from localinferencelab.canonical import ContractError, JsonValue
-from localinferencelab.contracts import Backend, RuntimeIdentity
+from localinferencelab.contracts import Backend, RuntimeFact, RuntimeIdentity
 
 BACKENDS = {"mlx-lm", "llama.cpp", "ollama"}
 
@@ -73,11 +73,7 @@ def probe_runtime_artifact(
         digest = f"sha256:{digest_state.hexdigest()}"
     finally:
         os.close(descriptor)
-    capabilities = (
-        "artifact bytes hashed without execution",
-        "no runtime capability claim",
-    )
-    return RuntimeIdentity(
+    record = RuntimeIdentity(
         "runtime_identity",
         "1.0",
         backend,
@@ -88,7 +84,10 @@ def probe_runtime_artifact(
         commit,
         digest,
         None,
-        (),
-        capabilities,
+        (
+            RuntimeFact("runner", "unobserved"),
+            RuntimeFact("metal", "unobserved"),
+        ),
         False,
     )
+    return RuntimeIdentity.from_dict(record.to_dict())

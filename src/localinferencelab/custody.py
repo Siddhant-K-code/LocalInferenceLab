@@ -23,13 +23,18 @@ from localinferencelab.canonical import (
     load_json_bytes,
 )
 from localinferencelab.contracts import (
+    CachePreparation,
+    ConcurrencyIdentity,
     Eligibility,
     ExecutionDeclaration,
     FixtureSource,
     HostIdentity,
     ModelIdentity,
+    ModelInstance,
+    ProcessInstance,
     Protocol,
     RunRecord,
+    RunScheduleEntry,
     RuntimeIdentity,
     parse_record,
     record_id,
@@ -50,6 +55,8 @@ class ReplayResult:
     group_count: int
     exactly_repeatable_groups: int
     divergent_groups: int
+    incomplete_groups: int
+    not_comparable_groups: int
     representation_equivalence: tuple[str, ...]
 
     def to_dict(self) -> dict[str, JsonValue]:
@@ -60,8 +67,33 @@ class ReplayResult:
             "group_count": self.group_count,
             "exactly_repeatable_groups": self.exactly_repeatable_groups,
             "divergent_groups": self.divergent_groups,
+            "incomplete_groups": self.incomplete_groups,
+            "not_comparable_groups": self.not_comparable_groups,
             "representation_equivalence": list(self.representation_equivalence),
         }
+
+
+def _fixture_evidence_is_synthetic(
+    hosts: dict[str, HostIdentity],
+    runtimes: dict[str, RuntimeIdentity],
+    models: dict[str, ModelIdentity],
+    processes: dict[str, ProcessInstance],
+    model_instances: dict[str, ModelInstance],
+    cache_preparations: dict[str, CachePreparation],
+    runs: list[RunRecord],
+) -> bool:
+    collections = (
+        hosts.values(),
+        runtimes.values(),
+        models.values(),
+        processes.values(),
+        model_instances.values(),
+        cache_preparations.values(),
+        runs,
+    )
+    return all(
+        record.evidence_kind == "synthetic_fixture" for records in collections for record in records
+    )
 
 
 def _strict_keys(data: dict[str, JsonValue], expected: set[str], label: str) -> None:
@@ -263,22 +295,152 @@ def publish_bundle(
             _fsync_directory(root)
 
 
-def _read_no_follow(path: Path) -> bytes:
+def _directory_flags() -> int:
     flags = os.O_RDONLY
     if hasattr(os, "O_CLOEXEC"):
         flags |= os.O_CLOEXEC
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
-    descriptor = os.open(path, flags)
+    if hasattr(os, "O_NONBLOCK"):
+        flags |= os.O_NONBLOCK
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    return flags
+
+
+def _require_directory(descriptor: int, label: str) -> None:
+    if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+        raise ContractError(f"non-directory bundle path component: {label}")
+
+
+def _require_trusted_directory(
+    descriptor: int,
+    label: str,
+    *,
+    expected_owner: int,
+) -> None:
+    metadata = os.fstat(descriptor)
+    if metadata.st_uid != expected_owner:
+        raise ContractError(f"bundle directory has untrusted ownership: {label}")
+    if metadata.st_mode & 0o022:
+        raise ContractError(f"bundle directory is group/world writable: {label}")
+
+
+def _open_child_directory(
+    parent_descriptor: int,
+    name: str,
+    *,
+    expected_owner: int | None = None,
+) -> int:
+    descriptor = os.open(name, _directory_flags(), dir_fd=parent_descriptor)
     try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise ContractError(f"non-regular bundle file: {path.name}")
-        blocks: list[bytes] = []
-        while block := os.read(descriptor, 1024 * 1024):
-            blocks.append(block)
-        return b"".join(blocks)
-    finally:
+        _require_directory(descriptor, name)
+        if expected_owner is not None:
+            _require_trusted_directory(
+                descriptor,
+                name,
+                expected_owner=expected_owner,
+            )
+    except Exception:
         os.close(descriptor)
+        raise
+    return descriptor
+
+
+def _open_bundle_root(path: Path) -> int:
+    if ".." in path.parts:
+        raise ContractError("path traversal is forbidden")
+    absolute = path.absolute()
+    descriptor = os.open(absolute.anchor, _directory_flags())
+    try:
+        for part in absolute.parts[1:]:
+            child = _open_child_directory(descriptor, part)
+            os.close(descriptor)
+            descriptor = child
+        _require_trusted_directory(
+            descriptor,
+            str(absolute),
+            expected_owner=os.geteuid(),
+        )
+    except OSError as error:
+        os.close(descriptor)
+        if error.errno in {errno.ELOOP, errno.ENOTDIR}:
+            raise ContractError("symlink or non-directory bundle path component") from error
+        raise
+    except Exception:
+        os.close(descriptor)
+        raise
+    else:
+        return descriptor
+
+
+def _read_relative_file(root_descriptor: int, relative_name: str) -> bytes:
+    relative = _safe_relative(relative_name)
+    root_owner = os.fstat(root_descriptor).st_uid
+    directory = os.dup(root_descriptor)
+    try:
+        for part in relative.parts[:-1]:
+            child = _open_child_directory(
+                directory,
+                part,
+                expected_owner=root_owner,
+            )
+            os.close(directory)
+            directory = child
+        flags = os.O_RDONLY
+        if hasattr(os, "O_CLOEXEC"):
+            flags |= os.O_CLOEXEC
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        if hasattr(os, "O_NONBLOCK"):
+            flags |= os.O_NONBLOCK
+        descriptor = os.open(relative.parts[-1], flags, dir_fd=directory)
+        try:
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise ContractError(f"non-regular bundle file: {relative_name}")
+            blocks: list[bytes] = []
+            while block := os.read(descriptor, 1024 * 1024):
+                blocks.append(block)
+            return b"".join(blocks)
+        finally:
+            os.close(descriptor)
+    except OSError as error:
+        if error.errno in {errno.ELOOP, errno.ENOTDIR, errno.ENXIO}:
+            raise ContractError(f"unsafe bundle path: {relative_name}") from error
+        raise
+    finally:
+        os.close(directory)
+
+
+def _snapshot_tree(root_descriptor: int) -> tuple[set[str], set[str]]:
+    files: set[str] = set()
+    directories: set[str] = set()
+    root_owner = os.fstat(root_descriptor).st_uid
+
+    def visit(descriptor: int, prefix: PurePosixPath) -> None:
+        for name in sorted(os.listdir(descriptor)):
+            metadata = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+            relative = prefix / name
+            if stat.S_ISLNK(metadata.st_mode):
+                raise ContractError(f"symlink in bundle: {relative.as_posix()}")
+            if stat.S_ISDIR(metadata.st_mode):
+                directories.add(relative.as_posix())
+                child = _open_child_directory(
+                    descriptor,
+                    name,
+                    expected_owner=root_owner,
+                )
+                try:
+                    visit(child, relative)
+                finally:
+                    os.close(child)
+            elif stat.S_ISREG(metadata.st_mode):
+                files.add(relative.as_posix())
+            else:
+                raise ContractError(f"non-regular bundle entry: {relative.as_posix()}")
+
+    visit(root_descriptor, PurePosixPath())
+    return files, directories
 
 
 def _read_canonical_json(data: bytes, label: str) -> JsonValue:
@@ -371,7 +533,7 @@ def _parse_index(
 
 
 def _verify_closed_set(
-    path: Path,
+    root_descriptor: int,
     index: dict[str, JsonValue],
     index_bytes: bytes,
     receipt_bytes: bytes,
@@ -385,22 +547,13 @@ def _verify_closed_set(
         for item in entries
     }
     expected_files.update({"index.json": {}, "receipt.json": {}})
-    expected_directories = {
-        PurePosixPath(name).parent.as_posix()
-        for name in expected_files
-        if PurePosixPath(name).parent != PurePosixPath(".")
-    }
-    actual_files: set[str] = set()
-    actual_directories: set[str] = set()
-    for root, directories, files in os.walk(path, followlinks=False):
-        root_path = Path(root)
-        for directory in directories:
-            directory_path = root_path / directory
-            if stat.S_ISLNK(os.lstat(directory_path).st_mode):
-                raise ContractError(f"symlink in bundle: {directory_path}")
-            actual_directories.add(directory_path.relative_to(path).as_posix())
-        for filename in files:
-            actual_files.add((root_path / filename).relative_to(path).as_posix())
+    expected_directories: set[str] = set()
+    for name in expected_files:
+        parent = PurePosixPath(name).parent
+        while parent != PurePosixPath("."):
+            expected_directories.add(parent.as_posix())
+            parent = parent.parent
+    actual_files, actual_directories = _snapshot_tree(root_descriptor)
     if actual_files != set(expected_files):
         missing = sorted(set(expected_files) - actual_files)
         extra = sorted(actual_files - set(expected_files))
@@ -411,7 +564,7 @@ def _verify_closed_set(
     for name, entry in expected_files.items():
         if not entry:
             continue
-        data = _read_no_follow(path / name)
+        data = _read_relative_file(root_descriptor, name)
         if len(data) != entry["size_bytes"] or digest_bytes(data) != entry["sha256"]:
             raise ContractError(f"indexed file digest mismatch: {name}")
         file_bytes[name] = data
@@ -420,20 +573,32 @@ def _verify_closed_set(
 
 def replay_bundle(bundle: Path) -> ReplayResult:
     """Strictly verify and recompute a closed bundle without network or model access."""
-    path = _safe_existing_directory(bundle)
+    root_descriptor = _open_bundle_root(bundle)
     try:
-        index_bytes = _read_no_follow(path / "index.json")
-        receipt_bytes = _read_no_follow(path / "receipt.json")
-    except FileNotFoundError as error:
-        raise ContractError("bundle has no publication receipt") from error
-    index, _receipt = _parse_index(index_bytes, receipt_bytes)
-    file_bytes = _verify_closed_set(path, index, index_bytes, receipt_bytes)
+        try:
+            index_bytes = _read_relative_file(root_descriptor, "index.json")
+            receipt_bytes = _read_relative_file(root_descriptor, "receipt.json")
+        except FileNotFoundError as error:
+            raise ContractError("bundle has no publication receipt") from error
+        index, _receipt = _parse_index(index_bytes, receipt_bytes)
+        file_bytes = _verify_closed_set(
+            root_descriptor,
+            index,
+            index_bytes,
+            receipt_bytes,
+        )
+    finally:
+        os.close(root_descriptor)
 
     protocol: Protocol | None = None
     source: FixtureSource | None = None
     hosts: dict[str, HostIdentity] = {}
     runtimes: dict[str, RuntimeIdentity] = {}
     models: dict[str, ModelIdentity] = {}
+    processes: dict[str, ProcessInstance] = {}
+    model_instances: dict[str, ModelInstance] = {}
+    cache_preparations: dict[str, CachePreparation] = {}
+    concurrency_identities: dict[str, ConcurrencyIdentity] = {}
     declarations: dict[str, ExecutionDeclaration] = {}
     eligibility: list[Eligibility] = []
     runs: list[RunRecord] = []
@@ -466,6 +631,22 @@ def replay_bundle(bundle: Path) -> ReplayResult:
             if name != expected:
                 raise ContractError("model identity is in the wrong bundle path")
             models[identity] = record
+        elif isinstance(record, ProcessInstance):
+            if name != f"state/process/{identity}.json":
+                raise ContractError("process instance is in the wrong bundle path")
+            processes[identity] = record
+        elif isinstance(record, ModelInstance):
+            if name != f"state/model/{identity}.json":
+                raise ContractError("model instance is in the wrong bundle path")
+            model_instances[identity] = record
+        elif isinstance(record, CachePreparation):
+            if name != f"state/cache/{identity}.json":
+                raise ContractError("cache preparation is in the wrong bundle path")
+            cache_preparations[identity] = record
+        elif isinstance(record, ConcurrencyIdentity):
+            if name != f"state/concurrency/{identity}.json":
+                raise ContractError("concurrency identity is in the wrong bundle path")
+            concurrency_identities[identity] = record
         elif isinstance(record, ExecutionDeclaration):
             expected = f"authorizations/{record.backend.replace('.', '-')}.json"
             if name != expected:
@@ -494,10 +675,153 @@ def replay_bundle(bundle: Path) -> ReplayResult:
         raise ContractError("protocol model allowlist does not match bundle identities")
     if set(protocol.allowed_host_ids) != set(hosts):
         raise ContractError("protocol host allowlist does not match bundle identities")
+    schedule_processes = {entry.process_instance_id for entry in protocol.run_schedule}
+    schedule_models = {entry.model_instance_id for entry in protocol.run_schedule}
+    schedule_concurrency = {entry.concurrency_id for entry in protocol.run_schedule}
+    if schedule_processes != set(processes):
+        raise ContractError("protocol schedule process instances do not match the bundle")
+    if schedule_models != set(model_instances):
+        raise ContractError("protocol schedule model instances do not match the bundle")
+    if schedule_concurrency != set(concurrency_identities):
+        raise ContractError("protocol schedule concurrency identities do not match the bundle")
+    scheduled_cache = {entry.cache_preparation_id for entry in protocol.run_schedule}
+    required_cache: set[str] = set()
+    remaining = list(scheduled_cache)
+    while remaining:
+        cache_id = remaining.pop()
+        if cache_id in required_cache:
+            continue
+        preparation = cache_preparations.get(cache_id)
+        if preparation is None:
+            raise ContractError("protocol schedule references an unknown cache preparation")
+        required_cache.add(cache_id)
+        if preparation.parent_preparation_id is not None:
+            remaining.append(preparation.parent_preparation_id)
+    if required_cache != set(cache_preparations):
+        raise ContractError("bundle contains orphan cache preparation state")
+    for process_id, process in processes.items():
+        runtime = runtimes.get(process.runtime_id)
+        if (
+            runtime is None
+            or process.host_id not in hosts
+            or runtime.backend != process.backend
+            or process.max_concurrency > protocol.concurrency
+        ):
+            raise ContractError(f"process instance identity drift: {process_id}")
+    for instance_id, instance in model_instances.items():
+        process_record = processes.get(instance.process_instance_id)
+        model = models.get(instance.model_id)
+        if (
+            process_record is None
+            or model is None
+            or process_record.backend != instance.backend
+            or model.backend != instance.backend
+            or instance.context_tokens != protocol.context_tokens
+        ):
+            raise ContractError(f"model instance identity drift: {instance_id}")
+    for cache_id, preparation in cache_preparations.items():
+        model_instance_record = model_instances.get(preparation.model_instance_id)
+        parent = (
+            None
+            if preparation.parent_preparation_id is None
+            else cache_preparations.get(preparation.parent_preparation_id)
+        )
+        if model_instance_record is None or model_instance_record.backend != preparation.backend:
+            raise ContractError(f"cache preparation identity drift: {cache_id}")
+        if preparation.parent_preparation_id is not None and (
+            parent is None or parent.model_instance_id != preparation.model_instance_id
+        ):
+            raise ContractError("cache preparation lineage crosses model instances")
+        seen_lineage = {cache_id}
+        ancestor_id = preparation.parent_preparation_id
+        while ancestor_id is not None:
+            if ancestor_id in seen_lineage:
+                raise ContractError("cache preparation lineage contains a cycle")
+            seen_lineage.add(ancestor_id)
+            ancestor = cache_preparations.get(ancestor_id)
+            if ancestor is None:
+                raise ContractError("cache preparation lineage references an unknown parent")
+            ancestor_id = ancestor.parent_preparation_id
+    if any(
+        identity.max_concurrency != protocol.concurrency
+        for identity in concurrency_identities.values()
+    ):
+        raise ContractError("concurrency identity does not match protocol concurrency")
+    schedule_waves: dict[int, list[RunScheduleEntry]] = {}
+    for entry in protocol.run_schedule:
+        schedule_waves.setdefault(entry.concurrency_wave, []).append(entry)
+    for wave_entries in schedule_waves.values():
+        if len(wave_entries) > protocol.concurrency:
+            raise ContractError("scheduled concurrency wave exceeds protocol concurrency")
+        slots: set[int] = set()
+        process_counts: dict[str, int] = {}
+        for schedule_entry in wave_entries:
+            concurrency_record = concurrency_identities[schedule_entry.concurrency_id]
+            peers = tuple(
+                sorted(
+                    other.request_sha256
+                    for other in wave_entries
+                    if other.sequence != schedule_entry.sequence
+                ),
+            )
+            if (
+                concurrency_record.worker_slot in slots
+                or concurrency_record.active_peers != len(wave_entries) - 1
+                or concurrency_record.peer_request_sha256 != peers
+            ):
+                raise ContractError("concurrency identity does not match its scheduled wave")
+            slots.add(concurrency_record.worker_slot)
+            process_counts[schedule_entry.process_instance_id] = (
+                process_counts.get(schedule_entry.process_instance_id, 0) + 1
+            )
+        if any(
+            count > processes[process_id].max_concurrency
+            for process_id, count in process_counts.items()
+        ):
+            raise ContractError("scheduled wave exceeds process-instance concurrency")
     if not runs:
         raise ContractError("bundle has no run records")
+    if len(runs) != len(protocol.run_schedule):
+        raise ContractError("run count does not match the exact protocol schedule")
     if sorted(run.run_order for run in runs) != list(range(1, len(runs) + 1)):
         raise ContractError("run order must be unique and contiguous")
+    for run, entry in zip(
+        sorted(runs, key=lambda item: item.run_order),
+        protocol.run_schedule,
+        strict=True,
+    ):
+        actual_slot = (
+            run.run_order,
+            run.run_id,
+            run.backend,
+            run.runtime_id,
+            run.model_id,
+            run.host_id,
+            run.process_instance_id,
+            run.model_instance_id,
+            run.cache_preparation_id,
+            run.concurrency_id,
+            run.concurrency_wave,
+            run.cache_cohort,
+            run.request_sha256,
+        )
+        expected_slot = (
+            entry.sequence,
+            entry.run_id,
+            entry.backend,
+            entry.runtime_id,
+            entry.model_id,
+            entry.host_id,
+            entry.process_instance_id,
+            entry.model_instance_id,
+            entry.cache_preparation_id,
+            entry.concurrency_id,
+            entry.concurrency_wave,
+            entry.cache_cohort,
+            entry.request_sha256,
+        )
+        if actual_slot != expected_slot:
+            raise ContractError("run does not match its exact protocol schedule slot")
     observed_backends = {run.backend for run in runs}
     if observed_backends != set(protocol.backend_order):
         raise ContractError("run backends do not match the protocol backend order")
@@ -611,6 +935,29 @@ def replay_bundle(bundle: Path) -> ReplayResult:
             and run.evidence_kind != "synthetic_fixture"
         ):
             raise ContractError("forbidden declaration cannot custody observed execution")
+        run_process = processes.get(run.process_instance_id)
+        model_instance = model_instances.get(run.model_instance_id)
+        preparation = cache_preparations.get(run.cache_preparation_id)
+        concurrency = concurrency_identities.get(run.concurrency_id)
+        if (
+            run_process is None
+            or model_instance is None
+            or preparation is None
+            or concurrency is None
+            or run_process.backend != run.backend
+            or run_process.runtime_id != run.runtime_id
+            or run_process.host_id != run.host_id
+            or model_instance.backend != run.backend
+            or model_instance.process_instance_id != run.process_instance_id
+            or model_instance.model_id != run.model_id
+            or preparation.backend != run.backend
+            or preparation.model_instance_id != run.model_instance_id
+            or preparation.cache_cohort != run.cache_cohort
+            or run_process.evidence_kind != run.evidence_kind
+            or model_instance.evidence_kind != run.evidence_kind
+            or preparation.evidence_kind != run.evidence_kind
+        ):
+            raise ContractError("run state identity does not match its scheduled execution state")
         if run.evidence_kind == "observed_execution" and (
             run_eligibility.decision != "eligible"
             or "inference_request" not in run_eligibility.allowed_actions
@@ -634,7 +981,10 @@ def replay_bundle(bundle: Path) -> ReplayResult:
         ):
             raise ContractError("run action accounting exceeds the declaration budget")
 
-    repeat_groups: dict[tuple[str, str, str, str, str, str, str], int] = {}
+    repeat_groups: dict[
+        tuple[str, str, str, str, str, str, str, str, str, str, str],
+        int,
+    ] = {}
     for run in runs:
         repeat_key = (
             run.backend,
@@ -642,6 +992,10 @@ def replay_bundle(bundle: Path) -> ReplayResult:
             run.model_id,
             run.host_id,
             run.protocol_id,
+            run.process_instance_id,
+            run.model_instance_id,
+            run.cache_preparation_id,
+            run.concurrency_id,
             run.cache_cohort,
             run.request_sha256,
         )
@@ -654,15 +1008,13 @@ def replay_bundle(bundle: Path) -> ReplayResult:
     if stored_analysis != analysis:
         raise ContractError("analysis replay mismatch")
     groups = cast("list[JsonValue]", analysis["groups"])
-    exact = 0
-    divergent = 0
-    for item in groups:
-        group = cast("dict[str, JsonValue]", item)
-        equality = cast("dict[str, JsonValue]", group["exact_repeatability"])
-        if all(value == "equal" for value in equality.values()):
-            exact += 1
-        else:
-            divergent += 1
+    classifications = [
+        cast("str", cast("dict[str, JsonValue]", item)["group_classification"]) for item in groups
+    ]
+    exact = classifications.count("exact")
+    divergent = classifications.count("divergent")
+    incomplete = classifications.count("incomplete")
+    not_comparable = classifications.count("not_comparable")
     pairs = cast("list[JsonValue]", analysis["representation_pairs"])
     equivalence = tuple(
         sorted(
@@ -681,8 +1033,18 @@ def replay_bundle(bundle: Path) -> ReplayResult:
         or source.expected_run_count != len(runs)
         or source.expected_exact_groups != exact
         or source.expected_divergent_groups != divergent
+        or source.expected_incomplete_groups != incomplete
+        or source.expected_not_comparable_groups != not_comparable
         or source.expected_representation_equivalence != equivalence
-        or any(run.evidence_kind != "synthetic_fixture" for run in runs)
+        or not _fixture_evidence_is_synthetic(
+            hosts,
+            runtimes,
+            models,
+            processes,
+            model_instances,
+            cache_preparations,
+            runs,
+        )
     ):
         raise ContractError("fixture source intent does not match replayed evidence")
     return ReplayResult(
@@ -692,5 +1054,7 @@ def replay_bundle(bundle: Path) -> ReplayResult:
         len(groups),
         exact,
         divergent,
+        incomplete,
+        not_comparable,
         equivalence,
     )

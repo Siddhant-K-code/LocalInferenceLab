@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+import pytest
+
+from localinferencelab.canonical import ContractError, canonical_json, load_json_bytes
 from localinferencelab.cli import main, run
+from localinferencelab.contracts import parse_record
 from localinferencelab.fixture import fixture_content
-
-if TYPE_CHECKING:
-    import pytest
 
 
 def _output(capfd: pytest.CaptureFixture[str]) -> dict[str, object]:
@@ -35,6 +35,7 @@ def test_contract_and_backend_commands(
     plan = _output(capfd)
     assert plan["allowed_to_execute"] is False
     assert plan["execution_implemented"] is False
+    assert json.loads(canonical_json(plan)) == plan
 
     artifact = tmp_path / "ollama"
     artifact.write_bytes(b"fixture artifact")
@@ -57,6 +58,8 @@ def test_contract_and_backend_commands(
     assert probe["executable_name"] == "ollama"
     assert probe["identity_complete"] is False
     assert str(tmp_path) not in json.dumps(probe)
+    probe.pop("identity")
+    assert parse_record(load_json_bytes(canonical_json(probe))).record_type == "runtime_identity"
 
 
 def test_fixture_verify_and_replay_commands(
@@ -89,6 +92,39 @@ def test_host_probe_command_is_privacy_preserving(
     assert "/Users/" not in encoded
     assert "/home/" not in encoded
     assert "identity" in output
+    output.pop("identity")
+    assert parse_record(load_json_bytes(canonical_json(output))).record_type == "host_identity"
+
+
+@pytest.mark.parametrize(
+    "version",
+    [
+        "/Users/person/runtime",
+        "Users/person/runtime",
+        "home/person/runtime",
+        "~/runtime",
+        "~\\runtime",
+        "username=person",
+        "bad\ud800",
+    ],
+)
+def test_backend_probe_cli_rejects_private_versions(
+    tmp_path: Path,
+    version: str,
+) -> None:
+    artifact = tmp_path / "runtime"
+    artifact.write_bytes(b"fixture")
+    with pytest.raises(ContractError, match=r"private|surrogate"):
+        run(
+            [
+                "backend",
+                "probe",
+                "ollama",
+                str(artifact),
+                "--version",
+                version,
+            ],
+        )
 
 
 def test_main_reports_fail_closed_errors(
