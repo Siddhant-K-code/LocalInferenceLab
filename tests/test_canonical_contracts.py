@@ -540,6 +540,7 @@ def test_synthetic_metric_evidence_and_throughput_units_are_enforced() -> None:
 def test_backend_plan_is_fail_closed() -> None:
     plan = backend_plan("ollama")
     assert plan["allowed_to_execute"] is False
+    assert plan["execution_implemented"] is True
     assert plan["automatic_runtime_start"] is False
     assert plan["automatic_model_download"] is False
     assert plan["network_access"] is False

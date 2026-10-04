@@ -26,6 +26,7 @@ from localinferencelab.contracts import HostIdentity, ModelIdentity, RuntimeIden
 from localinferencelab.custody import (
     _fixture_evidence_is_synthetic,
     publish_bundle,
+    publish_bundle_at,
     replay_bundle,
 )
 from localinferencelab.fixture import compile_fixture, fixture_content
@@ -290,6 +291,40 @@ def test_path_traversal_and_symlink_roots_are_rejected(tmp_path: Path) -> None:
         publish_bundle(fixture_content(), tmp_path, name_prefix="../escape")
     with pytest.raises(ContractError, match="reserved bundle path"):
         publish_bundle({"receipt.json": b"{}"}, tmp_path, name_prefix="reserved")
+
+
+def test_descriptor_relative_publication_is_closed_and_no_replace(tmp_path: Path) -> None:
+    descriptor = os.open(tmp_path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        content = {
+            "nested/first.json": b'{"value":1}',
+            "nested/second.json": b'{"value":2}',
+        }
+        bundle = publish_bundle_at(
+            content,
+            tmp_path,
+            descriptor,
+            name_prefix="descriptor",
+        )
+        assert (bundle / "receipt.json").is_file()
+        assert (bundle / "nested/first.json").read_bytes() == content["nested/first.json"]
+        with pytest.raises(FileExistsError):
+            publish_bundle_at(
+                content,
+                tmp_path,
+                descriptor,
+                name_prefix="descriptor",
+            )
+        assert not list(tmp_path.glob(".localinferencelab-stage-*"))
+        with pytest.raises(ContractError, match="canonical basename"):
+            publish_bundle_at(
+                content,
+                tmp_path,
+                descriptor,
+                name_prefix="nested/prefix",
+            )
+    finally:
+        os.close(descriptor)
 
 
 def test_replay_rejects_symlinked_bundle_ancestor(tmp_path: Path) -> None:

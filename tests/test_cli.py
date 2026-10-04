@@ -34,7 +34,7 @@ def test_contract_and_backend_commands(
     assert run(["backend", "plan", "ollama"]) == 0
     plan = _output(capfd)
     assert plan["allowed_to_execute"] is False
-    assert plan["execution_implemented"] is False
+    assert plan["execution_implemented"] is True
     assert json.loads(canonical_json(plan)) == plan
 
     artifact = tmp_path / "ollama"

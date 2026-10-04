@@ -29,18 +29,23 @@ def backend_plan(backend: Backend) -> dict[str, JsonValue]:
         "llama.cpp": "local executable invocation",
         "ollama": "local API request",
     }[backend]
+    execution_implemented = backend == "ollama"
     return {
         "record_type": "backend_plan",
         "schema_version": "1.0",
         "backend": backend,
         "prospective_action": action,
-        "execution_implemented": False,
+        "execution_implemented": execution_implemented,
         "allowed_to_execute": False,
         "authorization_requirement": "exact content-addressed execution declaration",
         "automatic_runtime_start": False,
         "automatic_model_download": False,
         "network_access": False,
-        "reason": "v1 exposes identity and planning surfaces only",
+        "reason": (
+            "Ollama execution requires an exact package and two one-shot artifacts"
+            if execution_implemented
+            else "this backend exposes identity and planning surfaces only"
+        ),
     }
 
 

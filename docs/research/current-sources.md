@@ -14,6 +14,10 @@ not define a guarantee.
 | GGML | [`353b63b439f27ab2cc19dac97ab1681ba6d2d084`](https://github.com/ggml-org/ggml/tree/353b63b439f27ab2cc19dac97ab1681ba6d2d084) |
 | Ollama | [`42e911bc3d05798cad729cb474bf62f378cb2e26`](https://github.com/ollama/ollama/tree/42e911bc3d05798cad729cb474bf62f378cb2e26) |
 
+On 2026-10-04, the pinned Ollama revision was verified as current `main` (commit date
+2026-10-02). The latest tagged release was `v0.35.1`, two docs-only commits behind that revision.
+The contract cites immutable source URLs; hosted docs are supplementary when their content can move.
+
 ## MLX-LM normative sources
 
 - [`generate_step`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/generate.py#L304-L330)
@@ -103,6 +107,39 @@ state or chip families. The protocol measures that property rather than assuming
   [v0.40.0-rc0 release notes](https://github.com/ollama/ollama/releases/tag/v0.40.0-rc0)
   state that supported Apple Silicon models may run through MLX. "Ollama" is therefore not a
   sufficient internal runner identity.
+- The pinned repository's
+  [`GenerateRequest`](https://github.com/ollama/ollama/blob/42e911bc3d05798cad729cb474bf62f378cb2e26/api/types.go#L62-L127)
+  and [OpenAPI schema](https://github.com/ollama/ollama/blob/42e911bc3d05798cad729cb474bf62f378cb2e26/docs/openapi.yaml#L68-L135)
+  define `stream`, `raw`, `keep_alive`, `options`, pointer-valued `think`, `truncate`, and `shift`.
+  The runner explicitly sets or version-pins every used field and rejects fields such as images,
+  format, suffix, context, debug rendering, and logprobs.
+- The full option source and
+  [`DefaultOptions`](https://github.com/ollama/ollama/blob/42e911bc3d05798cad729cb474bf62f378cb2e26/api/types.go#L1127-L1157)
+  are broader than the public OpenAPI table. Unknown option keys are warned about rather than
+  rejected by upstream `FromMap`; therefore LocalInferenceLab applies its own closed allowlist.
+- Pinned source distinguishes
+  [`:local`, `:cloud`, and unspecified model sources`](https://github.com/ollama/ollama/blob/42e911bc3d05798cad729cb474bf62f378cb2e26/internal/modelref/modelref.go).
+  `GenerateHandler` can proxy an unspecified name when its local config carries `RemoteHost` and
+  `RemoteModel`; an explicit `:local` suffix hard-refuses that remote model. The contract requires
+  `:local` and rejects those config fields.
+- [`thinking.mdx`](https://github.com/ollama/ollama/blob/42e911bc3d05798cad729cb474bf62f378cb2e26/docs/capabilities/thinking.mdx)
+  documents boolean or model-defined thinking values. Source comments confirm unset preserves
+  pre-option behavior, but no official source found in this review identifies the introducing
+  version or fully specifies that older behavior. Packages must pin `true`, `false`, or an
+  explicitly version-supported omission and bind `/api/show` thinking metadata.
+- Pinned scheduler/source behavior separates `shift` from `truncate`. `shift` controls internal
+  context shifting and can force runner reload; `truncate` controls pre-subprocess prompt
+  truncation. The runner fixes both false so an overlong prompt fails instead of changing input.
+- Ollama sends `cache_prompt: true` to its internal llama-server and provides no public control to
+  disable or identify exact prompt/KV contents. Sampling changes do not force a runner reload,
+  while runner options such as context can. Cache cohorts that require empty or reused prompt/KV
+  proof are therefore unsupported.
+- `/api/ps` reports residency sizes and context length but no actual compute engine. Its CLI
+  processor label is derived from a VRAM/size ratio. The API cannot prove Metal, CPU, MLX, or
+  llama.cpp execution; selected runner/Metal evidence must be separately reviewed and bound.
+- Model manifests and blobs are stored as plain manifest JSON plus content-addressed
+  `sha256-*` files. The contract hashes the raw manifest and every ordered config/layer blob and
+  rechecks the closure before and after generation.
 
 ### Non-normative Ollama evidence
 
@@ -126,3 +163,7 @@ state or chip families. The protocol measures that property rather than assuming
 6. Cross-backend analysis is descriptive. V1 fixes representation equivalence to `unproven` until
    a future typed, indexed mapping-artifact record is defined.
 7. CUDA deterministic-mode work is not generalized to Metal.
+8. An unspecified Ollama model name is not a local-execution guarantee; explicit `:local` and local
+   config inspection are required.
+9. Ollama prompt-cache state and actual compute engine are not mechanically observable through the
+   public API, so unsupported cohorts and absent runner evidence must refuse execution.

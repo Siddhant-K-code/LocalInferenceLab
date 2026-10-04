@@ -22,5 +22,9 @@ fixture:
 	mkdir .artifacts
 	uv run localinferencelab fixture compile .artifacts
 	uv run localinferencelab bundle replay .artifacts/localinferencelab-fixture-v1-*
+	uv run localinferencelab ollama fixture-compile .artifacts
+	for bundle in .artifacts/localinferencelab-ollama-*-synthetic-v1-*; do \
+		uv run localinferencelab ollama evidence-replay "$$bundle"; \
+	done
 
 validate: lint type test build fixture
