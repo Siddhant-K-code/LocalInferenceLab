@@ -211,6 +211,12 @@ tempCodeRunnerFile.py
 # PyPI configuration file
 .pypirc
 
+# Local Copilot tracing
+.agent-traces/
+
+# Local validation artifacts
+.artifacts/
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
