@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import errno
 import http.client
+import io
 import ipaddress
 import json
 import os
+import socket
 import stat
 import time
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Buffer, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol, cast
+from typing import BinaryIO, Literal, Protocol, cast
 
 from localinferencelab.canonical import (
     ContractError,
@@ -72,6 +74,8 @@ _ACTION_COUNT = 9
 _IDENTITY_ACTION_COUNT = 4
 _GENERATION_SEQUENCE = 5
 _HTTP_OK = 200
+_HTTP_STATUS_MIN = 100
+_HTTP_STATUS_MAX = 599
 _MAX_AUTHORIZATION_NONCE_BYTES = 1024
 
 
@@ -124,6 +128,13 @@ def _integer(value: JsonValue, label: str, *, minimum: int = 0) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
         raise ContractError(f"{label} must be an integer >= {minimum}")
     return value
+
+
+def _http_status(value: JsonValue, label: str) -> int:
+    status = _integer(value, label, minimum=_HTTP_STATUS_MIN)
+    if status > _HTTP_STATUS_MAX:
+        raise ContractError(f"{label} must be between {_HTTP_STATUS_MIN} and {_HTTP_STATUS_MAX}")
+    return status
 
 
 def _boolean(value: JsonValue, label: str) -> bool:
@@ -1983,12 +1994,104 @@ class TransportFailureError(ContractError):
         self.response_complete = response_complete
 
 
+@dataclass(frozen=True, slots=True)
+class SyntheticTransportFailure:
+    """Value-only description of one deterministic synthetic transport failure."""
+
+    message: str
+    response_body: bytes = b""
+    status: int | None = None
+    content_type: str | None = None
+    response_complete: bool = False
+
+
+SyntheticTransportOutcome = TransportResponse | SyntheticTransportFailure
+
+
+class _SocketLike(Protocol):
+    def settimeout(self, value: float | None) -> None: ...
+
+    def getpeername(self) -> tuple[str, int]: ...
+
+    def sendall(self, data: bytes) -> None: ...
+
+    def recv_into(self, buffer: Buffer) -> int: ...
+
+    def close(self) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class _RequestDeadline:
+    expires_at: float
+    monotonic: Callable[[], float]
+
+    @classmethod
+    def start(cls, timeout_ms: int, monotonic: Callable[[], float]) -> _RequestDeadline:
+        return cls(monotonic() + timeout_ms / 1_000, monotonic)
+
+    def remaining(self) -> float:
+        remaining = self.expires_at - self.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Ollama request exceeded its absolute deadline")
+        return remaining
+
+
+class _DeadlineSocketReader(io.RawIOBase):
+    def __init__(self, sock: _SocketLike, deadline: _RequestDeadline) -> None:
+        super().__init__()
+        self._socket = sock
+        self._deadline = deadline
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer: Buffer) -> int | None:
+        self._socket.settimeout(self._deadline.remaining())
+        return self._socket.recv_into(memoryview(buffer))
+
+
+class _DeadlineSocket:
+    def __init__(self, sock: _SocketLike, deadline: _RequestDeadline) -> None:
+        self._socket = sock
+        self._deadline = deadline
+
+    def _arm(self) -> None:
+        self._socket.settimeout(self._deadline.remaining())
+
+    def getpeername(self) -> tuple[str, int]:
+        self._arm()
+        return self._socket.getpeername()
+
+    def sendall(self, data: bytes) -> None:
+        self._arm()
+        self._socket.sendall(data)
+
+    def makefile(
+        self,
+        mode: str,
+        buffering: int | None = None,
+    ) -> BinaryIO:
+        del buffering
+        if mode not in {"r", "rb"}:
+            raise ValueError("deadline socket supports only binary reads")
+        return io.BufferedReader(_DeadlineSocketReader(self._socket, self._deadline))
+
+    def close(self) -> None:
+        self._socket.close()
+
+
 class LoopbackHTTPTransport:
     """Direct standard-library HTTP transport with no proxy or redirect support."""
 
-    def __init__(self, endpoint: EndpointIdentity) -> None:
+    def __init__(
+        self,
+        endpoint: EndpointIdentity,
+        *,
+        monotonic: Callable[[], float] | None = None,
+    ) -> None:
         """Bind one exact endpoint for all future calls."""
         self._endpoint = endpoint
+        self._monotonic = time.monotonic if monotonic is None else monotonic
 
     def request(self, request: TransportRequest) -> TransportResponse:
         """Call an exact allowlisted path on the pinned numeric-loopback peer."""
@@ -2003,17 +2106,31 @@ class LoopbackHTTPTransport:
             raise ContractError("transport path is outside the endpoint allowlist")
         if request.method == "GET" and request.body:
             raise ContractError("GET identity requests cannot carry a body")
+        deadline = _RequestDeadline.start(request.timeout_ms, self._monotonic)
         connection = http.client.HTTPConnection(
             self._endpoint.host,
             self._endpoint.port,
-            timeout=request.timeout_ms / 1000,
+            timeout=deadline.remaining(),
         )
         try:
+            connection.timeout = deadline.remaining()
             connection.connect()
+            deadline.remaining()
             if connection.sock is None:
                 raise TransportFailureError("Ollama connection has no connected socket")
-            peer = connection.sock.getpeername()[0]
-            peer_address = ipaddress.ip_address(peer)
+            deadline_socket = _DeadlineSocket(
+                cast("_SocketLike", connection.sock),
+                deadline,
+            )
+            connection.sock = cast("socket.socket", deadline_socket)
+            peer = deadline_socket.getpeername()[0]
+            deadline.remaining()
+            try:
+                peer_address = ipaddress.ip_address(peer)
+            except ValueError as error:
+                raise TransportFailureError(
+                    "connected Ollama peer is not a valid IP address",
+                ) from error
             expected = ipaddress.ip_address(self._endpoint.host)
             if not peer_address.is_loopback or peer_address != expected:
                 raise TransportFailureError(
@@ -2024,8 +2141,13 @@ class LoopbackHTTPTransport:
                 "Connection": "close",
                 "Content-Type": "application/json",
             }
+            deadline.remaining()
             connection.request(request.method, request.path, body=request.body, headers=headers)
+            deadline.remaining()
             response = connection.getresponse()
+            deadline.remaining()
+            if not _HTTP_STATUS_MIN <= response.status <= _HTTP_STATUS_MAX:
+                raise TransportFailureError("Ollama returned an invalid HTTP status")
             content_types = response.headers.get_all("Content-Type") or []
             content_type = content_types[0] if len(content_types) == 1 else None
             if response.getheader("Location") is not None:
@@ -2041,6 +2163,7 @@ class LoopbackHTTPTransport:
                     content_type=content_type,
                 )
             content_lengths = response.headers.get_all("Content-Length") or []
+            declared_length: int | None = None
             if len(content_lengths) > 1:
                 raise TransportFailureError(
                     "multiple Content-Length headers are forbidden",
@@ -2066,7 +2189,20 @@ class LoopbackHTTPTransport:
             remaining = request.response_read_budget_bytes
             while remaining:
                 try:
-                    block = response.read(min(64 * 1024, remaining))
+                    deadline.remaining()
+                    block = response.read1(min(64 * 1024, remaining))
+                except http.client.IncompleteRead as error:
+                    partial = bytes(error.partial)
+                    retained = b"".join(blocks)
+                    available = request.response_read_budget_bytes - len(retained)
+                    bounded_partial = partial[:available]
+                    raise TransportFailureError(
+                        "Ollama response body was truncated",
+                        response_body=retained + bounded_partial,
+                        status=response.status,
+                        content_type=content_type,
+                        response_complete=False,
+                    ) from error
                 except (OSError, TimeoutError) as error:
                     raise TransportFailureError(
                         "Ollama response body read failed",
@@ -2078,14 +2214,32 @@ class LoopbackHTTPTransport:
                     break
                 blocks.append(block)
                 remaining -= len(block)
+                try:
+                    deadline.remaining()
+                except TimeoutError as error:
+                    raise TransportFailureError(
+                        "Ollama response body read failed",
+                        response_body=b"".join(blocks),
+                        status=response.status,
+                        content_type=content_type,
+                        response_complete=False,
+                    ) from error
             body = b"".join(blocks)
+            if declared_length is not None and len(body) < declared_length:
+                raise TransportFailureError(
+                    "Ollama response body was truncated",
+                    response_body=body,
+                    status=response.status,
+                    content_type=content_type,
+                    response_complete=False,
+                )
             if len(body) > request.max_response_bytes:
                 raise TransportFailureError(
                     "Ollama response exceeds the byte budget",
                     response_body=body,
                     status=response.status,
                     content_type=content_type,
-                    response_complete=bool(remaining),
+                    response_complete=declared_length == len(body),
                 )
             if len(content_types) != 1:
                 raise TransportFailureError(
@@ -2098,6 +2252,8 @@ class LoopbackHTTPTransport:
             return TransportResponse(response.status, content_types[0], body, str(peer_address))
         except TimeoutError as error:
             raise TransportFailureError("Ollama request timed out") from error
+        except http.client.HTTPException as error:
+            raise TransportFailureError("Ollama HTTP framing failed") from error
         except OSError as error:
             raise TransportFailureError(
                 f"Ollama loopback transport failed: {error.strerror}",
@@ -2106,22 +2262,38 @@ class LoopbackHTTPTransport:
             connection.close()
 
 
-class FakeTransport:
-    """Deterministic no-socket transport used only for synthetic contract evidence."""
+class _ScriptedTransport:
+    """Private deterministic transport constructed only from sealed outcome values."""
 
-    def __init__(self, outcomes: Sequence[TransportResponse | Exception]) -> None:
+    def __init__(self, outcomes: tuple[SyntheticTransportOutcome, ...]) -> None:
         """Load one finite ordered response script."""
         self._outcomes = list(outcomes)
-        self.requests: list[TransportRequest] = []
 
     def request(self, request: TransportRequest) -> TransportResponse:
         """Return the next scripted bounded response without network or model action."""
-        self.requests.append(request)
         if not self._outcomes:
-            raise TransportFailureError("fake transport has no scripted response")
+            raise TransportFailureError("synthetic script has no remaining response")
         outcome = self._outcomes.pop(0)
-        if isinstance(outcome, Exception):
-            raise outcome
+        if type(outcome) is SyntheticTransportFailure:
+            failure = outcome
+            retained = failure.response_body[: request.response_read_budget_bytes]
+            if len(failure.response_body) > request.response_read_budget_bytes:
+                raise TransportFailureError(
+                    "fake failure response exceeds the read allowance",
+                    response_body=retained,
+                    status=failure.status,
+                    content_type=failure.content_type,
+                    response_complete=False,
+                )
+            raise TransportFailureError(
+                failure.message,
+                response_body=retained,
+                status=failure.status,
+                content_type=failure.content_type,
+                response_complete=failure.response_complete,
+            )
+        if type(outcome) is not TransportResponse:
+            raise ContractError("synthetic transport outcome type escaped validation")
         if len(outcome.body) > request.max_response_bytes:
             raise TransportFailureError(
                 "fake response exceeds the byte budget",
@@ -2131,6 +2303,67 @@ class FakeTransport:
                 response_complete=len(outcome.body) <= request.response_read_budget_bytes,
             )
         return outcome
+
+
+def _sealed_synthetic_transport(
+    outcomes: object,
+    expected_peer: str,
+) -> _ScriptedTransport:
+    if type(outcomes) is not tuple:
+        raise ContractError("synthetic outcomes must be an exact tuple of sealed values")
+    sealed: list[SyntheticTransportOutcome] = []
+    for index, outcome in enumerate(cast("tuple[object, ...]", outcomes)):
+        if type(outcome) is TransportResponse:
+            response = outcome
+            if (
+                type(response.status) is not int
+                or not _HTTP_STATUS_MIN <= response.status <= _HTTP_STATUS_MAX
+                or type(response.content_type) is not str
+                or not response.content_type
+                or type(response.body) is not bytes
+                or type(response.peer) is not str
+                or response.peer != expected_peer
+            ):
+                raise ContractError(f"synthetic outcome {index} has invalid response values")
+            sealed.append(
+                TransportResponse(
+                    response.status,
+                    response.content_type,
+                    bytes(response.body),
+                    response.peer,
+                )
+            )
+        elif type(outcome) is SyntheticTransportFailure:
+            failure = outcome
+            if (
+                type(failure.message) is not str
+                or not failure.message
+                or type(failure.response_body) is not bytes
+                or (
+                    failure.status is not None
+                    and (
+                        type(failure.status) is not int
+                        or not _HTTP_STATUS_MIN <= failure.status <= _HTTP_STATUS_MAX
+                    )
+                )
+                or (failure.content_type is not None and type(failure.content_type) is not str)
+                or type(failure.response_complete) is not bool
+            ):
+                raise ContractError(f"synthetic outcome {index} has invalid failure values")
+            sealed.append(
+                SyntheticTransportFailure(
+                    failure.message,
+                    bytes(failure.response_body),
+                    failure.status,
+                    failure.content_type,
+                    failure.response_complete,
+                )
+            )
+        else:
+            raise ContractError(
+                f"synthetic outcome {index} is not an exact sealed response or failure"
+            )
+    return _ScriptedTransport(tuple(sealed))
 
 
 @dataclass(slots=True)
@@ -2334,6 +2567,16 @@ def _require_stable_projection(
         raise ContractError("Ollama runtime/model identity drifted across generation")
 
 
+def _response_artifact_path(action: Mapping[str, JsonValue]) -> str:
+    sequence = _integer(action["sequence"], "action.sequence", minimum=1)
+    operation = _literal(
+        action["operation"],
+        {*_IDENTITY_OPERATIONS, "generate"},
+        "action.operation",
+    )
+    return f"responses/{sequence:04d}-{operation}.bin"
+
+
 def _call(
     *,
     action: Mapping[str, JsonValue],
@@ -2343,6 +2586,7 @@ def _call(
     timeout_ms: int,
     logical_network: bool,
     action_records: list[JsonValue],
+    response_artifacts: dict[str, bytes],
 ) -> TransportResponse:
     operation = cast("str", action["operation"])
     identity = operation in _IDENTITY_OPERATIONS
@@ -2357,6 +2601,7 @@ def _call(
         cast("int", action["response_read_budget_bytes"]),
     )
     ledger.before(request, identity=identity, inference=inference)
+    response_path = _response_artifact_path(action)
     started = time.monotonic_ns()
     try:
         response = transport.request(request)
@@ -2364,6 +2609,7 @@ def _call(
         failure = error if isinstance(error, TransportFailureError) else None
         response_body = failure.response_body if failure is not None else b""
         ledger.after_bytes(response_body)
+        response_artifacts[response_path] = response_body
         action_records.append(
             {
                 "sequence": action["sequence"],
@@ -2373,7 +2619,8 @@ def _call(
                 "path": action["path"],
                 "request_sha256": action["request_sha256"],
                 "request_size_bytes": len(body),
-                "response_sha256": (digest_bytes(response_body) if response_body else None),
+                "response_path": response_path,
+                "response_sha256": digest_bytes(response_body),
                 "response_size_bytes": len(response_body),
                 "response_complete": (failure.response_complete if failure is not None else False),
                 "http_status": failure.status if failure is not None else None,
@@ -2388,6 +2635,7 @@ def _call(
             raise
         raise TransportFailureError(str(error)) from error
     ledger.after(response)
+    response_artifacts[response_path] = response.body
     action_records.append(
         {
             "sequence": action["sequence"],
@@ -2397,6 +2645,7 @@ def _call(
             "path": action["path"],
             "request_sha256": action["request_sha256"],
             "request_size_bytes": len(body),
+            "response_path": response_path,
             "response_sha256": digest_bytes(response.body),
             "response_size_bytes": len(response.body),
             "response_complete": True,
@@ -2420,6 +2669,7 @@ def _identity_calls(
     *,
     logical_network: bool,
     action_records: list[JsonValue],
+    response_artifacts: dict[str, bytes],
 ) -> dict[str, JsonValue]:
     responses: dict[str, TransportResponse] = {}
     for action in actions:
@@ -2433,6 +2683,7 @@ def _identity_calls(
             timeout_ms=timeout_ms,
             logical_network=logical_network,
             action_records=action_records,
+            response_artifacts=response_artifacts,
         )
     return _identity_projection(package, responses)
 
@@ -2549,6 +2800,13 @@ def _parse_generate_response(
     if "context" in body:
         for index, token in enumerate(_list(body["context"], "generate.context")):
             _integer(token, f"generate.context[{index}]")
+    eval_count = _integer(body["eval_count"], "generate.eval_count")
+    if eval_count > _integer(
+        protocol["max_output_tokens"],
+        "protocol.max_output_tokens",
+        minimum=1,
+    ):
+        raise ContractError("Ollama eval_count exceeds the authorized output-token limit")
     metrics: list[JsonValue] = []
     evidence = "synthetic" if synthetic else "observed"
     metric_fields = (
@@ -2560,10 +2818,18 @@ def _parse_generate_response(
         ("eval_duration", "generation_duration_ns", "nanoseconds"),
     )
     for field, name, unit in metric_fields:
+        value = (
+            eval_count
+            if field == "eval_count"
+            else _integer(
+                body[field],
+                f"generate.{field}",
+            )
+        )
         metrics.append(
             {
                 "name": name,
-                "value": _integer(body[field], f"generate.{field}"),
+                "value": value,
                 "unit": unit,
                 "availability": evidence,
                 "reason": None,
@@ -2742,7 +3008,12 @@ def _preflight_at(
     marker = _output_root_marker_at(output_root_descriptor)
     if canonical_identity(marker) != package.output_root_id:
         raise ContractError("preflight output-root identity mismatch")
-    if not synthetic and marker["binding_mode"] != "physical_instance":
+    if synthetic:
+        if type(transport) is not _ScriptedTransport:
+            raise ContractError("synthetic preflight requires the sealed scripted transport")
+        if marker["binding_mode"] != "synthetic_fixture":
+            raise ContractError("synthetic preflight requires a synthetic output-root binding")
+    elif marker["binding_mode"] != "physical_instance":
         raise ContractError("observed preflight requires a physical output-root binding")
     _check_artifacts(package, runtime_artifact, model_manifest, blob_root)
     _consume_authorization_at(
@@ -2752,6 +3023,7 @@ def _preflight_at(
     )
     ledger = ActionBudgetLedger.for_authorizations((authorization,))
     action_records: list[JsonValue] = []
+    response_artifacts: dict[str, bytes] = {}
     declaration = _mapping(package.value["declaration"], "declaration")
     timeout_ms = cast(
         "int",
@@ -2768,6 +3040,7 @@ def _preflight_at(
             timeout_ms,
             logical_network=not synthetic,
             action_records=action_records,
+            response_artifacts=response_artifacts,
         )
         cache = _mapping(package.value["cache_contract"], "cache_contract")
         _require_load_state(projection, cache["expected_pre_loaded"], "preflight")
@@ -2830,6 +3103,7 @@ def _preflight_at(
                 "projection": projection,
             },
         )
+    evidence.update(response_artifacts)
     if _output_root_identity_at(output_root_descriptor) != package.output_root_id:
         raise ContractError("preflight output-root identity drift before publication")
     destination = publish_bundle_at(
@@ -2879,10 +3153,11 @@ def preflight_synthetic(
     runtime_artifact: Path,
     model_manifest: Path,
     blob_root: Path,
-    transport: FakeTransport,
+    outcomes: tuple[SyntheticTransportOutcome, ...],
     bundle_prefix: str,
 ) -> PreflightResult:
-    """Exercise only identity calls through a no-socket fake transport."""
+    """Exercise only identity calls through a private no-socket script."""
+    transport = _sealed_synthetic_transport(outcomes, package.endpoint.host)
     return _preflight(
         package=package,
         authorization=authorization,
@@ -2941,14 +3216,19 @@ def _execute_at(
     marker = _output_root_marker_at(output_root_descriptor)
     if canonical_identity(marker) != package.output_root_id:
         raise ContractError("execution output-root identity mismatch")
-    _check_artifacts(package, runtime_artifact, model_manifest, blob_root)
-    if not synthetic:
+    if synthetic:
+        if type(transport) is not _ScriptedTransport:
+            raise ContractError("synthetic execution requires the sealed scripted transport")
+        if marker["binding_mode"] != "synthetic_fixture":
+            raise ContractError("synthetic execution requires a synthetic output-root binding")
+    else:
         if marker["binding_mode"] != "physical_instance":
             raise ContractError("observed execution requires a physical output-root binding")
         raise ContractError(
             "observed generation is disabled until the listening process and active "
             "runner/Metal state can be mechanically attested"
         )
+    _check_artifacts(package, runtime_artifact, model_manifest, blob_root)
     _consume_authorization_at(
         output_root_descriptor,
         package.output_root_id,
@@ -2958,6 +3238,7 @@ def _execute_at(
         (identity_authorization, generation_authorization)
     )
     action_records: list[JsonValue] = []
+    response_artifacts: dict[str, bytes] = {}
     timeout_ms = cast(
         "int",
         _mapping(declaration["action_budget"], "action_budget")["per_request_timeout_ms"],
@@ -2970,7 +3251,6 @@ def _execute_at(
     pre_projection: dict[str, JsonValue] | None = None
     post_projection: dict[str, JsonValue] | None = None
     generation_response: TransportResponse | None = None
-    generation_envelope: bytes | None = None
     try:
         pre_projection = _identity_calls(
             package,
@@ -2980,6 +3260,7 @@ def _execute_at(
             timeout_ms,
             logical_network=logical_network,
             action_records=action_records,
+            response_artifacts=response_artifacts,
         )
         cache = _mapping(package.value["cache_contract"], "cache_contract")
         _require_load_state(pre_projection, cache["expected_pre_loaded"], "pre")
@@ -3001,10 +3282,9 @@ def _execute_at(
                 timeout_ms=timeout_ms,
                 logical_network=logical_network,
                 action_records=action_records,
+                response_artifacts=response_artifacts,
             )
-            generation_envelope = generation_response.body
         except TransportFailureError as error:
-            generation_envelope = error.response_body or None
             reason = str(error)
         except ContractError as error:
             reason = str(error)
@@ -3017,6 +3297,7 @@ def _execute_at(
                 timeout_ms,
                 logical_network=logical_network,
                 action_records=action_records,
+                response_artifacts=response_artifacts,
             )
             _check_artifacts(package, runtime_artifact, model_manifest, blob_root)
             cache = _mapping(package.value["cache_contract"], "cache_contract")
@@ -3119,8 +3400,7 @@ def _execute_at(
         )
     if run is not None:
         evidence["runs/0001.json"] = canonical_json(run.to_dict())
-    if generation_envelope is not None:
-        evidence["responses/generation.bin"] = generation_envelope
+    evidence.update(response_artifacts)
     if generation_id is not None:
         evidence["authorization/generation.json"] = canonical_json(
             generation_authorization.to_dict()
@@ -3182,10 +3462,11 @@ def execute_synthetic(
     runtime_artifact: Path,
     model_manifest: Path,
     blob_root: Path,
-    transport: FakeTransport,
+    outcomes: tuple[SyntheticTransportOutcome, ...],
     bundle_prefix: str,
 ) -> ExecutionResult:
     """Exercise the full runner with a no-socket fake and synthetic evidence labels."""
+    transport = _sealed_synthetic_transport(outcomes, package.endpoint.host)
     return _execute(
         package=package,
         identity_authorization=identity_authorization,
@@ -3292,6 +3573,8 @@ def _validate_action_log(
     values = _list(action_log["actions"], "ollama_action_log.actions")
     if not values:
         raise ContractError("Ollama evidence must contain at least one authorized action")
+    if len(values) > len(package.actions):
+        raise ContractError("Ollama action log exceeds the frozen schedule")
     actions: list[dict[str, JsonValue]] = []
     request_bytes = response_bytes = reserved_bytes = 0
     identity_requests = inference_requests = 0
@@ -3307,6 +3590,7 @@ def _validate_action_log(
                 "path",
                 "request_sha256",
                 "request_size_bytes",
+                "response_path",
                 "response_sha256",
                 "response_size_bytes",
                 "response_complete",
@@ -3328,6 +3612,8 @@ def _validate_action_log(
                 raise ContractError("Ollama action log does not match the frozen schedule")
         request_size = _integer(action["request_size_bytes"], "action.request_size_bytes")
         response_size = _integer(action["response_size_bytes"], "action.response_size_bytes")
+        if action["response_path"] != _response_artifact_path(planned):
+            raise ContractError("Ollama action response path drift")
         if request_size != planned["request_size_bytes"] or response_size > _integer(
             planned["response_read_budget_bytes"],
             "planned.response_read_budget_bytes",
@@ -3345,22 +3631,16 @@ def _validate_action_log(
             {"transport_failure", "response_received"},
             "action.outcome",
         )
-        response_sha = action["response_sha256"]
+        _sha256(action["response_sha256"], "action.response_sha256")
         if outcome == "response_received":
-            _sha256(response_sha, "action.response_sha256")
             if action["error_sha256"] is not None or action["response_complete"] is not True:
                 raise ContractError("successful Ollama action has inconsistent custody")
-            _integer(action["http_status"], "action.http_status", minimum=100)
+            _http_status(action["http_status"], "action.http_status")
             _text(action["content_type"], "action.content_type")
         else:
             _sha256(action["error_sha256"], "action.error_sha256")
-            if response_size == 0:
-                if response_sha is not None:
-                    raise ContractError("empty failed response cannot have a digest")
-            else:
-                _sha256(response_sha, "action.response_sha256")
             if action["http_status"] is not None:
-                _integer(action["http_status"], "action.http_status", minimum=100)
+                _http_status(action["http_status"], "action.http_status")
             if action["content_type"] is not None:
                 _text(action["content_type"], "action.content_type")
         operation = cast("str", action["operation"])
@@ -3381,6 +3661,75 @@ def _validate_action_log(
     if any(action_log[key] != value for key, value in expected_counts.items()):
         raise ContractError("Ollama action log totals do not match its ordered actions")
     return actions, identity_requests, inference_requests
+
+
+def _validate_response_artifacts(
+    actions: Sequence[Mapping[str, JsonValue]],
+    file_bytes: Mapping[str, bytes],
+    content_names: set[str],
+) -> None:
+    expected = {cast("str", action["response_path"]) for action in actions}
+    actual = {name for name in content_names if name.startswith("responses/")}
+    if actual != expected:
+        raise ContractError("Ollama response artifact set does not match the action log")
+    for action in actions:
+        path = cast("str", action["response_path"])
+        body = file_bytes[path]
+        if action["response_sha256"] != digest_bytes(body) or action["response_size_bytes"] != len(
+            body
+        ):
+            raise ContractError("Ollama response artifact bytes drifted from their action")
+
+
+def _response_from_action(
+    action: Mapping[str, JsonValue],
+    file_bytes: Mapping[str, bytes],
+    package: VerifiedPackage,
+) -> TransportResponse:
+    if action["outcome"] != "response_received" or action["response_complete"] is not True:
+        raise ContractError("Ollama identity projection requires a complete response")
+    return TransportResponse(
+        cast("int", action["http_status"]),
+        cast("str", action["content_type"]),
+        file_bytes[cast("str", action["response_path"])],
+        package.endpoint.host,
+    )
+
+
+def _projection_from_action_responses(
+    package: VerifiedPackage,
+    actions: Sequence[Mapping[str, JsonValue]],
+    file_bytes: Mapping[str, bytes],
+) -> dict[str, JsonValue]:
+    if len(actions) != _IDENTITY_ACTION_COUNT:
+        raise ContractError("Ollama identity projection requires four exact actions")
+    responses: dict[str, TransportResponse] = {}
+    for action, expected_operation in zip(actions, _IDENTITY_OPERATIONS, strict=True):
+        if action["operation"] != expected_operation:
+            raise ContractError("Ollama identity response order drift")
+        responses[expected_operation] = _response_from_action(action, file_bytes, package)
+    return _identity_projection(package, responses)
+
+
+def _replay_identity_snapshot(
+    *,
+    package: VerifiedPackage,
+    actions: Sequence[Mapping[str, JsonValue]],
+    file_bytes: Mapping[str, bytes],
+    snapshot_name: str,
+    phase: str,
+    require_declared_load_state: bool,
+) -> dict[str, JsonValue]:
+    reconstructed = _projection_from_action_responses(package, actions, file_bytes)
+    stored = _validate_identity_snapshot(
+        _canonical_bundle_value(file_bytes, snapshot_name),
+        package,
+        phase,
+        require_declared_load_state=require_declared_load_state,
+    )
+    if reconstructed != stored:
+        raise ContractError("Ollama identity snapshot disagrees with raw response bytes")
+    return stored
 
 
 def _validate_identity_snapshot(
@@ -3480,7 +3829,8 @@ def _replay_preflight(
         "terminal.json",
     }
     allowed = required | {"identity/preflight.json"}
-    if not required.issubset(content_names) or not content_names.issubset(allowed):
+    non_response_names = {name for name in content_names if not name.startswith("responses/")}
+    if not required.issubset(content_names) or not non_response_names.issubset(allowed):
         raise ContractError("Ollama preflight bundle has an invalid content set")
     package = verify_prospective_package(_canonical_bundle_value(file_bytes, "prospective.json"))
     source = _mapping(
@@ -3518,6 +3868,7 @@ def _replay_preflight(
     actions, _identity_requests, inference_requests = _validate_action_log(
         package, action_log, synthetic=synthetic, preflight=True
     )
+    _validate_response_artifacts(actions, file_bytes, content_names)
     terminal = _mapping(_canonical_bundle_value(file_bytes, "terminal.json"), "terminal")
     _keys(
         terminal,
@@ -3557,16 +3908,36 @@ def _replay_preflight(
             raise ContractError("accepted Ollama preflight did not complete its exact schedule")
         if terminal["reason_sha256"] is not None:
             raise ContractError("accepted Ollama preflight cannot contain a refusal reason")
-        _validate_identity_snapshot(
-            _canonical_bundle_value(file_bytes, "identity/preflight.json"),
-            package,
-            "preflight",
+        _replay_identity_snapshot(
+            package=package,
+            actions=actions,
+            file_bytes=file_bytes,
+            snapshot_name="identity/preflight.json",
+            phase="preflight",
             require_declared_load_state=True,
         )
     else:
         _sha256(terminal["reason_sha256"], "terminal.reason_sha256")
-        if len(actions) > _IDENTITY_ACTION_COUNT or "identity/preflight.json" in content_names:
+        if len(actions) > _IDENTITY_ACTION_COUNT:
             raise ContractError("refused Ollama preflight has impossible custody")
+        if "identity/preflight.json" in content_names:
+            _replay_identity_snapshot(
+                package=package,
+                actions=actions,
+                file_bytes=file_bytes,
+                snapshot_name="identity/preflight.json",
+                phase="preflight",
+                require_declared_load_state=False,
+            )
+        elif len(actions) == _IDENTITY_ACTION_COUNT and all(
+            action["outcome"] == "response_received" for action in actions
+        ):
+            try:
+                _projection_from_action_responses(package, actions, file_bytes)
+            except ContractError:
+                pass
+            else:
+                raise ContractError("refused Ollama preflight omitted a producible snapshot")
     return OllamaReplayResult(
         content_root,
         package.identity,
@@ -3595,10 +3966,10 @@ def replay_ollama_bundle(bundle: Path) -> OllamaReplayResult:
         "authorization/generation.json",
         "identity/pre.json",
         "identity/post.json",
-        "responses/generation.bin",
         "runs/0001.json",
     }
-    if not required.issubset(content_names) or not content_names.issubset(allowed):
+    non_response_names = {name for name in content_names if not name.startswith("responses/")}
+    if not required.issubset(content_names) or not non_response_names.issubset(allowed):
         raise ContractError("Ollama evidence bundle has an invalid content set")
     package = verify_prospective_package(_canonical_bundle_value(file_bytes, "prospective.json"))
     source = _mapping(
@@ -3643,6 +4014,7 @@ def replay_ollama_bundle(bundle: Path) -> OllamaReplayResult:
     actions, identity_requests, inference_requests = _validate_action_log(
         package, action_log, synthetic=synthetic, preflight=False
     )
+    _validate_response_artifacts(actions, file_bytes, content_names)
     identity_authorization = _authorization_from_value(
         _canonical_bundle_value(file_bytes, "authorization/identity.json")
     )
@@ -3721,26 +4093,31 @@ def replay_ollama_bundle(bundle: Path) -> OllamaReplayResult:
             or terminal["reason_sha256"] is not None
         ):
             raise ContractError("accepted Ollama execution lacks exact completed custody")
-        pre = _validate_identity_snapshot(
-            _canonical_bundle_value(file_bytes, "identity/pre.json"),
-            package,
-            "pre",
+        pre = _replay_identity_snapshot(
+            package=package,
+            actions=actions[:_IDENTITY_ACTION_COUNT],
+            file_bytes=file_bytes,
+            snapshot_name="identity/pre.json",
+            phase="pre",
             require_declared_load_state=True,
         )
-        post = _validate_identity_snapshot(
-            _canonical_bundle_value(file_bytes, "identity/post.json"),
-            package,
-            "post",
+        post = _replay_identity_snapshot(
+            package=package,
+            actions=actions[_GENERATION_SEQUENCE:],
+            file_bytes=file_bytes,
+            snapshot_name="identity/post.json",
+            phase="post",
             require_declared_load_state=True,
         )
         if pre != post:
             raise ContractError("accepted Ollama evidence contains identity drift")
-        if run.envelope_base64 is None or "responses/generation.bin" not in content_names:
+        if run.envelope_base64 is None:
             raise ContractError("accepted Ollama run lacks its exact response envelope")
         envelope = decode_bytes(run.envelope_base64)
-        if file_bytes["responses/generation.bin"] != envelope:
+        generate_action = actions[_GENERATION_SEQUENCE - 1]
+        generate_response_path = cast("str", generate_action["response_path"])
+        if file_bytes[generate_response_path] != envelope:
             raise ContractError("accepted Ollama response file drift")
-        generate_action = actions[4]
         if (
             run.envelope_sha256 != digest_bytes(envelope)
             or generate_action["response_sha256"] != digest_bytes(envelope)
@@ -3786,37 +4163,64 @@ def replay_ollama_bundle(bundle: Path) -> OllamaReplayResult:
         terminal_reason = _sha256(terminal["reason_sha256"], "terminal.reason_sha256")
         if run.invalid_reason_sha256 != terminal_reason:
             raise ContractError("invalid Ollama run and terminal reason drift")
-        _validate_identity_snapshot(
-            _canonical_bundle_value(file_bytes, "identity/pre.json"),
-            package,
-            "pre",
+        pre = _replay_identity_snapshot(
+            package=package,
+            actions=actions[:_IDENTITY_ACTION_COUNT],
+            file_bytes=file_bytes,
+            snapshot_name="identity/pre.json",
+            phase="pre",
             require_declared_load_state=True,
         )
+        invalid_post: dict[str, JsonValue] | None = None
         if "identity/post.json" in content_names:
             if len(actions) != _ACTION_COUNT or any(
                 action["outcome"] != "response_received" for action in post_actions
             ):
                 raise ContractError("post identity snapshot requires the complete post schedule")
-            _validate_identity_snapshot(
-                _canonical_bundle_value(file_bytes, "identity/post.json"),
-                package,
-                "post",
+            invalid_post = _replay_identity_snapshot(
+                package=package,
+                actions=post_actions,
+                file_bytes=file_bytes,
+                snapshot_name="identity/post.json",
+                phase="post",
                 require_declared_load_state=False,
             )
-        generate_action = actions[_GENERATION_SEQUENCE - 1]
-        if "responses/generation.bin" in content_names:
-            envelope = file_bytes["responses/generation.bin"]
-            if generate_action["response_sha256"] != digest_bytes(envelope) or generate_action[
-                "response_size_bytes"
-            ] != len(envelope):
-                raise ContractError("invalid Ollama run envelope custody drift")
-            if run.envelope_base64 is not None or run.envelope_sha256 is not None:
-                raise ContractError("invalid Ollama run partially trusted response fields")
-        elif (
-            generate_action["outcome"] == "response_received"
-            or generate_action["response_size_bytes"] != 0
+        elif len(post_actions) == _IDENTITY_ACTION_COUNT and all(
+            action["outcome"] == "response_received" for action in post_actions
         ):
-            raise ContractError("invalid Ollama response bytes were not preserved")
+            try:
+                _projection_from_action_responses(package, post_actions, file_bytes)
+            except ContractError:
+                pass
+            else:
+                raise ContractError("invalid Ollama execution omitted a producible post snapshot")
+        generate_action = actions[_GENERATION_SEQUENCE - 1]
+        if run.envelope_base64 is not None or run.envelope_sha256 is not None:
+            raise ContractError("invalid Ollama run partially trusted response fields")
+        generation_valid = False
+        if generate_action["outcome"] == "response_received":
+            try:
+                _parse_generate_response(
+                    package,
+                    _response_from_action(generate_action, file_bytes, package),
+                    synthetic=synthetic,
+                    declaration_id=package.declaration_id,
+                    invalid_reason=None,
+                )
+            except ContractError:
+                pass
+            else:
+                generation_valid = True
+        post_valid = (
+            invalid_post is not None
+            and invalid_post == pre
+            and invalid_post["model_loaded"]
+            == _mapping(package.value["cache_contract"], "cache_contract")["expected_post_loaded"]
+        )
+        if generation_valid and post_valid:
+            raise ContractError(
+                "invalid Ollama execution is not reachable from its retained responses"
+            )
     else:
         if (
             len(actions) > _IDENTITY_ACTION_COUNT
@@ -3824,17 +4228,27 @@ def replay_ollama_bundle(bundle: Path) -> OllamaReplayResult:
             or generation_authorization is not None
             or run is not None
             or "identity/post.json" in content_names
-            or "responses/generation.bin" in content_names
         ):
             raise ContractError("refused Ollama execution crossed the generation boundary")
         _sha256(terminal["reason_sha256"], "terminal.reason_sha256")
         if "identity/pre.json" in content_names:
-            _validate_identity_snapshot(
-                _canonical_bundle_value(file_bytes, "identity/pre.json"),
-                package,
-                "pre",
+            _replay_identity_snapshot(
+                package=package,
+                actions=actions,
+                file_bytes=file_bytes,
+                snapshot_name="identity/pre.json",
+                phase="pre",
                 require_declared_load_state=False,
             )
+        elif len(actions) == _IDENTITY_ACTION_COUNT and all(
+            action["outcome"] == "response_received" for action in actions
+        ):
+            try:
+                _projection_from_action_responses(package, actions, file_bytes)
+            except ContractError:
+                pass
+            else:
+                raise ContractError("refused Ollama execution omitted a producible snapshot")
     if terminal["completed_runs"] != (0 if run is None else 1):
         raise ContractError("Ollama terminal completed-run accounting drift")
     return OllamaReplayResult(

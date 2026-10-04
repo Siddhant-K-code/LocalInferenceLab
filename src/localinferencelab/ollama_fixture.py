@@ -1,4 +1,4 @@
-"""Deterministic fake-transport Ollama contract evidence."""
+"""Deterministic sealed-script Ollama contract evidence."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ from localinferencelab.contracts import (
     RuntimeIdentity,
 )
 from localinferencelab.ollama import (
-    FakeTransport,
     TransportResponse,
     build_prospective_package,
     execute_synthetic,
@@ -266,7 +265,7 @@ def _generate_response(package: dict[str, JsonValue]) -> TransportResponse:
 
 
 def compile_ollama_contract_fixtures(output_root: Path) -> dict[str, JsonValue]:
-    """Publish accepted, invalid, and refused fake-transport evidence bundles."""
+    """Publish accepted, invalid, and refused sealed-script evidence bundles."""
     runtime, manifest, blobs = _write_inputs(output_root)
     output_root_id = initialize_output_root(
         output_root,
@@ -278,23 +277,19 @@ def compile_ollama_contract_fixtures(output_root: Path) -> dict[str, JsonValue]:
         package_value = _package(output_root_id, runtime, manifest, blobs, outcome)
         package = verify_prospective_package(package_value)
         if outcome == "accepted":
-            transport = FakeTransport(
-                [
-                    *_identity_responses(package_value),
-                    _generate_response(package_value),
-                    *_identity_responses(package_value),
-                ]
+            outcomes = (
+                *_identity_responses(package_value),
+                _generate_response(package_value),
+                *_identity_responses(package_value),
             )
         elif outcome == "invalid":
-            transport = FakeTransport(
-                [
-                    *_identity_responses(package_value),
-                    TransportResponse(200, _CONTENT_TYPE, b"{", "127.0.0.1"),
-                    *_identity_responses(package_value),
-                ]
+            outcomes = (
+                *_identity_responses(package_value),
+                TransportResponse(200, _CONTENT_TYPE, b"{", "127.0.0.1"),
+                *_identity_responses(package_value),
             )
         else:
-            transport = FakeTransport(_identity_responses(package_value, version="identity-drift"))
+            outcomes = tuple(_identity_responses(package_value, version="identity-drift"))
         result = execute_synthetic(
             package=package,
             identity_authorization=make_authorization(
@@ -311,7 +306,7 @@ def compile_ollama_contract_fixtures(output_root: Path) -> dict[str, JsonValue]:
             runtime_artifact=runtime,
             model_manifest=manifest,
             blob_root=blobs,
-            transport=transport,
+            outcomes=outcomes,
             bundle_prefix=f"localinferencelab-ollama-{outcome}-synthetic-v1",
         )
         replay = replay_ollama_bundle(result.path)

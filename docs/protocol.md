@@ -120,7 +120,11 @@ This permits custody without turning malformed backend output into a successful 
 Ollama does not expose a trustworthy generated-token sequence. Its deprecated `context` array is
 not projected into `token_ids`. Valid runs preserve the exact response envelope in the run.
 Malformed output or post-request identity/cache drift closes as digest-safe invalid run custody;
-the untrusted exact transport bytes remain separately preserved and action-linked.
+the untrusted exact transport bytes remain separately preserved and action-linked. Every
+dispatched identity or generation action retains an indexed bounded response artifact, including
+empty and partial transport failures. Replay reconstructs both identity snapshots from those raw
+envelopes rather than trusting the stored projections. Native `eval_count` must be less than or
+equal to the frozen output limit; no context/token equivalence is inferred.
 
 ## Ollama request and authorization protocol
 
@@ -137,7 +141,8 @@ instance, process/model/cache/concurrency identities, `/api/show` projection, re
 all budgets are fixed before authorization. Identity and generation require distinct one-shot
 artifacts whose nonce hashes were already committed in the declaration. Action counts, request
 bytes, and complete bounded-read allowances are reserved before their side effects; received bytes
-are recorded separately. Failures are never retried. Production generation is additionally
+are recorded separately. The timeout is one monotonic absolute deadline for the complete HTTP call,
+not a renewed socket-operation timeout. Failures are never retried. Production generation is additionally
 disabled until the loopback listener process and active runner/Metal state can be mechanically
 attested.
 

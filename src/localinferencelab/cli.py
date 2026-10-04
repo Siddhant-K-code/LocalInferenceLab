@@ -140,7 +140,7 @@ def _parser() -> argparse.ArgumentParser:
     evidence.add_argument("bundle", type=Path)
     fixture_ollama = ollama_commands.add_parser(
         "fixture-compile",
-        help="publish deterministic fake-transport contract evidence",
+        help="publish deterministic sealed-script contract evidence",
     )
     fixture_ollama.add_argument("output_root", type=Path)
     return parser

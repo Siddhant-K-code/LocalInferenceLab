@@ -140,7 +140,9 @@ localinferencelab ollama evidence-replay ./ollama-output/BUNDLE
 
 ## 7. Repository-only synthetic validation
 
-This command is always safe for CI and development. It uses no socket and no model:
+This command is always safe for CI and development. It accepts only sealed response/failure values,
+constructs its private scripted transport internally, requires a synthetic output-root binding, and
+uses no socket or model:
 
 ```bash
 localinferencelab ollama fixture-compile .artifacts
@@ -149,4 +151,6 @@ for bundle in .artifacts/localinferencelab-ollama-*-synthetic-v1-*; do
 done
 ```
 
-The generated fake durations are schema fixtures only and must never be reported as performance.
+Each dispatched fake call retains one exact indexed bounded response body so replay reconstructs
+the identity snapshots from raw envelopes. The generated fake durations are schema fixtures only
+and must never be reported as performance.

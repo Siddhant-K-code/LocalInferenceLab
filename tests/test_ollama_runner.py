@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import socket
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -32,8 +33,9 @@ from localinferencelab.contracts import (
 from localinferencelab.custody import publish_bundle
 from localinferencelab.ollama import (
     EndpointIdentity,
-    FakeTransport,
     LoopbackHTTPTransport,
+    SyntheticTransportFailure,
+    SyntheticTransportOutcome,
     TransportFailureError,
     TransportRequest,
     TransportResponse,
@@ -45,6 +47,7 @@ from localinferencelab.ollama import (
     inspect_model_artifacts,
     make_authorization,
     output_root_identity,
+    preflight_observed,
     preflight_synthetic,
     read_authorization_nonce,
     replay_ollama_bundle,
@@ -58,6 +61,17 @@ _JSON_CONTENT_TYPE = "application/json"
 _PREFLIGHT_NONCE = "test-preflight-authorization-nonce-000001"
 _IDENTITY_NONCE = "test-identity-authorization-nonce-0000001"
 _GENERATION_NONCE = "test-generation-authorization-nonce-00001"
+
+
+class _FakeMonotonic:
+    def __init__(self) -> None:
+        self.value = 0.0
+
+    def __call__(self) -> float:
+        return self.value
+
+    def advance(self, seconds: float) -> None:
+        self.value += seconds
 
 
 def _write_artifacts(root: Path) -> tuple[Path, Path, Path]:
@@ -128,7 +142,7 @@ def _make_package(
     root: Path,
     *,
     output_nonce: str = "fixture-output-root",
-    synthetic_output_root: bool = False,
+    synthetic_output_root: bool = True,
 ) -> tuple[
     ollama_module.VerifiedPackage,
     Path,
@@ -301,7 +315,11 @@ def _identity_responses(
     ]
 
 
-def _generate_response(package: ollama_module.VerifiedPackage) -> TransportResponse:
+def _generate_response(
+    package: ollama_module.VerifiedPackage,
+    *,
+    eval_count: int = 4,
+) -> TransportResponse:
     return _response(
         {
             "model": package.canonical_model_name,
@@ -313,19 +331,19 @@ def _generate_response(package: ollama_module.VerifiedPackage) -> TransportRespo
             "load_duration": 10,
             "prompt_eval_count": 7,
             "prompt_eval_duration": 20,
-            "eval_count": 4,
+            "eval_count": eval_count,
             "eval_duration": 70,
         },
     )
 
 
-def _accepted_transport(package: ollama_module.VerifiedPackage) -> FakeTransport:
-    return FakeTransport(
-        [
-            *_identity_responses(package),
-            _generate_response(package),
-            *_identity_responses(package),
-        ],
+def _accepted_outcomes(
+    package: ollama_module.VerifiedPackage,
+) -> tuple[SyntheticTransportOutcome, ...]:
+    return (
+        *_identity_responses(package),
+        _generate_response(package),
+        *_identity_responses(package),
     )
 
 
@@ -335,7 +353,7 @@ def _execute_fixture(
     manifest: Path,
     blobs: Path,
     output: Path,
-    transport: FakeTransport,
+    outcomes: tuple[SyntheticTransportOutcome, ...],
     *,
     prefix: str,
 ) -> ollama_module.ExecutionResult:
@@ -347,7 +365,7 @@ def _execute_fixture(
         runtime_artifact=runtime,
         model_manifest=manifest,
         blob_root=blobs,
-        transport=transport,
+        outcomes=outcomes,
         bundle_prefix=prefix,
     )
 
@@ -473,6 +491,9 @@ def test_direct_transport_ignores_proxy_environment_and_rejects_redirect(
     calls: list[tuple[str, int]] = []
 
     class FakeSocket:
+        def settimeout(self, _value: float | None) -> None:
+            pass
+
         def getpeername(self) -> tuple[str, int]:
             return ("127.0.0.1", 11434)
 
@@ -540,6 +561,9 @@ def test_direct_transport_rejects_connected_peer_drift(
     request_called = False
 
     class DriftSocket:
+        def settimeout(self, _value: float | None) -> None:
+            pass
+
         def getpeername(self) -> tuple[str, int]:
             return ("192.0.2.1", 11434)
 
@@ -578,6 +602,233 @@ def test_direct_transport_rejects_connected_peer_drift(
     assert request_called is False
 
 
+def test_direct_transport_enforces_absolute_deadline_during_trickle_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _FakeMonotonic()
+    wire = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}"
+
+    class TrickleSocket:
+        def __init__(self) -> None:
+            self.offset = 0
+            self.timeout: float | None = None
+
+        def settimeout(self, value: float | None) -> None:
+            self.timeout = value
+
+        def getpeername(self) -> tuple[str, int]:
+            return ("127.0.0.1", 11434)
+
+        def sendall(self, _data: bytes) -> None:
+            pass
+
+        def recv_into(self, buffer: memoryview) -> int:
+            if self.offset == len(wire):
+                return 0
+            delay = 0.2
+            if self.timeout is not None and delay >= self.timeout:
+                clock.advance(self.timeout)
+                raise TimeoutError
+            clock.advance(delay)
+            buffer[0] = wire[self.offset]
+            self.offset += 1
+            return 1
+
+        def close(self) -> None:
+            pass
+
+    class FakeConnection:
+        def __init__(self, _host: str, _port: int, *, timeout: float) -> None:
+            self.timeout = timeout
+            self.sock: object | None = None
+
+        def connect(self) -> None:
+            self.sock = TrickleSocket()
+
+        def request(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def getresponse(self) -> http.client.HTTPResponse:
+            response = http.client.HTTPResponse(cast("socket.socket", self.sock))
+            response.begin()
+            return response
+
+        def close(self) -> None:
+            self.sock = None
+
+    monkeypatch.setattr(http.client, "HTTPConnection", FakeConnection)
+    endpoint = EndpointIdentity.from_value(
+        {
+            "scheme": "http",
+            "host": "127.0.0.1",
+            "port": 11434,
+            "version_path": "/api/version",
+            "tags_path": "/api/tags",
+            "show_path": "/api/show",
+            "ps_path": "/api/ps",
+            "generate_path": "/api/generate",
+        },
+    )
+    with pytest.raises(TransportFailureError, match="timed out"):
+        LoopbackHTTPTransport(endpoint, monotonic=clock).request(
+            TransportRequest("version", "GET", "/api/version", b"", 1_000, 100, 101),
+        )
+    assert clock.value <= 1.000_001
+
+
+def test_observed_preflight_trickle_body_times_out_with_partial_custody(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package, runtime, manifest, blobs, output = _make_package(
+        tmp_path / "body-deadline",
+        synthetic_output_root=False,
+    )
+    clock = _FakeMonotonic()
+    body = canonical_json({"version": package.runtime.version})
+    header = (
+        b"HTTP/1.1 200 OK\r\n"
+        b"Content-Type: application/json\r\n" + f"Content-Length: {len(body)}\r\n\r\n".encode()
+    )
+    wire = header + body
+
+    class TrickleSocket:
+        def __init__(self) -> None:
+            self.offset = 0
+            self.timeout: float | None = None
+
+        def settimeout(self, value: float | None) -> None:
+            self.timeout = value
+
+        def getpeername(self) -> tuple[str, int]:
+            return ("127.0.0.1", 11434)
+
+        def sendall(self, _data: bytes) -> None:
+            pass
+
+        def recv_into(self, buffer: memoryview) -> int:
+            if self.offset == len(wire):
+                return 0
+            delay = 0.001 if self.offset < len(header) else 0.4
+            if self.timeout is not None and delay >= self.timeout:
+                clock.advance(self.timeout)
+                raise TimeoutError
+            clock.advance(delay)
+            buffer[0] = wire[self.offset]
+            self.offset += 1
+            return 1
+
+        def close(self) -> None:
+            pass
+
+    class FakeConnection:
+        def __init__(self, _host: str, _port: int, *, timeout: float) -> None:
+            self.timeout = timeout
+            self.sock: object | None = None
+
+        def connect(self) -> None:
+            self.sock = TrickleSocket()
+
+        def request(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def getresponse(self) -> http.client.HTTPResponse:
+            response = http.client.HTTPResponse(cast("socket.socket", self.sock))
+            response.begin()
+            return response
+
+        def close(self) -> None:
+            self.sock = None
+
+    monkeypatch.setattr(http.client, "HTTPConnection", FakeConnection)
+    monkeypatch.setattr(ollama_module.time, "monotonic", clock)
+    result = preflight_observed(
+        package=package,
+        authorization=make_authorization(package, "preflight_only", _PREFLIGHT_NONCE),
+        output_root=output,
+        runtime_artifact=runtime,
+        model_manifest=manifest,
+        blob_root=blobs,
+    )
+    assert result.status == "refused"
+    assert clock.value <= 1.000_001
+    action = json.loads((result.path / "actions.json").read_bytes())["actions"][0]
+    partial = (result.path / action["response_path"]).read_bytes()
+    assert partial
+    assert partial == body[: len(partial)]
+    assert action["response_complete"] is False
+    assert action["response_size_bytes"] == len(partial)
+    assert action["response_sha256"] == digest_bytes(partial)
+    assert replay_ollama_bundle(result.path).status == "refused"
+
+
+def test_direct_transport_retains_incomplete_chunked_response_bytes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeSocket:
+        def settimeout(self, _value: float | None) -> None:
+            pass
+
+        def getpeername(self) -> tuple[str, int]:
+            return ("127.0.0.1", 11434)
+
+        def close(self) -> None:
+            pass
+
+    class FakeHeaders:
+        def get_all(self, name: str) -> list[str]:
+            return [_JSON_CONTENT_TYPE] if name == "Content-Type" else []
+
+    class FakeResponse:
+        headers = FakeHeaders()
+        status = 200
+
+        def getheader(self, _name: str) -> None:
+            return None
+
+        def read1(self, _amount: int) -> bytes:
+            raise http.client.IncompleteRead(b"bounded-partial", 12)
+
+    class FakeConnection:
+        def __init__(self, _host: str, _port: int, *, timeout: float) -> None:
+            self.timeout = timeout
+            self.sock: object | None = None
+
+        def connect(self) -> None:
+            self.sock = FakeSocket()
+
+        def request(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def getresponse(self) -> FakeResponse:
+            return FakeResponse()
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(http.client, "HTTPConnection", FakeConnection)
+    endpoint = EndpointIdentity.from_value(
+        {
+            "scheme": "http",
+            "host": "127.0.0.1",
+            "port": 11434,
+            "version_path": "/api/version",
+            "tags_path": "/api/tags",
+            "show_path": "/api/show",
+            "ps_path": "/api/ps",
+            "generate_path": "/api/generate",
+        },
+    )
+    with pytest.raises(TransportFailureError, match="truncated") as raised:
+        LoopbackHTTPTransport(endpoint).request(
+            TransportRequest("version", "GET", "/api/version", b"", 1_000, 100, 101),
+        )
+    assert raised.value.response_body == b"bounded-partial"
+    assert raised.value.status == 200
+    assert raised.value.content_type == _JSON_CONTENT_TYPE
+    assert raised.value.response_complete is False
+
+
 def test_package_freezes_artifacts_schedule_and_request_bytes(tmp_path: Path) -> None:
     package, runtime, manifest, blobs, _output = _make_package(tmp_path / "package")
     assert package.request == decode_request(package)
@@ -613,13 +864,104 @@ def decode_request(package: ollama_module.VerifiedPackage) -> bytes:
     return decode_bytes(cast("str", protocol["request_base64"]))
 
 
+def test_synthetic_execution_rejects_transport_capabilities_before_side_effects(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package, runtime, manifest, blobs, output = _make_package(tmp_path / "sealed-synthetic")
+    custom_calls = 0
+    socket_calls = 0
+
+    class CustomTransport:
+        def request(self, _request: TransportRequest) -> TransportResponse:
+            nonlocal custom_calls
+            custom_calls += 1
+            return _response({})
+
+    class TupleSubclass(tuple[object, ...]):
+        __slots__ = ()
+
+    class ResponseSubclass(TransportResponse):
+        pass
+
+    def forbidden_connection(*_args: object, **_kwargs: object) -> None:
+        nonlocal socket_calls
+        socket_calls += 1
+        raise AssertionError("synthetic validation must not construct a socket")
+
+    monkeypatch.setattr(http.client, "HTTPConnection", forbidden_connection)
+    candidates: tuple[object, ...] = (
+        LoopbackHTTPTransport(package.endpoint),
+        CustomTransport(),
+        TupleSubclass(_accepted_outcomes(package)),
+        (
+            ResponseSubclass(
+                200,
+                _JSON_CONTENT_TYPE,
+                canonical_json({"version": package.runtime.version}),
+                "127.0.0.1",
+            ),
+        ),
+    )
+    runtime.write_bytes(b"artifact drift that must not be inspected")
+    before = _bundle_files(output)
+    for candidate in candidates:
+        with pytest.raises(ContractError, match=r"synthetic outcome|exact tuple"):
+            execute_synthetic(
+                package=package,
+                identity_authorization=make_authorization(
+                    package,
+                    "identity_guard",
+                    _IDENTITY_NONCE,
+                ),
+                generation_authorization=make_authorization(
+                    package,
+                    "generation",
+                    _GENERATION_NONCE,
+                ),
+                output_root=output,
+                runtime_artifact=runtime,
+                model_manifest=manifest,
+                blob_root=blobs,
+                outcomes=cast("tuple[SyntheticTransportOutcome, ...]", candidate),
+                bundle_prefix="must-not-exist",
+            )
+    assert _bundle_files(output) == before
+    assert custom_calls == 0
+    assert socket_calls == 0
+    assert not list(output.glob(".localinferencelab-consumed-*"))
+
+
+def test_production_execution_rejects_synthetic_output_root_before_socket(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package, runtime, manifest, blobs, output = _make_package(tmp_path / "synthetic-root")
+
+    def forbidden_connection(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("socket construction is forbidden")
+
+    monkeypatch.setattr(http.client, "HTTPConnection", forbidden_connection)
+    with pytest.raises(ContractError, match="physical output-root"):
+        execute_observed(
+            package=package,
+            identity_authorization=make_authorization(package, "identity_guard", _IDENTITY_NONCE),
+            generation_authorization=make_authorization(package, "generation", _GENERATION_NONCE),
+            output_root=output,
+            runtime_artifact=runtime,
+            model_manifest=manifest,
+            blob_root=blobs,
+        )
+    assert not list(output.glob(".localinferencelab-consumed-*"))
+
+
 def test_mismatched_authorization_refuses_before_transport_or_output_write(
     tmp_path: Path,
 ) -> None:
     package, runtime, manifest, blobs, output = _make_package(tmp_path / "refuse")
     good_guard = make_authorization(package, "identity_guard", _IDENTITY_NONCE)
     bad_guard = replace(good_guard, package_id=digest_bytes(b"other-package"))
-    transport = _accepted_transport(package)
+    outcomes = _accepted_outcomes(package)
     with pytest.raises(ContractError, match="authorization does not match"):
         execute_synthetic(
             package=package,
@@ -633,10 +975,9 @@ def test_mismatched_authorization_refuses_before_transport_or_output_write(
             runtime_artifact=runtime,
             model_manifest=manifest,
             blob_root=blobs,
-            transport=transport,
+            outcomes=outcomes,
             bundle_prefix="must-not-exist",
         )
-    assert transport.requests == []
     assert not list(output.glob(".localinferencelab-consumed-*"))
     assert not list(output.glob("must-not-exist-*"))
 
@@ -651,7 +992,7 @@ def test_authorization_nonce_must_match_the_prospective_commitment(tmp_path: Pat
         )
     authorization = make_authorization(package, "generation", _GENERATION_NONCE)
     altered = replace(authorization, nonce_sha256=digest_bytes(b"different"))
-    transport = _accepted_transport(package)
+    outcomes = _accepted_outcomes(package)
     with pytest.raises(ContractError, match="authorization does not match"):
         execute_synthetic(
             package=package,
@@ -661,10 +1002,9 @@ def test_authorization_nonce_must_match_the_prospective_commitment(tmp_path: Pat
             runtime_artifact=runtime,
             model_manifest=manifest,
             blob_root=blobs,
-            transport=transport,
+            outcomes=outcomes,
             bundle_prefix="must-not-exist",
         )
-    assert transport.requests == []
     altered_preimage = replace(authorization, nonce_base64=encode_bytes(b"different"))
     with pytest.raises(ContractError, match="authorization does not match"):
         execute_synthetic(
@@ -675,7 +1015,7 @@ def test_authorization_nonce_must_match_the_prospective_commitment(tmp_path: Pat
             runtime_artifact=runtime,
             model_manifest=manifest,
             blob_root=blobs,
-            transport=transport,
+            outcomes=outcomes,
             bundle_prefix="must-not-exist",
         )
     duplicated = json.loads(canonical_json(package.value))
@@ -730,8 +1070,8 @@ def test_accepted_fake_execution_is_exact_deterministic_and_replayable(
         output_nonce="shared-output",
         synthetic_output_root=True,
     )
-    first_result = _execute_fixture(*first, _accepted_transport(first[0]), prefix="accepted")
-    second_result = _execute_fixture(*second, _accepted_transport(second[0]), prefix="accepted")
+    first_result = _execute_fixture(*first, _accepted_outcomes(first[0]), prefix="accepted")
+    second_result = _execute_fixture(*second, _accepted_outcomes(second[0]), prefix="accepted")
     assert first_result.status == "accepted"
     assert first_result.run_validity == "valid"
     assert first_result.path.name == second_result.path.name
@@ -744,21 +1084,79 @@ def test_accepted_fake_execution_is_exact_deterministic_and_replayable(
     assert replay.run_validity == "valid"
 
 
+@pytest.mark.parametrize(
+    "target",
+    ["missing", "extra", "swapped", "coordinated_identity_drift"],
+)
+def test_replay_reconstructs_identity_snapshots_from_exact_response_bytes(
+    tmp_path: Path,
+    target: str,
+) -> None:
+    package_data = _make_package(tmp_path / f"identity-response-{target}")
+    package = package_data[0]
+    result = _execute_fixture(
+        *package_data,
+        _accepted_outcomes(package),
+        prefix="accepted",
+    )
+    actions = json.loads((result.path / "actions.json").read_bytes())["actions"]
+    response_paths = [action["response_path"] for action in actions]
+    assert response_paths == [
+        "responses/0001-version.bin",
+        "responses/0002-tags.bin",
+        "responses/0003-show.bin",
+        "responses/0004-ps.bin",
+        "responses/0005-generate.bin",
+        "responses/0006-version.bin",
+        "responses/0007-tags.bin",
+        "responses/0008-show.bin",
+        "responses/0009-ps.bin",
+    ]
+
+    def tamper(files: dict[str, bytes]) -> None:
+        action_log = json.loads(files["actions.json"])
+        tampered_actions = action_log["actions"]
+        if target == "missing":
+            files.pop(response_paths[0])
+        elif target == "extra":
+            files["responses/unindexed.bin"] = b"extra"
+        elif target == "swapped":
+            first = files[response_paths[0]]
+            files[response_paths[0]] = files[response_paths[1]]
+            files[response_paths[1]] = first
+        else:
+            changed = canonical_json({"version": "different-but-well-formed"})
+            files[response_paths[0]] = changed
+            tampered_actions[0]["response_sha256"] = digest_bytes(changed)
+            tampered_actions[0]["response_size_bytes"] = len(changed)
+            pre = json.loads(files["identity/pre.json"])
+            pre["projection"]["runtime_version"] = "different-but-well-formed"
+            files["identity/pre.json"] = canonical_json(pre)
+            files["actions.json"] = canonical_json(action_log)
+
+    repacked = _repack_with_file_change(
+        result.path,
+        tmp_path / f"identity-response-repacked-{target}",
+        tamper,
+    )
+    with pytest.raises(ContractError):
+        replay_ollama_bundle(repacked)
+
+
 def test_authorization_consumption_is_durable_and_one_shot(tmp_path: Path) -> None:
     package_data = _make_package(tmp_path / "one-shot")
     _execute_fixture(
         *package_data,
-        _accepted_transport(package_data[0]),
+        _accepted_outcomes(package_data[0]),
         prefix="first",
     )
-    second_transport = _accepted_transport(package_data[0])
+    second_outcomes = _accepted_outcomes(package_data[0])
     with pytest.raises(FileExistsError):
         _execute_fixture(
             *package_data,
-            second_transport,
+            second_outcomes,
             prefix="second",
         )
-    assert second_transport.requests == []
 
 
 @pytest.mark.parametrize("target", ["action", "snapshot", "run"])
@@ -769,7 +1167,7 @@ def test_replay_rejects_semantically_repacked_execution_tampering(
     package_data = _make_package(tmp_path / f"semantic-{target}")
     result = _execute_fixture(
         *package_data,
-        _accepted_transport(package_data[0]),
+        _accepted_outcomes(package_data[0]),
         prefix="accepted",
     )
     if target == "action":
@@ -808,7 +1206,7 @@ def test_replay_rejects_observed_execution_without_attestation_schema(
     package_data = _make_package(tmp_path / "observed-replay")
     result = _execute_fixture(
         *package_data,
-        _accepted_transport(package_data[0]),
+        _accepted_outcomes(package_data[0]),
         prefix="accepted",
     )
 
@@ -835,18 +1233,16 @@ def test_invalid_replay_requires_complete_producer_custody(
     package = package_data[0]
     result = _execute_fixture(
         *package_data,
-        FakeTransport(
-            [
-                *_identity_responses(package),
-                TransportResponse(200, _JSON_CONTENT_TYPE, b"{", "127.0.0.1"),
-                *_identity_responses(package),
-            ]
+        (
+            *_identity_responses(package),
+            TransportResponse(200, _JSON_CONTENT_TYPE, b"{", "127.0.0.1"),
+            *_identity_responses(package),
         ),
         prefix="invalid",
     )
     if target in {"pre_snapshot", "response_bytes"}:
         missing_name = (
-            "identity/pre.json" if target == "pre_snapshot" else "responses/generation.bin"
+            "identity/pre.json" if target == "pre_snapshot" else "responses/0005-generate.bin"
         )
 
         def remove_file(files: dict[str, bytes]) -> None:
@@ -879,18 +1275,17 @@ def test_invalid_replay_rejects_successful_truncated_post_prefix(
     package = package_data[0]
     result = _execute_fixture(
         *package_data,
-        FakeTransport(
-            [
-                *_identity_responses(package),
-                TransportResponse(200, _JSON_CONTENT_TYPE, b"{", "127.0.0.1"),
-                *_identity_responses(package),
-            ]
+        (
+            *_identity_responses(package),
+            TransportResponse(200, _JSON_CONTENT_TYPE, b"{", "127.0.0.1"),
+            *_identity_responses(package),
         ),
         prefix="invalid",
     )
 
     def truncate(files: dict[str, bytes]) -> None:
         action_log = json.loads(files["actions.json"])
+        removed_actions = action_log["actions"][6:]
         actions = action_log["actions"][:6]
         action_log["actions"] = actions
         action_log["request_bytes_consumed"] = sum(
@@ -910,6 +1305,8 @@ def test_invalid_replay_rejects_successful_truncated_post_prefix(
         terminal["logical_identity_requests"] = 5
         files["terminal.json"] = canonical_json(terminal)
         files.pop("identity/post.json")
+        for action in removed_actions:
+            files.pop(action["response_path"])
 
     repacked = _repack_with_file_change(
         result.path,
@@ -924,7 +1321,10 @@ def test_observed_generation_refuses_without_listener_attestation_before_socket(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    package, runtime, manifest, blobs, output = _make_package(tmp_path / "attestation")
+    package, runtime, manifest, blobs, output = _make_package(
+        tmp_path / "attestation",
+        synthetic_output_root=False,
+    )
 
     def forbidden_connection(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("socket construction is forbidden")
@@ -945,18 +1345,18 @@ def test_observed_generation_refuses_without_listener_attestation_before_socket(
 
 def test_identity_drift_refuses_before_generation(tmp_path: Path) -> None:
     package, runtime, manifest, blobs, output = _make_package(tmp_path / "drift")
-    transport = FakeTransport(_identity_responses(package, version="different"))
     result = _execute_fixture(
         package,
         runtime,
         manifest,
         blobs,
         output,
-        transport,
+        tuple(_identity_responses(package, version="different")),
         prefix="refused",
     )
     assert result.status == "refused"
-    assert [request.operation for request in transport.requests] == [
+    actions = json.loads((result.path / "actions.json").read_bytes())["actions"]
+    assert [action["operation"] for action in actions] == [
         "version",
         "tags",
         "show",
@@ -976,22 +1376,20 @@ def test_identity_drift_refuses_before_generation(tmp_path: Path) -> None:
         TransportResponse(200, "text/plain", b"{}", "127.0.0.1"),
         TransportResponse(200, _JSON_CONTENT_TYPE, b"{", "127.0.0.1"),
         _response({"model": "fixture-model:local", "done": True}),
-        TransportFailureError("synthetic timeout"),
+        SyntheticTransportFailure("synthetic timeout"),
     ],
 )
 def test_generation_failures_close_as_digest_safe_invalid_records(
     tmp_path: Path,
-    generation_outcome: TransportResponse | Exception,
+    generation_outcome: SyntheticTransportOutcome,
 ) -> None:
     package, runtime, manifest, blobs, output = _make_package(
         tmp_path / f"invalid-{digest_bytes(repr(generation_outcome).encode())[7:15]}",
     )
-    transport = FakeTransport(
-        [
-            *_identity_responses(package),
-            generation_outcome,
-            *_identity_responses(package),
-        ],
+    outcomes = (
+        *_identity_responses(package),
+        generation_outcome,
+        *_identity_responses(package),
     )
     result = _execute_fixture(
         package,
@@ -999,7 +1397,7 @@ def test_generation_failures_close_as_digest_safe_invalid_records(
         manifest,
         blobs,
         output,
-        transport,
+        outcomes,
         prefix="invalid",
     )
     assert result.status == "invalid"
@@ -1013,14 +1411,120 @@ def test_generation_failures_close_as_digest_safe_invalid_records(
     assert run["token_ids"] is None
 
 
+def test_incomplete_generation_bytes_close_invalid_and_replay(
+    tmp_path: Path,
+) -> None:
+    package_data = _make_package(tmp_path / "incomplete-generation")
+    package = package_data[0]
+    partial = b'{"model":"fixture-model:latest","response":"partial'
+    result = _execute_fixture(
+        *package_data,
+        (
+            *_identity_responses(package),
+            SyntheticTransportFailure(
+                "Ollama response body was truncated",
+                response_body=partial,
+                status=200,
+                content_type=_JSON_CONTENT_TYPE,
+                response_complete=False,
+            ),
+            *_identity_responses(package),
+        ),
+        prefix="incomplete",
+    )
+    assert result.status == "invalid"
+    action = json.loads((result.path / "actions.json").read_bytes())["actions"][4]
+    assert action["outcome"] == "transport_failure"
+    assert action["response_complete"] is False
+    assert action["response_size_bytes"] == len(partial)
+    assert action["response_sha256"] == digest_bytes(partial)
+    assert (result.path / action["response_path"]).read_bytes() == partial
+    assert replay_ollama_bundle(result.path).status == "invalid"
+
+
+def test_output_token_limit_accepts_exact_boundary_and_rejects_excess(
+    tmp_path: Path,
+) -> None:
+    exact = _make_package(tmp_path / "token-limit-exact")
+    exact_result = _execute_fixture(
+        *exact,
+        (
+            *_identity_responses(exact[0]),
+            _generate_response(exact[0], eval_count=8),
+            *_identity_responses(exact[0]),
+        ),
+        prefix="exact-limit",
+    )
+    assert exact_result.status == "accepted"
+    assert replay_ollama_bundle(exact_result.path).status == "accepted"
+
+    excess = _make_package(tmp_path / "token-limit-excess")
+    excess_result = _execute_fixture(
+        *excess,
+        (
+            *_identity_responses(excess[0]),
+            _generate_response(excess[0], eval_count=9),
+            *_identity_responses(excess[0]),
+        ),
+        prefix="excess-limit",
+    )
+    assert excess_result.status == "invalid"
+    excess_run = json.loads((excess_result.path / "runs/0001.json").read_bytes())
+    assert excess_run["validity"] == "invalid"
+    assert excess_run["native_metrics"] == []
+    assert excess_run["text_utf8"] is None
+    assert replay_ollama_bundle(excess_result.path).status == "invalid"
+
+
+def test_replay_rejects_coordinated_token_limit_analysis_tampering(
+    tmp_path: Path,
+) -> None:
+    package_data = _make_package(tmp_path / "token-limit-tamper")
+    package = package_data[0]
+    result = _execute_fixture(
+        *package_data,
+        (
+            *_identity_responses(package),
+            _generate_response(package, eval_count=9),
+            *_identity_responses(package),
+        ),
+        prefix="excess-limit",
+    )
+
+    def tamper(files: dict[str, bytes]) -> None:
+        actions = json.loads(files["actions.json"])
+        generate = actions["actions"][4]
+        response_path = generate["response_path"]
+        envelope = json.loads(files[response_path])
+        envelope["eval_count"] = 8
+        changed = canonical_json(envelope)
+        files[response_path] = changed
+        generate["response_sha256"] = digest_bytes(changed)
+        generate["response_size_bytes"] = len(changed)
+        files["actions.json"] = canonical_json(actions)
+        coordinated_reason = digest_bytes(b"coordinated-but-unreachable-invalid-analysis")
+        run = json.loads(files["runs/0001.json"])
+        run["invalid_reason_sha256"] = coordinated_reason
+        files["runs/0001.json"] = canonical_json(run)
+        terminal = json.loads(files["terminal.json"])
+        terminal["reason_sha256"] = coordinated_reason
+        files["terminal.json"] = canonical_json(terminal)
+
+    repacked = _repack_with_file_change(
+        result.path,
+        tmp_path / "token-limit-tampered",
+        tamper,
+    )
+    with pytest.raises(ContractError, match="not reachable"):
+        replay_ollama_bundle(repacked)
+
+
 def test_oversized_response_is_bounded_and_post_identity_still_runs(tmp_path: Path) -> None:
     package, runtime, manifest, blobs, output = _make_package(tmp_path / "oversized")
-    transport = FakeTransport(
-        [
-            *_identity_responses(package),
-            TransportResponse(200, _JSON_CONTENT_TYPE, b"x" * 65_537, "127.0.0.1"),
-            *_identity_responses(package),
-        ],
+    outcomes = (
+        *_identity_responses(package),
+        TransportResponse(200, _JSON_CONTENT_TYPE, b"x" * 65_537, "127.0.0.1"),
+        *_identity_responses(package),
     )
     result = _execute_fixture(
         package,
@@ -1028,18 +1532,18 @@ def test_oversized_response_is_bounded_and_post_identity_still_runs(tmp_path: Pa
         manifest,
         blobs,
         output,
-        transport,
+        outcomes,
         prefix="oversized",
     )
     assert result.status == "invalid"
-    assert len(transport.requests) == 9
-    assert [request.operation for request in transport.requests[5:]] == [
+    actions = json.loads((result.path / "actions.json").read_bytes())
+    assert len(actions["actions"]) == 9
+    assert [action["operation"] for action in actions["actions"][5:]] == [
         "version",
         "tags",
         "show",
         "ps",
     ]
-    actions = json.loads((result.path / "actions.json").read_bytes())
     generate = actions["actions"][4]
     assert generate["response_size_bytes"] == 65_537
     assert generate["response_complete"] is True
@@ -1052,12 +1556,10 @@ def test_post_request_identity_drift_invalidates_an_otherwise_valid_response(
     tmp_path: Path,
 ) -> None:
     package, runtime, manifest, blobs, output = _make_package(tmp_path / "post-drift")
-    transport = FakeTransport(
-        [
-            *_identity_responses(package),
-            _generate_response(package),
-            *_identity_responses(package, loaded=True),
-        ],
+    outcomes = (
+        *_identity_responses(package),
+        _generate_response(package),
+        *_identity_responses(package, loaded=True),
     )
     result = _execute_fixture(
         package,
@@ -1065,7 +1567,7 @@ def test_post_request_identity_drift_invalidates_an_otherwise_valid_response(
         manifest,
         blobs,
         output,
-        transport,
+        outcomes,
         prefix="post-drift",
     )
     assert result.status == "invalid"
@@ -1094,12 +1596,10 @@ def test_loaded_model_alias_with_same_manifest_is_not_claimed_cold(tmp_path: Pat
         manifest,
         blobs,
         output,
-        FakeTransport(
-            [
-                *_identity_responses(package),
-                _generate_response(package),
-                *post,
-            ]
+        (
+            *_identity_responses(package),
+            _generate_response(package),
+            *post,
         ),
         prefix="alias-loaded",
     )
@@ -1126,14 +1626,6 @@ def test_budget_is_consumed_before_transport_side_effect() -> None:
         ledger.before(request, identity=True, inference=False)
 
 
-def test_fake_transport_enforces_response_bound_before_returning_bytes() -> None:
-    transport = FakeTransport(
-        [TransportResponse(200, _JSON_CONTENT_TYPE, b"too-large", "127.0.0.1")],
-    )
-    with pytest.raises(TransportFailureError, match="byte budget"):
-        transport.request(TransportRequest("version", "GET", "/api/version", b"", 1, 1, 2))
-
-
 def test_package_rejects_request_body_and_budget_drift(tmp_path: Path) -> None:
     package, *_rest = _make_package(tmp_path / "tamper")
     request_drift = json.loads(canonical_json(package.value))
@@ -1151,23 +1643,22 @@ def test_redirect_status_is_refused_without_generation(tmp_path: Path) -> None:
     package, runtime, manifest, blobs, output = _make_package(tmp_path / "redirect")
     responses = _identity_responses(package)
     responses[0] = TransportResponse(302, _JSON_CONTENT_TYPE, b"{}", "127.0.0.1")
-    transport = FakeTransport(responses)
     result = _execute_fixture(
         package,
         runtime,
         manifest,
         blobs,
         output,
-        transport,
+        tuple(responses),
         prefix="redirect",
     )
     assert result.status == "refused"
-    assert all(request.operation != "generate" for request in transport.requests)
+    actions = json.loads((result.path / "actions.json").read_bytes())["actions"]
+    assert all(action["operation"] != "generate" for action in actions)
 
 
 def test_separately_authorized_preflight_cannot_call_generation(tmp_path: Path) -> None:
     package, runtime, manifest, blobs, output = _make_package(tmp_path / "preflight")
-    transport = FakeTransport(_identity_responses(package))
     result = preflight_synthetic(
         package=package,
         authorization=make_authorization(package, "preflight_only", _PREFLIGHT_NONCE),
@@ -1175,11 +1666,12 @@ def test_separately_authorized_preflight_cannot_call_generation(tmp_path: Path) 
         runtime_artifact=runtime,
         model_manifest=manifest,
         blob_root=blobs,
-        transport=transport,
+        outcomes=tuple(_identity_responses(package)),
         bundle_prefix="preflight",
     )
     assert result.status == "accepted"
-    assert [request.operation for request in transport.requests] == [
+    actions = json.loads((result.path / "actions.json").read_bytes())["actions"]
+    assert [action["operation"] for action in actions] == [
         "version",
         "tags",
         "show",
@@ -1196,7 +1688,6 @@ def test_separately_authorized_preflight_cannot_call_generation(tmp_path: Path) 
 
 def test_refused_preflight_bundle_replays_without_generation(tmp_path: Path) -> None:
     package, runtime, manifest, blobs, output = _make_package(tmp_path / "preflight-refused")
-    transport = FakeTransport(_identity_responses(package, version="different"))
     result = preflight_synthetic(
         package=package,
         authorization=make_authorization(package, "preflight_only", _PREFLIGHT_NONCE),
@@ -1204,7 +1695,7 @@ def test_refused_preflight_bundle_replays_without_generation(tmp_path: Path) -> 
         runtime_artifact=runtime,
         model_manifest=manifest,
         blob_root=blobs,
-        transport=transport,
+        outcomes=tuple(_identity_responses(package, version="different")),
         bundle_prefix="preflight-refused",
     )
     assert result.status == "refused"

@@ -48,7 +48,7 @@ because listener-process attestation is not yet portable and reviewed.
 | Cache cohort contract | Prompt and KV cache state | Process, model, prompt/KV, context shift | Outer API state plus active runner and cache state |
 | Native metrics | Preserved when exposed | Preserved when exposed | Durations and token counts in native nanosecond units |
 | Live execution in v1 | Forbidden | Forbidden | Read-only preflight only; generation is implemented for fake contract evidence but production-refused pending listener/runner attestation |
-| Synthetic fixture | Exact repeat group | Text and token divergence group | Accepted, invalid, and identity-refused fake-transport bundles |
+| Synthetic fixture | Exact repeat group | Text and token divergence group | Accepted, invalid, and identity-refused sealed-script bundles |
 
 MLX snapshots, GGUF files, and Ollama manifests are separate representations. A shared marketing
 name does not establish byte or behavioral equivalence. Cross-representation equivalence remains
@@ -81,16 +81,18 @@ The committed fixture deterministically produces:
 
 These are synthetic contract results, not benchmark claims about hardware, a model, or a backend.
 
-The recorded Ollama fake-transport fixtures deterministically produce:
+The recorded Ollama sealed-script fixtures deterministically produce:
 
 | Outcome | Bundle content root | Logical calls | Model/network side effects |
 |---|---|---:|---:|
-| Accepted | `sha256:67e986561a1413983782e3b11691a1228d506273779969e070819d78d4ad7f27` | 9 | 0 |
-| Digest-safe invalid | `sha256:66b1cbdfa34be1eb2bd92dccbaa5b496782378b95afc168afccb2a27c3c27aae` | 9 | 0 |
-| Identity-refused | `sha256:8ba8d496e594b4b096ca97b6877eca89dd8c12801d0a3e79587112c1e22cb479` | 4 | 0 |
+| Accepted | `sha256:f24cdd03797444f260bcb405cf5da374f36a72e83278ad48e2d3b382142e64e5` | 9 | 0 |
+| Digest-safe invalid | `sha256:0f164344931d9dc1ed253ce8147b1994e5917a18b22eea2554e9b9585e67b707` | 9 | 0 |
+| Identity-refused | `sha256:4a0e505cf8a28e6f81790d47f6f201bdb87df780d616fa642f8279227a6a8480` | 4 | 0 |
 
-Logical fake calls exercise ordering and budgets only. Their counters and timings are not observed
-Ollama behavior or performance evidence.
+Logical scripted calls exercise ordering, budgets, bounded response custody, and replay only. The
+public synthetic API cannot receive a transport object, and each response is action-indexed for
+offline reconstruction. Their counters and timings are not observed Ollama behavior or performance
+evidence.
 
 ## CLI
 

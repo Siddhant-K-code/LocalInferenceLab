@@ -5,8 +5,9 @@
 The runner implements one frozen, preinstalled-resource Ollama study. It is not a general Ollama
 client. A protocol file, environment variable, localhost service, `--allow-network`-style flag, or
 possession of model artifacts cannot authorize execution. The repository's tests and recorded
-accepted/invalid/refused bundles use `FakeTransport`; they make zero socket calls and zero model
-actions.
+accepted/invalid/refused bundles use a closed tuple of exact response/failure values. Public
+synthetic entry points instantiate the private scripted transport internally; they cannot accept a
+transport-capable object. The bundles make zero socket calls and zero model actions.
 
 Implementation evidence is not an observed model benchmark. It establishes no determinism, speed,
 memory, energy, backend quality, or model quality claim. Seed and temperature are controls, not
@@ -46,10 +47,13 @@ encoding, duplicate content lengths, and environment proxy discovery are unavail
 construction. `HTTPConnection` connects directly to the numeric address. The connected peer is
 checked against the exact declared loopback address before request bytes are sent.
 
-Every call has an explicit deadline, accepted response limit, and a one-byte overflow sentinel
-allowance committed in the pre-action read budget. The full allowance is reserved before the call.
+Every call has one monotonic absolute deadline spanning connect, peer verification, request send,
+response headers, and every body read; it is not a fresh timeout per socket operation. Each call
+also has an accepted response limit and a one-byte overflow sentinel allowance committed in the
+pre-action read budget. The full allowance is reserved before the call.
 Bounded partial bytes, status, content type, and completeness are recorded on transport failure;
-unknown/truncated reads cannot appear as zero-byte success. Content type must be exactly
+`IncompleteRead` and deadline failures retain every already returned bounded body byte, and a short
+`Content-Length` body cannot appear complete. Content type must be exactly
 `application/json` with at most a UTF-8 charset parameter. Status, malformed UTF-8/JSON, duplicate
 keys, floats, unknown generate fields, missing terminal fields, and oversized bodies fail closed.
 There are no retries.
@@ -129,7 +133,9 @@ pooled.
 A valid response requires HTTP 200, JSON content type, exact response model identity, `done=true`,
 non-empty `done_reason`, response text, and all six native count/duration fields. The exact response
 envelope bytes and digest are retained. Text is the exact decoded JSON string and is separately
-digested. Durations remain nanoseconds; counts remain tokens.
+digested. Durations remain nanoseconds; counts remain tokens. `eval_count` must not exceed the
+authorized `max_output_tokens`/exact request `num_predict`; the equal boundary is accepted. No
+prompt/context token equivalence is invented.
 
 The deprecated `context` field is not treated as generated token IDs. `token_ids` is always
 unavailable.
@@ -137,18 +143,21 @@ unavailable.
 If generation was dispatched but transport, parsing, required-field validation, cache lifecycle,
 artifact recheck, or post-identity validation fails, the scheduled run closes as an invalid
 digest-safe record. It retains the exact request and error digest but no partially trusted output,
-text, tokens, finish reason, or envelope fields. Exact bytes returned by a completed generation
-transport are retained separately as `responses/generation.bin` and linked to action 5, so invalid
-bytes remain available without treating any parsed field as trusted. Pre-generation identity
+text, tokens, finish reason, or envelope fields. Every dispatched action retains one exact bounded
+body artifact under `responses/NNNN-operation.bin`, including empty and partial failures. The action
+binds its path, digest, size, status, content type, and completeness. Pre-generation identity
 failure publishes a refused terminal record with no run. All terminal outcomes include ordered
 action accounting and are published through atomic no-replace, receipt-last custody.
 
 ## Synthetic boundary
 
-`FakeTransport` is a finite response script with no socket. Synthetic action timing is fixed to zero
-and physical network/model counters are zero. Deterministic recorded fixtures use an explicit
-`synthetic_fixture` output-root marker whose physical identity fields are fixed to zero; observed
-preflight/execution rejects that marker mode. The fixture publishes:
+The synthetic API accepts only an exact built-in tuple containing exact immutable
+`TransportResponse`/`SyntheticTransportFailure` values; tuple/value subclasses, custom dispatch
+objects, and production transports are rejected before output-root access or authorization
+consumption. It creates the private finite scripted transport only after that validation. Synthetic
+action timing is fixed to zero and physical network/model counters are zero. Synthetic execution
+also requires the explicit `synthetic_fixture` output-root marker whose physical identity fields are
+fixed to zero; observed preflight/execution rejects that marker mode. The fixture publishes:
 
 - `accepted`: valid synthetic response custody;
 - `invalid`: malformed response closed as a digest-safe invalid run;
@@ -156,6 +165,7 @@ preflight/execution rejects that marker mode. The fixture publishes:
 
 Replay verifies closed-set publication, embedded one-shot authorizations and nonce commitments,
 the exact accepted/invalid/refused state machine, schedule prefix, reserved/received byte totals,
-strict identity snapshot projections, every run identity, action-5 response custody, regenerated
-valid response projections, non-claims, and synthetic side-effect/timing zeros. The same command
-strictly replays four-call preflight bundles and proves they contain no generation action.
+the exact indexed response artifact set, strict identity snapshots reconstructed from all eight raw
+pre/post identity envelopes, every run identity, regenerated valid response projections,
+producer-reachable invalid analysis, non-claims, and synthetic side-effect/timing zeros. The same
+command strictly replays four-call preflight bundles and proves they contain no generation action.
