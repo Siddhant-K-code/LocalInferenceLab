@@ -13,11 +13,18 @@ from typing import cast
 
 import pytest
 
-from localinferencelab.canonical import ContractError, JsonValue, canonical_json
+from localinferencelab.canonical import (
+    ContractError,
+    JsonValue,
+    canonical_json,
+    decode_bytes,
+    digest_bytes,
+)
 from localinferencelab.cli import run
 from localinferencelab.custody import publish_bundle, read_closed_bundle
 from localinferencelab.ollama_attestation import (
     DECLARATION_COMMIT,
+    DECLARATION_ID,
     FOUNDATION_COMMIT,
     GENERATION_REQUEST_SHA256,
     OLLAMA_REVISION,
@@ -82,6 +89,7 @@ def test_pinned_spec_separates_requirements_candidates_and_verdict() -> None:
     spec = verify_attestation_spec(attestation_feasibility_spec())
     binding = _dict(spec["contract_binding"])
     assert binding["declaration_contract_commit"] == DECLARATION_COMMIT
+    assert binding["declaration_id"] == DECLARATION_ID
     assert binding["ollama_revision"] == OLLAMA_REVISION
     assert binding["generation_request_sha256"] == GENERATION_REQUEST_SHA256
     scope = _dict(spec["platform_scope"])
@@ -122,16 +130,12 @@ def test_pinned_spec_separates_requirements_candidates_and_verdict() -> None:
     assert all(value == 0 for value in _dict(assessment["non_actions"]).values())
 
 
-def test_declaration_binds_negative_verdict_without_broadening_eligibility() -> None:
+def test_separate_verdict_explains_unchanged_declaration_ineligibility() -> None:
     assessment = build_attestation_assessment()
     declaration = build_study_declaration(qwen3_repeatability_study_spec())
     gate = _dict(declaration["attestation_gate"])
     assert gate == {
-        "schema_status": "feasibility_schema_1_0_no_positive_attestor",
-        "attestation_assessment_id": assessment["assessment_id"],
-        "attestation_feasibility_id": assessment["feasibility_id"],
-        "attestation_verdict_id": assessment["verdict_id"],
-        "attestation_verdict": "insufficient",
+        "schema_status": "not_available_in_schema_1_0",
         "listener_owner_attestation_id": None,
         "active_internal_runner_metal_attestation_id": None,
         "gate_may_be_forged_by_caller": False,
@@ -140,9 +144,11 @@ def test_declaration_binds_negative_verdict_without_broadening_eligibility() -> 
     for key in ("observed_generation", "observed_generation_replay"):
         observed = _dict(eligibility[key])
         assert observed["decision"] == "ineligible"
-        assert observed["attestation_verdict_id"] == assessment["verdict_id"]
-        assert observed["attestation_decision"] == "insufficient"
         assert observed["attestation_content_bound"] is False
+    verdict = _dict(assessment["verdict"])
+    assert verdict["decision"] == "insufficient"
+    assert verdict["observed_generation_eligible"] is False
+    assert verdict["observed_generation_replay_eligible"] is False
 
 
 def test_attestation_binding_matches_the_declared_study_contract() -> None:
@@ -155,10 +161,17 @@ def test_attestation_binding_matches_the_declared_study_contract() -> None:
     request = _dict(_list(declaration["request_catalog"])[0])
     identity = _dict(study["known_identity"])
     host = _dict(identity["host"])
+    controls = _dict(study["request_controls"])
     transport = _dict(study["transport"])
 
     assert binding["foundation_commit"] == FOUNDATION_COMMIT
+    assert binding["declaration_id"] == DECLARATION_ID
+    assert declaration["declaration_id"] == DECLARATION_ID
     assert binding["generation_request_sha256"] == request["request_sha256"]
+    assert (
+        digest_bytes(decode_bytes(cast("str", request["request_base64"])))
+        == binding["generation_request_sha256"]
+    )
     assert binding["declaration_record_type"] == declaration["record_type"]
     assert binding["declaration_schema_version"] == declaration["schema_version"]
     assert (
@@ -177,6 +190,22 @@ def test_attestation_binding_matches_the_declared_study_contract() -> None:
         transport["host"],
         transport["port"],
     )
+    assert controls == {
+        "raw": True,
+        "think_mode": "false",
+        "stream": False,
+        "shift": False,
+        "truncate": False,
+        "keep_alive_seconds": 0,
+        "seed": 424_242,
+        "temperature_millionths": 0,
+        "top_p_millionths": 1_000_000,
+        "top_k": 1,
+        "min_p_millionths": 0,
+        "repeat_penalty_millionths": 1_000_000,
+        "context_tokens": 8_192,
+        "max_output_tokens": 64,
+    }
 
 
 def _top_unknown(value: dict[str, JsonValue]) -> None:
@@ -395,6 +424,7 @@ def test_contract_paths_make_no_socket_subprocess_or_process_probe_calls(
     assessment = build_attestation_assessment()
     verify_attestation_assessment(assessment)
     inspection = attestation_inspection(assessment)
+    assert inspection["declaration_id"] == DECLARATION_ID
     assert inspection["physical_network_requests"] == 0
     assert inspection["model_actions"] == 0
     bundle_root = tmp_path / "bundle"
@@ -412,6 +442,7 @@ def test_attestation_cli_create_verify_inspect_compile_and_replay(
     created = _output(capfd)
     assert created["status"] == "created"
     assert created["decision"] == "insufficient"
+    assert created["declaration_id"] == DECLARATION_ID
     assert created["observed_generation_eligible"] is False
     load_attestation_assessment(assessment_path)
 

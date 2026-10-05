@@ -175,15 +175,18 @@ declaration construction.
 
 Completeness does not imply generation eligibility. Schema 1.0 always reports observed generation
 and replay ineligible because it cannot content-bind the loopback listener owner or active internal
-runner/Metal state. It binds the exact negative attestation verdict described below. Fixed seed and
-temperature remain controls, not determinism guarantees.
+runner/Metal state. Its bytes and semantics remain unchanged from PR #3. The separate negative
+attestation verdict described below binds the immutable declaration identity and explains why the
+existing gate stays closed; it is not embedded in the declaration. Fixed seed and temperature
+remain controls, not determinism guarantees.
 
 ## Ollama listener and runner attestation assessment
 
 The additive schema-1.0 assessment is a feasibility contract, not live evidence. It binds the
-merged declaration contract, pinned source revisions, exact Qwen3 generation request digest,
-numeric IPv4 loopback endpoint, and a macOS 27.0.1/arm64 non-root scope. Its normative requirements
-are intentionally stronger than process discovery:
+merged declaration contract and exact built-in declaration identity, pinned source revisions,
+exact Qwen3 generation request digest, numeric IPv4 loopback endpoint, and a macOS
+27.0.1/arm64 non-root scope. Its normative requirements are intentionally stronger than process
+discovery:
 
 - the exact retained accepted connection must bind to owner UID, PID plus anti-reuse birth/unique
   identity, and no-follow executable bytes;

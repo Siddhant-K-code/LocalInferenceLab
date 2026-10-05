@@ -32,8 +32,10 @@ localinferencelab ollama attestation-inspect attestation-assessment.json
 These are also pure offline operations. They do not inspect a live process or socket, invoke
 `lsof`, run a subprocess, contact Ollama, consume an authorization nonce/output root, or perform a
 model action. The expected verdict is `insufficient`; observed generation and observed replay must
-remain ineligible. An explicit `--spec` input must be canonical and byte-equivalent in meaning to
-the built-in pinned feasibility specification.
+remain ineligible. The assessment is separate from the unchanged strict declaration record and
+binds its immutable identity; it does not revise or migrate declaration schema 1.0. An explicit
+`--spec` input must be canonical and byte-equivalent in meaning to the built-in pinned feasibility
+specification.
 
 ## 1. Establish preinstalled identities
 
@@ -161,12 +163,12 @@ or interrupted authorized phase remains consumed and must not be selectively rer
 ## 6. Execution gate
 
 The command surface is present, but production generation intentionally refuses before consuming
-either authorization or opening a socket. The bound schema-1.0 verdict is `insufficient`: public
-nonprivileged macOS observations cannot atomically bind the retained accepted connection to a
-stable listener process through response, and Ollama's public API does not bind the exact external
-request to its internal scheduler runner/model-load instance and actual Metal backend. Do not
-attempt a real model run until a separate reviewed milestone supplies both the privileged kernel
-socket/process assertion and in-process Ollama cooperation named by the assessment.
+either authorization or opening a socket. The separate schema-1.0 verdict is `insufficient`:
+public nonprivileged macOS observations cannot atomically bind the retained accepted connection to
+a stable listener process through response, and Ollama's public API does not bind the exact
+external request to its internal scheduler runner/model-load instance and actual Metal backend.
+Do not attempt a real model run until a separate reviewed milestone supplies both the privileged
+kernel socket/process assertion and in-process Ollama cooperation named by the assessment.
 
 After that future gate is implemented and only after package, source, privacy, cache, and threat
 review, the frozen command shape is:

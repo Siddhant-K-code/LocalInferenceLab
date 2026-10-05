@@ -132,16 +132,19 @@ a valid incomplete declaration rather than fabricated evidence.
 Declaration construction never initializes an output root or creates authorization. Metadata
 preflight remains separately authorized. Generation and observed-generation replay remain
 schema-ineligible with exactly two trust-gate blockers: missing content-bound listener-owner
-attestation and missing content-bound active internal runner/Metal attestation. The declaration
-now also binds the exact canonical `insufficient` attestation verdict ID; a caller cannot replace
-that record with eligibility fields.
+attestation and missing content-bound active internal runner/Metal attestation. The strict
+schema-1.0 declaration remains byte-for-byte compatible with PR #3. The separate assessment binds
+that immutable declaration identity and explains why the existing gate remains closed; it does
+not revise or migrate the declaration.
 
 ## Ollama attestation feasibility layer
 
 The additive `ollama_attestation_feasibility_spec`,
 `ollama_attestation_feasibility`, `ollama_attestation_verdict`, and enclosing
 `ollama_attestation_assessment` records remain schema 1.0. They bind declaration commit
-`8f97e3de113bc334ce6928c3d135edea6fbe3b8c`, pinned Ollama revision
+`8f97e3de113bc334ce6928c3d135edea6fbe3b8c`, immutable built-in declaration identity
+`sha256:ebf8c3758c83c353e6e0bd9ab0f12d4aeb30ed9d7c1ed8f20669f7948f30022e`,
+pinned Ollama revision
 `42e911bc3d05798cad729cb474bf62f378cb2e26`, the exact generation request digest, the declared
 IPv4 numeric-loopback endpoint, and a narrow macOS 27.0.1/arm64/non-root/no-special-entitlement
 scope. Public XNU source parity with that exact OS build is explicitly not claimed.

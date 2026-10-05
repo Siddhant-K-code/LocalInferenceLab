@@ -150,7 +150,10 @@ permits it. Apple's public XNU source revision
 and Security source revision
 [`db15acbe6a7f257a859ad9a3bb86097bfe0679d9`](https://github.com/apple-oss-distributions/Security/tree/db15acbe6a7f257a859ad9a3bb86097bfe0679d9)
 are pinned authoritative sources for the interfaces and fields they define. The assessment does
-not claim that those public source revisions are byte-identical to the exact shipped OS build.
+not claim that those public source revisions are byte-identical to the exact shipped OS build. The
+separate assessment binds the unchanged PR #3 built-in declaration identity
+`sha256:ebf8c3758c83c353e6e0bd9ab0f12d4aeb30ed9d7c1ed8f20669f7948f30022e`;
+it does not alter that strict declaration record.
 
 ### Darwin normative source findings
 

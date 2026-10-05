@@ -21,6 +21,7 @@ from localinferencelab.custody import publish_bundle, read_closed_bundle
 SCHEMA_VERSION = "1.0"
 FOUNDATION_COMMIT = "7f89682bdc50a944cf74e4729f5acffa48dc6f1a"
 DECLARATION_COMMIT = "8f97e3de113bc334ce6928c3d135edea6fbe3b8c"
+DECLARATION_ID = "sha256:ebf8c3758c83c353e6e0bd9ab0f12d4aeb30ed9d7c1ed8f20669f7948f30022e"
 OLLAMA_REVISION = "42e911bc3d05798cad729cb474bf62f378cb2e26"
 XNU_REVISION = "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea"
 SECURITY_REVISION = "db15acbe6a7f257a859ad9a3bb86097bfe0679d9"
@@ -637,6 +638,7 @@ def attestation_feasibility_spec() -> dict[str, JsonValue]:
             "repository": "Siddhant-K-code/LocalInferenceLab",
             "foundation_commit": FOUNDATION_COMMIT,
             "declaration_contract_commit": DECLARATION_COMMIT,
+            "declaration_id": DECLARATION_ID,
             "declaration_record_type": "ollama_repeatability_study_declaration",
             "declaration_schema_version": "1.0",
             "runner_contract_schema_version": "1.0",
@@ -674,6 +676,7 @@ def _parse_contract_binding(value: JsonValue) -> None:
         "repository",
         "foundation_commit",
         "declaration_contract_commit",
+        "declaration_id",
         "declaration_record_type",
         "declaration_schema_version",
         "runner_contract_schema_version",
@@ -681,8 +684,12 @@ def _parse_contract_binding(value: JsonValue) -> None:
         "generation_request_sha256",
     }
     _keys(binding, fields, "attestation_spec.contract_binding")
-    for field in fields - {"generation_request_sha256"}:
+    for field in fields - {"declaration_id", "generation_request_sha256"}:
         _text(binding[field], f"attestation_spec.contract_binding.{field}")
+    _sha256(
+        binding["declaration_id"],
+        "attestation_spec.contract_binding.declaration_id",
+    )
     _sha256(
         binding["generation_request_sha256"],
         "attestation_spec.contract_binding.generation_request_sha256",
@@ -1145,9 +1152,11 @@ def attestation_inspection(value: JsonValue) -> dict[str, JsonValue]:
     """Return the bounded fail-closed inspection projection."""
     assessment = verify_attestation_assessment(value)
     feasibility = _mapping(assessment["feasibility"], "feasibility")
+    contract_binding = _mapping(feasibility["contract_binding"], "contract_binding")
     verdict = _mapping(assessment["verdict"], "verdict")
     return {
         "assessment_id": assessment["assessment_id"],
+        "declaration_id": contract_binding["declaration_id"],
         "feasibility_id": assessment["feasibility_id"],
         "verdict_id": assessment["verdict_id"],
         "decision": verdict["decision"],

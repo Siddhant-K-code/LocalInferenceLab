@@ -111,8 +111,8 @@ The declaration fixture separately freezes five prospective Qwen3 8B Q8 repeats:
 | Qwen3 manifest digest | `sha256:e56358ca25dd14db6853a9f68a92d717aaa6f0a94250a72d1a0f3d86a9f30130` |
 | Repeats / concurrency / attempts | 5 / 1 / 1 each |
 | Supported cache cohort | `cold_model_warm_process` only |
-| Declaration identity | `sha256:24ba4d251493cccf5f95b95bf06782b88a6f4cb09b3f22bc512975250f695f59` |
-| Synthetic declaration bundle root | `sha256:00a7933522a88eaca321f8fdf2d01ccef389379bf28d2f661fb044bf1dfaf1c5` |
+| Declaration identity | `sha256:ebf8c3758c83c353e6e0bd9ab0f12d4aeb30ed9d7c1ed8f20669f7948f30022e` |
+| Synthetic declaration bundle root | `sha256:52d39c95991d3151423f9de455eb734bfe0d9a0e17f516f4ad05771bb9c9714a` |
 | Physical network, socket, model, cloud, spend actions | 0 |
 
 The fixture is intentionally incomplete: no runtime artifact digest, selected internal runner,
@@ -127,11 +127,12 @@ The independent offline attestation fixture freezes the feasibility decision:
 | Result | Value |
 |---|---:|
 | Assessment schema | `ollama_attestation_assessment` 1.0 |
-| Assessment identity | `sha256:5fab901d52f9038f3db6776bf69545bf290cfa4499f1e428b7e1e2aee603446b` |
-| Feasibility identity | `sha256:d38b69ce1400cf9ff0974e48ae1161a24086069c44d2d124d84abe87f5e34b9f` |
-| Verdict identity | `sha256:a7aed7b4abe6360a5d7d365b7a87c98c0866bd37bbbaae693a98a03940398990` |
+| Bound PR #3 declaration identity | `sha256:ebf8c3758c83c353e6e0bd9ab0f12d4aeb30ed9d7c1ed8f20669f7948f30022e` |
+| Assessment identity | `sha256:d84a278868c3f0d3c5ec516f39825d10d01e307dffabaa04e2368d8acc48bcb6` |
+| Feasibility identity | `sha256:caa1d2a3cb421325de24ba147441476001c6e0938c8fe8287c3f09f3f5751534` |
+| Verdict identity | `sha256:5de010f84328e24eed9d4b2efd635eb7390227b04ae623cd36189e1a44091ebe` |
 | Verdict | `insufficient` |
-| Synthetic bundle root | `sha256:e7e96b3b44c624bf955b048ab1f95bac5e1d0bf3ab8448ebc32154993e3ff87f` |
+| Synthetic bundle root | `sha256:1e189da8cde51544a361b98c4f0376b70cd5f223b5e0db112b6d18accb997460` |
 | Live process probes, sockets, subprocesses, Ollama/model actions | 0 |
 
 The record distinguishes normative requirements from candidate evidence and from the final
@@ -141,7 +142,9 @@ Pinned Ollama source retains `runnerRef`, child PID, model state, and internal c
 inside the server, but the public API does not export a content-bound chain. A future positive path
 would need both a privileged retained accepted-socket/process assertion and reviewed in-process
 Ollama cooperation binding the request digest, runner/load instance, model closure, and actual
-Metal execution through the response.
+Metal execution through the response. The assessment is a separate record that explains and
+retains the declaration's existing ineligibility; it does not revise, migrate, or embed itself in
+the strict declaration schema.
 
 ## CLI
 

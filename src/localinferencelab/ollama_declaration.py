@@ -26,7 +26,6 @@ from localinferencelab.ollama import (
     build_generate_request,
     verify_prospective_package,
 )
-from localinferencelab.ollama_attestation import build_attestation_assessment
 
 SCHEMA_VERSION = "1.0"
 FOUNDATION_COMMIT = "7f89682bdc50a944cf74e4729f5acffa48dc6f1a"
@@ -133,7 +132,6 @@ def _foundation_contract() -> dict[str, JsonValue]:
         "ollama_runner_contract_schema": RUNNER_CONTRACT_SCHEMA,
         "ollama_prospective_package_schema": PROSPECTIVE_PACKAGE_SCHEMA,
         "ollama_repeatability_declaration_schema": SCHEMA_VERSION,
-        "ollama_attestation_assessment_schema": SCHEMA_VERSION,
     }
     return {
         "descriptor": descriptor,
@@ -1073,12 +1071,6 @@ def build_study_declaration(
     identity = _mapping(spec["known_identity"], "known_identity")
     missing = _missing_fields(identity, bindings)
     complete = not missing
-    attestation_assessment = build_attestation_assessment()
-    attestation_verdict = _mapping(
-        attestation_assessment["verdict"],
-        "attestation_assessment.verdict",
-    )
-    attestation_verdict_id = attestation_assessment["verdict_id"]
     eligibility: dict[str, JsonValue] = {
         "declaration_completeness": {
             "status": "complete" if complete else "incomplete",
@@ -1092,8 +1084,6 @@ def build_study_declaration(
         "observed_generation": {
             "decision": "ineligible",
             "trust_gate_blockers": list(_ATTESTATION_GATES),
-            "attestation_verdict_id": attestation_verdict_id,
-            "attestation_decision": attestation_verdict["decision"],
             "attestation_content_bound": False,
             "authorization_may_be_consumed": False,
             "socket_may_be_opened": False,
@@ -1102,8 +1092,6 @@ def build_study_declaration(
         "observed_generation_replay": {
             "decision": "ineligible",
             "trust_gate_blockers": list(_ATTESTATION_GATES),
-            "attestation_verdict_id": attestation_verdict_id,
-            "attestation_decision": attestation_verdict["decision"],
             "attestation_content_bound": False,
         },
     }
@@ -1124,11 +1112,7 @@ def build_study_declaration(
         "analysis_policy": _analysis_policy(),
         "custody_policy": _custody_policy(bindings),
         "attestation_gate": {
-            "schema_status": "feasibility_schema_1_0_no_positive_attestor",
-            "attestation_assessment_id": attestation_assessment["assessment_id"],
-            "attestation_feasibility_id": attestation_assessment["feasibility_id"],
-            "attestation_verdict_id": attestation_verdict_id,
-            "attestation_verdict": attestation_verdict["decision"],
+            "schema_status": "not_available_in_schema_1_0",
             "listener_owner_attestation_id": None,
             "active_internal_runner_metal_attestation_id": None,
             "gate_may_be_forged_by_caller": False,

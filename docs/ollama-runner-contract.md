@@ -58,8 +58,10 @@ Declaration completeness, metadata-preflight authorization, and generation eligi
 separate outputs. Metadata preflight always requires its own one-shot authorization. Observed
 generation and observed replay remain ineligible regardless of declaration completeness until a
 future reviewed schema content-binds both listener ownership and active internal runner/Metal
-attestation. The declaration now binds the reviewed schema-1.0 feasibility verdict, which is
-`insufficient`; this records why the gate is closed without creating a positive attestation.
+attestation. The declaration remains the exact strict schema-1.0 PR #3 record. A separate reviewed
+schema-1.0 feasibility verdict binds its immutable identity and concludes `insufficient`; this
+explains why the existing gate stays closed without revising the declaration or creating a
+positive attestation.
 
 The request model name must end in `:local`. Pinned Ollama source permits an unspecified model
 reference backed by `RemoteHost`/`RemoteModel` metadata to proxy externally; `:local` turns such a
