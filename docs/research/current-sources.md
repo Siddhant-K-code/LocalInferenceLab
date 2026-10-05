@@ -39,8 +39,9 @@ runner contract.
   collects `model*.safetensors` and passes them to `model.load_weights` with its `strict` argument,
   whose normal default is `True`. A configured `model_file` requires `trust_remote_code=true` and
   is then imported/executed from the snapshot. Model Python is forbidden by the manifest contract.
-  The static manifest can close obvious canonical shard-name/index gaps but cannot prove parameter
-  key/shape completeness without this future strict load. The prospective study freezes the normal
+  The static manifest can close obvious canonical shard-name/index gaps and rejects Safetensors
+  outside this pinned `model*.safetensors` loader scope, but it cannot prove parameter key/shape
+  completeness without this future strict load. The prospective study freezes the normal
   non-custom-code, non-distributed (`sharding=None`) `load` / `load_model` path with explicit
   `strict=True`; this PR does not call it.
 - [`load`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/utils.py#L610-L668)

@@ -103,8 +103,8 @@ Without an index, the only permitted weight layout is exactly `model.safetensors
 must use one canonical contiguous set from `model-00001-of-000NN.safetensors` through
 `model-000NN-of-000NN.safetensors`, all with the same total and exactly matching both the present
 files and index projection. Mixed monolith/shard layouts and malformed, incomplete, noncontiguous,
-or inconsistent shard names are rejected. This preserves the pinned loader's
-`model*.safetensors` scope while closing obvious filename-level incompleteness.
+or inconsistent shard names are rejected. Additional Safetensors outside the pinned loader's
+`model*.safetensors` scope are also rejected rather than retained as unused model-root bytes.
 
 Only the pinned loader's data extensions are admitted. Python/shared-library/custom-code files,
 executables, symlinks, special files, nested path escapes, remote-code markers (`model_file`,

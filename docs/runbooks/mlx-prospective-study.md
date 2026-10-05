@@ -61,9 +61,10 @@ localinferencelab mlx model-manifest-create \
 
 The compiler reads no-follow regular files only and rejects custom code, remote-code markers,
 symlinks, special files, nested paths, executable files, mixed monolith/shard layouts, malformed
-or incomplete canonical shard sets, and inconsistent shard indexes. Without an index, the sole
-weight must be exactly `model.safetensors`. It does not load config through MLX/Transformers,
-instantiate a tokenizer/model, validate parameter keys/shapes, or mutate a cache.
+or incomplete canonical shard sets, inconsistent shard indexes, and Safetensors outside the pinned
+`model*.safetensors` loader scope. Without an index, the sole weight must be exactly
+`model.safetensors`. It does not load config through MLX/Transformers, instantiate a
+tokenizer/model, validate parameter keys/shapes, or mutate a cache.
 
 This manifest proves supplied bytes and exact present projections, not semantic model completeness.
 A future positive worker must use the pinned normal non-distributed (`sharding=None`)

@@ -1119,6 +1119,11 @@ def compile_model_manifest(model_root: Path) -> dict[str, JsonValue]:
         )
         if not weights:
             raise ContractError("model snapshot has no model*.safetensors weights")
+        safetensors_files = sorted(path for path in paths if path.endswith(".safetensors"))
+        if safetensors_files != weights:
+            raise ContractError(
+                "Safetensors files outside the pinned model*.safetensors loader scope are forbidden"
+            )
         index_path = "model.safetensors.index.json"
         referenced: list[str] = []
         _verify_model_weight_layout(weights, has_index=index_path in paths)
@@ -1289,6 +1294,11 @@ def verify_model_manifest(value: JsonValue) -> dict[str, JsonValue]:
     )
     if actual_weights != weight_files:
         raise ContractError("MLX model weight-file projection differs from the closure")
+    actual_safetensors = sorted(path for path in file_records if path.endswith(".safetensors"))
+    if actual_safetensors != actual_weights:
+        raise ContractError(
+            "Safetensors files outside the pinned model*.safetensors loader scope are forbidden"
+        )
     actual_tokenizers = sorted(
         path
         for path in file_records

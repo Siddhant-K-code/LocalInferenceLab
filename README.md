@@ -250,8 +250,9 @@ regular-file interpreter, package root, worker bytes, distribution metadata, sel
 closed environment without importing or executing them. Model compilation scans one explicit,
 already-identified materialized directory; it never searches caches or resolves/downloads a
 snapshot. Symlinks, special files, hard-link aliases, path/import injection, remote/custom code,
-mixed or malformed/incomplete canonical shards, and inconsistent indexes fail closed. Supplying
-both manifests still cannot make execution eligible: applicable dependencies, Python
+Safetensors outside the pinned loader scope, mixed or malformed/incomplete canonical shards, and
+inconsistent indexes fail closed. Supplying both manifests still cannot make execution eligible:
+applicable dependencies, Python
 standard-library/native-loader bytes, production IPC/protocol/result validation, strict model
 parameter key/shape load evidence, exact limits, output-root/nonce custody, worker
 birth/import/backend/cache evidence, and final synchronization remain missing, and no

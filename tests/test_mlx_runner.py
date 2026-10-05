@@ -633,6 +633,29 @@ def test_model_scanner_rejects_missing_extra_and_malformed_shards(tmp_path: Path
     with pytest.raises(ContractError, match="mixed monolithic and sharded"):
         compile_model_manifest(mixed)
 
+    extra_monolith_root = tmp_path / "extra-monolith"
+    extra_monolith = _write_model_tree(extra_monolith_root)
+    (extra_monolith / "adapter.safetensors").write_bytes(b"out of loader scope")
+    with pytest.raises(ContractError, match=r"outside the pinned model\*\.safetensors"):
+        compile_model_manifest(extra_monolith)
+
+    extra_sharded_root = tmp_path / "extra-sharded"
+    extra_sharded = _write_model_tree(extra_sharded_root)
+    (extra_sharded / "model.safetensors").unlink()
+    (extra_sharded / "model-00001-of-00001.safetensors").write_bytes(b"only shard")
+    (extra_sharded / "adapter.safetensors").write_bytes(b"out of loader scope")
+    (extra_sharded / "model.safetensors.index.json").write_bytes(
+        canonical_json(
+            {
+                "weight_map": {
+                    "fixture.weight": "model-00001-of-00001.safetensors",
+                }
+            }
+        )
+    )
+    with pytest.raises(ContractError, match=r"outside the pinned model\*\.safetensors"):
+        compile_model_manifest(extra_sharded)
+
     wrong_index_root = tmp_path / "wrong-index"
     indexed_model = _write_model_tree(wrong_index_root)
     (indexed_model / "model.safetensors").unlink()
