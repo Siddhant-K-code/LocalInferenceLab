@@ -13,6 +13,23 @@ from localinferencelab.contracts import parse_record, record_id
 from localinferencelab.custody import replay_bundle
 from localinferencelab.fixture import compile_fixture
 from localinferencelab.host import probe_host
+from localinferencelab.mlx_fixture import compile_mlx_fixture, replay_mlx_fixture
+from localinferencelab.mlx_manifest import (
+    compile_model_manifest,
+    compile_runtime_manifest,
+    load_runtime_scan_spec,
+    write_manifest,
+)
+from localinferencelab.mlx_runner import (
+    build_mlx_prospective_package,
+    load_mlx_prospective_package,
+    load_mlx_study_spec,
+    load_optional_manifests,
+    mlx_capability_report,
+    mlx_eligibility_inspection,
+    mlx_study_spec,
+    write_mlx_prospective_package,
+)
 from localinferencelab.ollama import (
     build_prospective_package,
     create_authorization_nonce,
@@ -52,6 +69,10 @@ def _emit(value: object) -> None:
     sys.stdout.buffer.write(canonical_json(value) + b"\n")
 
 
+def _emit_document(value: object) -> None:
+    sys.stdout.buffer.write(canonical_json(value))
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="localinferencelab",
@@ -88,6 +109,65 @@ def _parser() -> argparse.ArgumentParser:
     probe.add_argument("artifact", type=Path)
     probe.add_argument("--version", required=True)
     probe.add_argument("--commit")
+
+    mlx = commands.add_parser(
+        "mlx",
+        help="offline direct-worker manifests, prospective contract, and refusal fixture",
+    )
+    mlx_commands = mlx.add_subparsers(dest="mlx_command", required=True)
+    mlx_commands.add_parser(
+        "capability-report",
+        help="report implemented direct-worker capabilities without probing MLX or Metal",
+    )
+    mlx_commands.add_parser(
+        "prospective-spec",
+        help="emit the pinned execution-ineligible direct MLX study specification",
+    )
+    runtime_manifest = mlx_commands.add_parser(
+        "runtime-manifest-create",
+        help="compile an explicit supplied package-root byte closure without imports or execution",
+    )
+    runtime_manifest.add_argument("scan_spec", type=Path)
+    runtime_manifest.add_argument("runtime_root", type=Path)
+    runtime_manifest.add_argument("interpreter", type=Path)
+    runtime_manifest.add_argument("worker_program", type=Path)
+    runtime_manifest.add_argument("output", type=Path)
+    model_manifest = mlx_commands.add_parser(
+        "model-manifest-create",
+        help=(
+            "compile a supplied model-root byte closure and loader-scope projection without loading"
+        ),
+    )
+    model_manifest.add_argument("model_root", type=Path)
+    model_manifest.add_argument("output", type=Path)
+    mlx_prospective = mlx_commands.add_parser(
+        "prospective-create",
+        help="create a fail-closed direct-worker package from optional static manifests",
+    )
+    mlx_prospective.add_argument("spec", type=Path)
+    mlx_prospective.add_argument("output", type=Path)
+    mlx_prospective.add_argument("--runtime-manifest", type=Path)
+    mlx_prospective.add_argument("--model-manifest", type=Path)
+    mlx_verify = mlx_commands.add_parser(
+        "prospective-verify",
+        help="strictly verify one direct-worker prospective package",
+    )
+    mlx_verify.add_argument("package", type=Path)
+    mlx_inspect = mlx_commands.add_parser(
+        "eligibility-inspect",
+        help="inspect exact missing evidence and the closed execution gate",
+    )
+    mlx_inspect.add_argument("package", type=Path)
+    mlx_fixture = mlx_commands.add_parser(
+        "fixture-compile",
+        help="publish deterministic synthetic refusal-contract evidence",
+    )
+    mlx_fixture.add_argument("output_root", type=Path)
+    mlx_replay = mlx_commands.add_parser(
+        "fixture-replay",
+        help="replay one closed MLX refusal fixture offline",
+    )
+    mlx_replay.add_argument("bundle", type=Path)
 
     ollama = commands.add_parser(
         "ollama",
@@ -282,6 +362,81 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
             output = record.to_dict()
             output["identity"] = record_id(record)
             _emit(output)
+        return 0
+    if args.command == "mlx":
+        if args.mlx_command == "capability-report":
+            _emit(mlx_capability_report())
+            return 0
+        if args.mlx_command == "prospective-spec":
+            _emit_document(mlx_study_spec())
+            return 0
+        if args.mlx_command == "runtime-manifest-create":
+            manifest = compile_runtime_manifest(
+                load_runtime_scan_spec(args.scan_spec),
+                args.runtime_root,
+                args.interpreter,
+                args.worker_program,
+            )
+            write_manifest(args.output, manifest)
+            _emit(
+                {
+                    "status": "created",
+                    "manifest_id": manifest["manifest_id"],
+                    "mlx_imports": 0,
+                    "process_actions": 0,
+                    "network_actions": 0,
+                }
+            )
+            return 0
+        if args.mlx_command == "model-manifest-create":
+            manifest = compile_model_manifest(args.model_root)
+            write_manifest(args.output, manifest)
+            _emit(
+                {
+                    "status": "created",
+                    "manifest_id": manifest["manifest_id"],
+                    "model_loads": 0,
+                    "tokenizer_loads": 0,
+                    "network_actions": 0,
+                }
+            )
+            return 0
+        if args.mlx_command == "prospective-create":
+            runtime_manifest, model_manifest = load_optional_manifests(
+                args.runtime_manifest,
+                args.model_manifest,
+            )
+            package = build_mlx_prospective_package(
+                load_mlx_study_spec(args.spec),
+                runtime_manifest=runtime_manifest,
+                model_manifest=model_manifest,
+            )
+            write_mlx_prospective_package(args.output, package)
+            inspection = mlx_eligibility_inspection(package)
+            inspection["status"] = "created"
+            _emit(inspection)
+            return 0
+        if args.mlx_command in {"prospective-verify", "eligibility-inspect"}:
+            package = load_mlx_prospective_package(args.package)
+            inspection = mlx_eligibility_inspection(package)
+            inspection["status"] = (
+                "valid" if args.mlx_command == "prospective-verify" else "inspected"
+            )
+            _emit(inspection)
+            return 0
+        if args.mlx_command == "fixture-compile":
+            path, mlx_replay = compile_mlx_fixture(args.output_root)
+            output = mlx_replay.to_dict()
+            output["status"] = "compiled"
+            output["path"] = path.name
+            output["evidence_status"] = "synthetic_offline_refusal_contract_evidence"
+            _emit(output)
+            return 0
+        mlx_replay_result = replay_mlx_fixture(args.bundle)
+        output = mlx_replay_result.to_dict()
+        output["status"] = "replayed"
+        output["external_network_actions"] = 0
+        _emit(output)
         return 0
     if args.command == "ollama":
         if args.ollama_command == "output-root-init":

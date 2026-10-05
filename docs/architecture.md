@@ -14,6 +14,9 @@ Every trust transition is represented by immutable canonical data.
 | `contracts.py` | Versioned dataclasses with unknown-key rejection and semantic validation | None |
 | `host.py` | Privacy-preserving host probe through Python APIs, procfs, or `sysctlbyname` | Read-only |
 | `backends.py` | Static artifact digest and non-executable backend plans | Read-only |
+| `mlx_manifest.py` | Bounded descriptor-relative supplied package/model-root byte-manifest compilers | Explicit local-file reads and manifest writes only; no imports, loads, resolution, process, device, or network |
+| `mlx_runner.py` | Pinned direct-worker threat model, finite inherited-descriptor protocol, controls, eligibility, and prospective package | Explicit package writes only; production launch and authorization are absent |
+| `mlx_fixture.py` | Deterministic sealed package/model-root byte manifests and ineligible-package replay | Closed-bundle writes only; no fake transport, worker, model, or hardware action |
 | `ollama.py` | Prospective package, direct numeric-loopback transport, one-shot authorization, bounded execution, terminal custody/replay | Explicit output-root writes; loopback calls only after authorization |
 | `ollama_declaration.py` | Canonical multi-run study intent, exact package closure binding, eligibility, and offline declaration fixture replay | Explicit declaration/fixture writes only; no host probe, socket, marker, authorization, or model |
 | `ollama_attestation.py` | Pinned listener/runner feasibility requirements, candidate evidence, derived negative verdict, and offline fixture replay | Explicit assessment/fixture writes only; no live process probe, socket, subprocess, Ollama call, authorization, output-root consumption, or model |
@@ -23,12 +26,55 @@ Every trust transition is represented by immutable canonical data.
 | `fixture.py` | Source-custodied synthetic records for two backends | Publishes through custody |
 | `cli.py` | Narrow command routing and fail-closed errors | Command-dependent |
 
-No module imports an ML framework, starts a process, or downloads/mutates a model. Only
+No module imports an ML framework, starts a process, or downloads/mutates a model. The MLX modules
+also import no socket or subprocess library and expose no production launch/authorization
+entrypoint. Only
 `LoopbackHTTPTransport` can open a socket. An explicit, separately authorized Ollama `preflight`
 may use it after output-root and artifact validation. The `execute` surface validates its package
 and artifacts but production-refuses before authorization consumption or socket access until the
 listening process and active runner/Metal state can be mechanically attested. The attestation
 module intentionally imports no socket, subprocess, HTTP transport, host probe, or runtime probe.
+
+## Direct MLX prospective layer
+
+The additive `mlx_runtime_manifest`, `mlx_model_manifest`, `mlx_direct_study_spec`,
+`mlx_direct_eligibility`, and `mlx_direct_prospective_package` records are schema 1.0. They do not
+change the foundation, Ollama package, declaration, or attestation schemas or identities.
+
+Runtime and model compilers operate only on explicit paths. They traverse from retained directory
+descriptors, reject symlinks/special files/hard-link aliases/path injection, enforce fixed depth,
+count, path and byte bounds, and store only relative file names plus device/inode/mode/size/digest
+identity. The runtime manifest binds the regular-file Python executable, declared
+implementation/version/ABI/platform, every direct distribution metadata record and complete byte
+closure of the explicitly supplied package root, selected MLX/MLX-LM module-file declarations,
+future worker bytes, and a closed environment. Raw `Requires-Dist` headers are recorded but not
+evaluated; applicable dependency distributions, the Python standard library, `lib-dynload`,
+`libpython`, dynamic loader, native libraries, and frameworks are not proven. The model manifest
+binds the complete supplied model-root bytes, materialized config/tokenizer/weight files, exact
+present canonical monolith-or-indexed-shard projection, chat-template identity, and absence of
+executable/custom/remote code. It does not prove that parameter keys/shapes form a complete
+instantiated model.
+
+Static supplied package-root/model evidence remains prospective. The built-in study does not
+search for a model and therefore reports no real model manifest. Even when explicit manifests are
+supplied, execution is
+ineligible pending applicable dependency and Python standard-library/native-loader closure,
+production private-IPC/protocol/result-validation implementation, exact memory limits, output-root
+binding, one-shot authorization, process birth, active imported-module closure, exact cache
+classes, pinned strict model parameter key/shape load evidence, worker-side backend/stream facts,
+and final synchronization evidence.
+
+The future protocol removes the Ollama listener-authentication gap by making the parent create and
+own a one-shot worker and inherited `AF_UNIX` socketpair descriptor. It defines a fixed bounded
+canonical-message sequence and forbids bind/listen/accept, DNS, proxies, redirects, arbitrary
+commands, shell, unrelated descriptors, retries, warmups, concurrency, and selective reruns. This
+PR records that architecture but intentionally contains no launch, private IPC, protocol
+state-machine, or worker-result-validation implementation.
+
+Pinned MLX APIs can report default device, compiled Metal availability, and synchronized stream
+completion. They cannot programmatically prove per-kernel Metal dispatch. The eligibility and
+result schemas therefore scope any future positive cohort to direct MLX runtime execution with
+same-process backend facts, never proven per-kernel GPU execution.
 
 ## Identity graph
 
@@ -236,6 +282,13 @@ rebuilds the assessment and every identity, derives the negative verdict, and re
 counts for live process probes, socket inspection/calls, subprocesses, Ollama requests,
 authorization/output-root consumption, model activity, external network, cloud, and spend.
 Receipt-consistent coordinated tampering still fails semantic reconstruction.
+
+MLX refusal-fixture replay is also closed-set. It rebuilds sealed synthetic runtime and model
+manifests, the pinned study specification, and the execution-ineligible package. It requires exact
+zero counts for framework imports, Metal/device activity, model/tokenizer loads, inference,
+process/subprocess/socket/listener/network actions, downloads, cache mutation, authorization and
+output-root consumption, cloud, and spend. Because no safe worker producer exists yet, the fixture
+contains no accepted fake execution; it is deterministic refusal-contract evidence only.
 
 ## Privacy boundary
 

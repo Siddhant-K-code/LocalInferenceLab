@@ -60,6 +60,12 @@ Representations have distinct identity shapes:
 states are rejected because v1 has no typed, indexed mapping artifact whose identity can be
 recomputed and bound to both model records. Labels and marketing names never create equivalence.
 
+The additive direct MLX runtime/model manifests are stricter prospective records. They bind
+descriptor-relative physical file identity and digest closure without importing the packages or
+loading the model. A manifest is not observed execution evidence. A future worker must revalidate
+the same closures, report selected imported modules and active backend facts from the same process,
+and satisfy authorization/custody before a run can be eligible.
+
 ## Prospective protocol
 
 The protocol binds exact prompt bytes and digest, chat-template digest, sampler controls, output
@@ -145,6 +151,49 @@ are recorded separately. The timeout is one monotonic absolute deadline for the 
 not a renewed socket-operation timeout. Failures are never retried. Production generation is additionally
 disabled until the loopback listener process and active runner/Metal state can be mechanically
 attested.
+
+## Direct MLX worker protocol
+
+The direct architecture does not use a discoverable TCP listener. A future parent creates one
+worker per run and one inherited private `AF_UNIX` socketpair endpoint at child FD 3. Frames are
+bounded length-prefixed canonical JSON. The only order is:
+
+```text
+parent_hello -> worker_identity -> authorize_once -> authorization_ack ->
+generate_once -> result_or_terminal_error -> shutdown -> shutdown_ack
+```
+
+The parent owns process birth and must bind PID/birth identity, executable bytes, worker bytes,
+applicable dependency distributions, Python standard-library/native-runtime/dynamic-loader bytes,
+the supplied package/model-root byte closures, actual selected module files, closed environment,
+cache class/state, default device, compiled Metal availability, generation-stream device, and
+exact memory limits before revealing the committed one-shot nonce. Unrelated descriptors, shell,
+user commands, network aliases, retries, warmups, concurrency, and reruns are forbidden. The
+future ledger reserves every action before side effects and closes accepted, invalid, refused, or
+interrupted outcomes through the existing atomic bundle custody.
+
+The static model manifest binds supplied bytes and exact present monolith/canonical indexed-shard
+projections, not semantic tensor completeness. Before authorization, the future worker must use
+the pinned normal non-distributed (`sharding=None`) `mlx_lm.utils.load` / `load_model` path, require
+`model.load_weights(..., strict=True)`, and bind successful parameter key/shape validation to the
+same worker, package, and result.
+
+Schema 1.0 defines but does not implement that state machine. It also does not implement the
+private-IPC framing, protocol order enforcement, timeout/termination logic, or untrusted worker
+result validation. No launch, socketpair, authorization, model load, or generation function is
+reachable. The deterministic fixture reconstructs a refused package from sealed fake byte
+closures rather than simulating success.
+
+The pinned sampler is greedy temperature-zero argmax. The seed is still recorded and must be set on
+the generation thread because MLX random state is thread-local, but greedy sampling consumes no
+PRNG. Fixed controls are not a determinism guarantee. Prompt/template/tokenization bytes, generated
+token IDs, stop criteria, cache construction, prefill, KV quantization state, exact runtime cache
+classes, memory limits, and final stream synchronization all remain part of the run identity.
+
+Native prompt TPS includes prefill plus the first decode step. Native generation TPS is a
+cumulative decode average after that first token. Peak memory is scoped since process start or the
+last explicit reset; TTFT is unavailable. Device strings and stream completion do not prove
+individual Metal kernels executed, so the protocol forbids that claim.
 
 ## Ollama repeatability-study declaration
 
