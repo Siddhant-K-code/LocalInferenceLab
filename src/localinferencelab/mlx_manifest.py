@@ -52,6 +52,7 @@ _MODEL_SUFFIXES = {
     ".tiktoken",
     ".txt",
 }
+_MODEL_SHARD_PATTERN = re.compile(r"^model-(\d{5})-of-(\d{5})\.safetensors$")
 
 
 def _mapping(value: JsonValue, label: str) -> dict[str, JsonValue]:
@@ -1050,8 +1051,39 @@ def _contains_remote_code_marker(value: object) -> bool:
     return False
 
 
+def _verify_model_weight_layout(weights: list[str], *, has_index: bool) -> None:
+    if weights == ["model.safetensors"]:
+        if has_index:
+            raise ContractError("monolithic model.safetensors must not have a weight index")
+        return
+    if "model.safetensors" in weights:
+        raise ContractError("mixed monolithic and sharded model weights are forbidden")
+
+    shards: list[tuple[int, int]] = []
+    for path in weights:
+        match = _MODEL_SHARD_PATTERN.fullmatch(path)
+        if match is None:
+            raise ContractError(f"malformed canonical model shard name: {path}")
+        index = int(match.group(1))
+        total = int(match.group(2))
+        if index < 1 or total < 1 or index > total:
+            raise ContractError(f"invalid canonical model shard ordinal: {path}")
+        shards.append((index, total))
+    if not has_index:
+        raise ContractError("canonical sharded model weights require model.safetensors.index.json")
+    totals = {total for _index, total in shards}
+    if len(totals) != 1:
+        raise ContractError("canonical model shard names have inconsistent totals")
+    total = totals.pop()
+    if total != len(shards):
+        raise ContractError("canonical model shard set is incomplete or noncontiguous")
+    expected = [f"model-{index:05d}-of-{total:05d}.safetensors" for index in range(1, total + 1)]
+    if weights != expected:
+        raise ContractError("canonical model shard set is incomplete or noncontiguous")
+
+
 def compile_model_manifest(model_root: Path) -> dict[str, JsonValue]:
-    """Compile one complete local MLX snapshot without loading or resolving it."""
+    """Compile one complete supplied model-root byte closure without loading it."""
     root_descriptor = _open_directory(model_root)
     try:
         root, files = _scan_open_tree(root_descriptor)
@@ -1089,8 +1121,7 @@ def compile_model_manifest(model_root: Path) -> dict[str, JsonValue]:
             raise ContractError("model snapshot has no model*.safetensors weights")
         index_path = "model.safetensors.index.json"
         referenced: list[str] = []
-        if len(weights) > 1 and index_path not in paths:
-            raise ContractError("sharded model snapshot lacks model.safetensors.index.json")
+        _verify_model_weight_layout(weights, has_index=index_path in paths)
         if index_path in paths:
             index = _external_object(
                 _read_relative_file(root_descriptor, index_path, file_records),
@@ -1277,6 +1308,7 @@ def verify_model_manifest(value: JsonValue) -> dict[str, JsonValue]:
     )
     if index_path != expected_index_path:
         raise ContractError("MLX model weight-index path projection differs from the closure")
+    _verify_model_weight_layout(weight_files, has_index=index_path is not None)
     index_digest_value = manifest["weight_index_sha256"]
     referenced_shards = [
         _relative(item, "mlx_model_manifest.weight_index_referenced_shards[]")
@@ -1298,8 +1330,6 @@ def verify_model_manifest(value: JsonValue) -> dict[str, JsonValue]:
             raise ContractError("MLX model weight-index digest differs from the closure")
         if referenced_shards != weight_files:
             raise ContractError("MLX model weight-index shard projection differs from weights")
-    if len(weight_files) > 1 and index_path is None:
-        raise ContractError("sharded MLX model manifest requires a weight index")
     chat_template = _mapping(manifest["chat_template"], "mlx_model_manifest.chat_template")
     _keys(chat_template, {"source", "sha256"}, "mlx_model_manifest.chat_template")
     source = _text(chat_template["source"], "mlx_model_manifest.chat_template.source")
@@ -1313,7 +1343,7 @@ def verify_model_manifest(value: JsonValue) -> dict[str, JsonValue]:
         )
         if source == "chat_template.jinja":
             if source not in file_records:
-                raise ContractError("chat-template file is outside the model closure")
+                raise ContractError("chat-template file is outside the supplied model-root closure")
             if file_records[source]["sha256"] != template_digest:
                 raise ContractError("chat-template digest differs from the file closure")
         if source not in {

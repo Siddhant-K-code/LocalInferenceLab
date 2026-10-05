@@ -165,12 +165,18 @@ generate_once -> result_or_terminal_error -> shutdown -> shutdown_ack
 
 The parent owns process birth and must bind PID/birth identity, executable bytes, worker bytes,
 applicable dependency distributions, Python standard-library/native-runtime/dynamic-loader bytes,
-the supplied package-root and model closures, actual selected module files, closed environment,
+the supplied package/model-root byte closures, actual selected module files, closed environment,
 cache class/state, default device, compiled Metal availability, generation-stream device, and
 exact memory limits before revealing the committed one-shot nonce. Unrelated descriptors, shell,
 user commands, network aliases, retries, warmups, concurrency, and reruns are forbidden. The
 future ledger reserves every action before side effects and closes accepted, invalid, refused, or
 interrupted outcomes through the existing atomic bundle custody.
+
+The static model manifest binds supplied bytes and exact present monolith/canonical indexed-shard
+projections, not semantic tensor completeness. Before authorization, the future worker must use
+the pinned normal non-distributed (`sharding=None`) `mlx_lm.utils.load` / `load_model` path, require
+`model.load_weights(..., strict=True)`, and bind successful parameter key/shape validation to the
+same worker, package, and result.
 
 Schema 1.0 defines but does not implement that state machine. It also does not implement the
 private-IPC framing, protocol order enforcement, timeout/termination logic, or untrusted worker

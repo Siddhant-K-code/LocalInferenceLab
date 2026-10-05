@@ -169,6 +169,7 @@ _PERMANENT_RUNTIME_BLOCKERS = {
     "python_native_runtime_and_dynamic_loader_closure",
     "python_standard_library_closure",
 }
+_PERMANENT_MODEL_BLOCKERS = {"strict_model_parameter_key_shape_load_evidence"}
 
 
 def test_pinned_spec_defines_private_worker_and_closed_execution_gate() -> None:
@@ -213,6 +214,22 @@ def test_pinned_spec_defines_private_worker_and_closed_execution_gate() -> None:
     assert runtime_closure["python_native_runtime_and_dynamic_loader_closure"] == (
         "required_future_not_proven"
     )
+    model_closure = _dict(spec["model_closure"])
+    assert model_closure["supplied_model_root_byte_closure"] == ("complete_no_follow_regular_files")
+    assert model_closure["present_weight_projection"] == (
+        "exact_monolith_or_complete_canonical_indexed_shards"
+    )
+    assert model_closure["semantic_parameter_key_shape_completeness"] == (
+        "required_future_strict_load_evidence"
+    )
+    weight_loading = _dict(model_closure["future_weight_loading"])
+    assert weight_loading["entry_points"] == [
+        "mlx_lm.utils.load",
+        "mlx_lm.utils.load_model",
+    ]
+    assert weight_loading["distributed_sharding"] is None
+    assert weight_loading["model_load_weights_strict"] is True
+    assert weight_loading["study_path"] == "normal_non_distributed_loader"
     gate = _dict(spec["execution_gate"])
     assert gate["production_worker_start_implemented"] is False
     assert gate["observed_execution_reachable"] is False
@@ -291,6 +308,7 @@ def test_absent_requires_dist_remains_static_evidence_and_permanent_blocker(
     )
     missing = set(cast("list[str]", inspection["missing_requirements"]))
     assert _PERMANENT_RUNTIME_BLOCKERS.issubset(missing)
+    assert _PERMANENT_MODEL_BLOCKERS.issubset(missing)
     assert "non_synthetic_runtime_manifest" not in missing
     assert "non_synthetic_model_manifest" not in missing
     assert inspection["worker_process_may_start"] is False
@@ -315,6 +333,7 @@ def test_builtin_package_is_explicitly_incomplete_and_ineligible() -> None:
         "one_shot_authorization",
     }.issubset(missing)
     assert _PERMANENT_RUNTIME_BLOCKERS.issubset(missing)
+    assert _PERMANENT_MODEL_BLOCKERS.issubset(missing)
     assert inspection["physical_gpu_actions"] == 0
     assert inspection["model_actions"] == 0
     assert inspection["network_actions"] == 0
@@ -335,6 +354,7 @@ def test_static_manifests_do_not_unlock_execution() -> None:
     assert "exact_runtime_manifest" not in missing
     assert "exact_local_model_manifest" not in missing
     assert _PERMANENT_RUNTIME_BLOCKERS.issubset(missing)
+    assert _PERMANENT_MODEL_BLOCKERS.issubset(missing)
 
 
 def test_synthetic_manifests_cannot_be_relabeled_as_filesystem_evidence() -> None:
@@ -558,13 +578,66 @@ def test_runtime_scan_rejects_descendant_directory_drift(
 def test_model_scanner_rejects_missing_extra_and_malformed_shards(tmp_path: Path) -> None:
     missing_index_root = tmp_path / "missing-index"
     model = _write_model_tree(missing_index_root)
-    (model / "model-00001-of-00002.safetensors").write_bytes(b"extra shard")
-    with pytest.raises(ContractError, match=r"lacks model\.safetensors\.index\.json"):
+    (model / "model.safetensors").unlink()
+    (model / "model-00001-of-00002.safetensors").write_bytes(b"shard one")
+    with pytest.raises(ContractError, match="sharded model weights require"):
         compile_model_manifest(model)
+
+    incomplete_root = tmp_path / "incomplete"
+    incomplete = _write_model_tree(incomplete_root)
+    (incomplete / "model.safetensors").unlink()
+    (incomplete / "model-00001-of-00002.safetensors").write_bytes(b"shard one")
+    (incomplete / "model.safetensors.index.json").write_bytes(
+        canonical_json(
+            {
+                "weight_map": {
+                    "fixture.weight": "model-00001-of-00002.safetensors",
+                }
+            }
+        )
+    )
+    with pytest.raises(ContractError, match="incomplete or noncontiguous"):
+        compile_model_manifest(incomplete)
+
+    inconsistent_root = tmp_path / "inconsistent"
+    inconsistent = _write_model_tree(inconsistent_root)
+    (inconsistent / "model.safetensors").unlink()
+    (inconsistent / "model-00001-of-00002.safetensors").write_bytes(b"shard one")
+    (inconsistent / "model-00002-of-00003.safetensors").write_bytes(b"shard two")
+    (inconsistent / "model.safetensors.index.json").write_bytes(
+        canonical_json(
+            {
+                "weight_map": {
+                    "fixture.one": "model-00001-of-00002.safetensors",
+                    "fixture.two": "model-00002-of-00003.safetensors",
+                }
+            }
+        )
+    )
+    with pytest.raises(ContractError, match="inconsistent totals"):
+        compile_model_manifest(inconsistent)
+
+    malformed_root = tmp_path / "malformed"
+    malformed = _write_model_tree(malformed_root)
+    (malformed / "model.safetensors").unlink()
+    (malformed / "model-1-of-00001.safetensors").write_bytes(b"bad shard")
+    (malformed / "model.safetensors.index.json").write_bytes(
+        canonical_json({"weight_map": {"fixture": "model-1-of-00001.safetensors"}})
+    )
+    with pytest.raises(ContractError, match="malformed canonical model shard name"):
+        compile_model_manifest(malformed)
+
+    mixed_root = tmp_path / "mixed"
+    mixed = _write_model_tree(mixed_root)
+    (mixed / "model-00001-of-00001.safetensors").write_bytes(b"extra shard")
+    with pytest.raises(ContractError, match="mixed monolithic and sharded"):
+        compile_model_manifest(mixed)
 
     wrong_index_root = tmp_path / "wrong-index"
     indexed_model = _write_model_tree(wrong_index_root)
-    (indexed_model / "model-00001-of-00002.safetensors").write_bytes(b"extra shard")
+    (indexed_model / "model.safetensors").unlink()
+    (indexed_model / "model-00001-of-00002.safetensors").write_bytes(b"shard one")
+    (indexed_model / "model-00002-of-00002.safetensors").write_bytes(b"shard two")
     (indexed_model / "model.safetensors.index.json").write_bytes(
         canonical_json(
             {
@@ -696,18 +769,22 @@ def test_package_rejects_forged_eligibility_identity_and_noncanonical_bytes(
     with pytest.raises(ContractError, match="integer"):
         verify_mlx_prospective_package(package)
 
-    package = _copy(
-        build_mlx_prospective_package(
-            mlx_study_spec(),
-            runtime_manifest=synthetic_runtime_manifest(),
-            model_manifest=synthetic_model_manifest(),
+    for blocker in (
+        "applicable_dependency_distribution_closure",
+        "strict_model_parameter_key_shape_load_evidence",
+    ):
+        package = _copy(
+            build_mlx_prospective_package(
+                mlx_study_spec(),
+                runtime_manifest=synthetic_runtime_manifest(),
+                model_manifest=synthetic_model_manifest(),
+            )
         )
-    )
-    missing = _list(_dict(package["eligibility"])["missing_requirements"])
-    missing.remove("applicable_dependency_distribution_closure")
-    _reidentify(package, "package_id")
-    with pytest.raises(ContractError, match="semantic or eligibility drift"):
-        verify_mlx_prospective_package(package)
+        missing = _list(_dict(package["eligibility"])["missing_requirements"])
+        missing.remove(blocker)
+        _reidentify(package, "package_id")
+        with pytest.raises(ContractError, match="semantic or eligibility drift"):
+            verify_mlx_prospective_package(package)
 
     package_path = tmp_path / "package.json"
     package_path.write_text(
@@ -734,7 +811,7 @@ def test_fixture_is_byte_identical_refused_and_closed(tmp_path: Path) -> None:
     assert first.name == second.name
     assert first_result == second_result
     assert first_result.decision == "ineligible"
-    assert first_result.missing_requirements == 15
+    assert first_result.missing_requirements == 16
     assert first_result.physical_actions == 0
     assert read_closed_bundle(first)[1] == read_closed_bundle(second)[1]
     assert replay_mlx_fixture(first) == first_result
@@ -872,6 +949,8 @@ def test_capability_report_never_overclaims_backend_or_metal() -> None:
         report["production_worker_private_ipc_protocol_and_result_validation_implementation"]
         is False
     )
+    assert report["supplied_model_root_byte_closure"] is True
+    assert report["strict_model_parameter_key_shape_load_evidence"] is False
     assert report["runtime_import"] is False
     assert report["device_query"] is False
     assert report["metal_initialization"] is False

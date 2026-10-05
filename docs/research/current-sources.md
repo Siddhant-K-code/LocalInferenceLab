@@ -36,9 +36,13 @@ runner contract.
 - [`load_config`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/utils.py#L362-L378)
   requires `config.json` and merges only `eos_token_id` from optional `generation_config.json`.
   [`load_model`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/utils.py#L408-L471)
-  requires `model*.safetensors` in strict mode. A configured `model_file` requires
-  `trust_remote_code=true` and is then imported/executed from the snapshot. Model Python is
-  forbidden by the manifest contract.
+  collects `model*.safetensors` and passes them to `model.load_weights` with its `strict` argument,
+  whose normal default is `True`. A configured `model_file` requires `trust_remote_code=true` and
+  is then imported/executed from the snapshot. Model Python is forbidden by the manifest contract.
+  The static manifest can close obvious canonical shard-name/index gaps but cannot prove parameter
+  key/shape completeness without this future strict load. The prospective study freezes the normal
+  non-custom-code, non-distributed (`sharding=None`) `load` / `load_model` path with explicit
+  `strict=True`; this PR does not call it.
 - [`load`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/utils.py#L610-L668)
   passes its `trust_remote_code` argument to model loading, but tokenizer loading separately
   delegates to

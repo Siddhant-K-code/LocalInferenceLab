@@ -14,9 +14,9 @@ Every trust transition is represented by immutable canonical data.
 | `contracts.py` | Versioned dataclasses with unknown-key rejection and semantic validation | None |
 | `host.py` | Privacy-preserving host probe through Python APIs, procfs, or `sysctlbyname` | Read-only |
 | `backends.py` | Static artifact digest and non-executable backend plans | Read-only |
-| `mlx_manifest.py` | Bounded descriptor-relative runtime/model closure compilers and strict additive manifests | Explicit local-file reads and manifest writes only; no imports, loads, resolution, process, device, or network |
+| `mlx_manifest.py` | Bounded descriptor-relative supplied package/model-root byte-manifest compilers | Explicit local-file reads and manifest writes only; no imports, loads, resolution, process, device, or network |
 | `mlx_runner.py` | Pinned direct-worker threat model, finite inherited-descriptor protocol, controls, eligibility, and prospective package | Explicit package writes only; production launch and authorization are absent |
-| `mlx_fixture.py` | Deterministic sealed runtime/model closure and ineligible-package replay | Closed-bundle writes only; no fake transport, worker, model, or hardware action |
+| `mlx_fixture.py` | Deterministic sealed package/model-root byte manifests and ineligible-package replay | Closed-bundle writes only; no fake transport, worker, model, or hardware action |
 | `ollama.py` | Prospective package, direct numeric-loopback transport, one-shot authorization, bounded execution, terminal custody/replay | Explicit output-root writes; loopback calls only after authorization |
 | `ollama_declaration.py` | Canonical multi-run study intent, exact package closure binding, eligibility, and offline declaration fixture replay | Explicit declaration/fixture writes only; no host probe, socket, marker, authorization, or model |
 | `ollama_attestation.py` | Pinned listener/runner feasibility requirements, candidate evidence, derived negative verdict, and offline fixture replay | Explicit assessment/fixture writes only; no live process probe, socket, subprocess, Ollama call, authorization, output-root consumption, or model |
@@ -49,9 +49,11 @@ implementation/version/ABI/platform, every direct distribution metadata record a
 closure of the explicitly supplied package root, selected MLX/MLX-LM module-file declarations,
 future worker bytes, and a closed environment. Raw `Requires-Dist` headers are recorded but not
 evaluated; applicable dependency distributions, the Python standard library, `lib-dynload`,
-`libpython`, dynamic loader, native libraries, and frameworks are not proven. The model closure
-requires materialized config/tokenizer/weight files, exact shard index agreement, chat-template
-identity, and absence of executable/custom/remote code.
+`libpython`, dynamic loader, native libraries, and frameworks are not proven. The model manifest
+binds the complete supplied model-root bytes, materialized config/tokenizer/weight files, exact
+present canonical monolith-or-indexed-shard projection, chat-template identity, and absence of
+executable/custom/remote code. It does not prove that parameter keys/shapes form a complete
+instantiated model.
 
 Static supplied package-root/model evidence remains prospective. The built-in study does not
 search for a model and therefore reports no real model manifest. Even when explicit manifests are
@@ -59,7 +61,8 @@ supplied, execution is
 ineligible pending applicable dependency and Python standard-library/native-loader closure,
 production private-IPC/protocol/result-validation implementation, exact memory limits, output-root
 binding, one-shot authorization, process birth, active imported-module closure, exact cache
-classes, worker-side backend/stream facts, and final synchronization evidence.
+classes, pinned strict model parameter key/shape load evidence, worker-side backend/stream facts,
+and final synchronization evidence.
 
 The future protocol removes the Ollama listener-authentication gap by making the parent create and
 own a one-shot worker and inherited `AF_UNIX` socketpair descriptor. It defines a fixed bounded

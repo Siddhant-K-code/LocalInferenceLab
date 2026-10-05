@@ -253,7 +253,15 @@ def mlx_study_spec() -> dict[str, JsonValue]:
         "model_closure": {
             "source": "explicit_preexisting_local_directory_only",
             "directory_identity": "device_inode_owner_mode",
-            "file_manifest": "complete_no_follow_regular_files",
+            "supplied_model_root_byte_closure": "complete_no_follow_regular_files",
+            "present_weight_projection": "exact_monolith_or_complete_canonical_indexed_shards",
+            "semantic_parameter_key_shape_completeness": "required_future_strict_load_evidence",
+            "future_weight_loading": {
+                "entry_points": ["mlx_lm.utils.load", "mlx_lm.utils.load_model"],
+                "distributed_sharding": None,
+                "model_load_weights_strict": True,
+                "study_path": "normal_non_distributed_loader",
+            },
             "required": [
                 "config_json",
                 "tokenizer_config_json",
@@ -451,6 +459,7 @@ def _missing_requirements(
         "production_worker_private_ipc_protocol_and_result_validation_implementation",
         "python_native_runtime_and_dynamic_loader_closure",
         "python_standard_library_closure",
+        "strict_model_parameter_key_shape_load_evidence",
         "worker_process_birth_and_executable_binding",
         "worker_reported_imported_module_closure",
         "wired_limit_bytes",
@@ -503,7 +512,8 @@ def _assemble_mlx_prospective_package(
         "reason": (
             "static supplied-root bytes do not prove applicable dependency, Python standard "
             "library, native runtime, or dynamic-loader closure; production private IPC, "
-            "protocol, and result validation are not implemented; future process, imported "
+            "protocol, and result validation are not implemented; supplied model bytes and shard "
+            "names do not prove strict parameter key/shape loading; future process, imported "
             "runtime, backend, stream, limits, output root, and authorization are unattested"
         ),
     }
@@ -648,6 +658,8 @@ def mlx_capability_report() -> dict[str, JsonValue]:
         "python_standard_library_closure": False,
         "python_native_runtime_and_dynamic_loader_closure": False,
         "model_manifest_compiler": True,
+        "supplied_model_root_byte_closure": True,
+        "strict_model_parameter_key_shape_load_evidence": False,
         "prospective_package": True,
         "offline_fixture_replay": True,
         "production_worker_launch": False,

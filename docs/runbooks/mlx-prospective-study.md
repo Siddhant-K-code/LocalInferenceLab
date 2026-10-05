@@ -14,8 +14,8 @@ The capability report must show `production_worker_launch=false`,
 `production_worker_private_ipc_protocol_and_result_validation_implementation=false`,
 `applicable_dependency_distribution_closure=false`, `python_standard_library_closure=false`,
 `python_native_runtime_and_dynamic_loader_closure=false`, `runtime_import=false`,
-`device_query=false`, `metal_initialization=false`, `inference=false`, `network=false`, and
-`subprocess=false`.
+`strict_model_parameter_key_shape_load_evidence=false`, `device_query=false`,
+`metal_initialization=false`, `inference=false`, `network=false`, and `subprocess=false`.
 
 ## 2. Optionally compile an explicit supplied package-root byte closure
 
@@ -48,7 +48,7 @@ distributions are not required. The interpreter's standard library, `lib-dynload
 dynamic loader, native shared libraries, and frameworks are also outside this manifest. Do not
 describe it as a complete Python dependency or execution-runtime closure.
 
-## 3. Optionally compile an already identified local model closure
+## 3. Optionally compile an already identified supplied model-root byte closure
 
 Only use a model directory the operator already identified before this runbook. Do not search a
 Hugging Face cache, resolve a repository/revision, download a snapshot, materialize symlinks, or
@@ -60,8 +60,15 @@ localinferencelab mlx model-manifest-create \
 ```
 
 The compiler reads no-follow regular files only and rejects custom code, remote-code markers,
-symlinks, special files, nested paths, executable files, and inconsistent shards/indexes. It does
-not load config through MLX/Transformers, instantiate a tokenizer/model, or mutate a cache.
+symlinks, special files, nested paths, executable files, mixed monolith/shard layouts, malformed
+or incomplete canonical shard sets, and inconsistent shard indexes. Without an index, the sole
+weight must be exactly `model.safetensors`. It does not load config through MLX/Transformers,
+instantiate a tokenizer/model, validate parameter keys/shapes, or mutate a cache.
+
+This manifest proves supplied bytes and exact present projections, not semantic model completeness.
+A future positive worker must use the pinned normal non-distributed (`sharding=None`)
+`mlx_lm.utils.load` / `load_model` path with strict weight loading and bind the successful
+key/shape validation as observed evidence.
 
 If no suitable path is already known, skip this step. Absence is the correct built-in state.
 
@@ -90,11 +97,12 @@ localinferencelab mlx prospective-verify mlx-prospective.json
 localinferencelab mlx eligibility-inspect mlx-prospective.json
 ```
 
-Static supplied-root/model closure completeness does not grant execution. The result remains
+Static supplied package/model-root byte closure does not grant execution. The result remains
 ineligible because applicable dependency semantics, Python standard-library/native-loader closure,
 production private IPC/protocol/result validation, worker start, process/import/backend
-synchronization attestation, exact memory limits, output-root instance, and one-shot authorization
-are absent. No command exists to authorize or execute it.
+synchronization attestation, strict model parameter key/shape load evidence, exact memory limits,
+output-root instance, and one-shot authorization are absent. No command exists to authorize or
+execute it.
 
 ## 5. Repository-only deterministic validation
 
@@ -123,10 +131,12 @@ must implement, test, and authorize all of the following together:
    validation, bounded result validation, timeout, termination, and terminal-error behavior.
 3. Worker process-birth, executable, worker-byte, import-module, environment, device/backend, cache,
    limit, and stream identity bound before authorization.
-4. One-shot committed nonce custody and reserve-before-side-effect action ledger.
-5. One request per worker, concurrency 1, no retries/warmups/selective reruns.
-6. Exact prompt/template/token/sampler/cache controls and terminal raw-artifact custody.
-7. Final synchronization and correctly scoped native metrics.
-8. Explicit claim scope that does not overstate per-kernel Metal proof.
+4. Pinned normal MLX-LM model construction and `model.load_weights(..., strict=True)` key/shape
+   validation bound to that same worker and package.
+5. One-shot committed nonce custody and reserve-before-side-effect action ledger.
+6. One request per worker, concurrency 1, no retries/warmups/selective reruns.
+7. Exact prompt/template/token/sampler/cache controls and terminal raw-artifact custody.
+8. Final synchronization and correctly scoped native metrics.
+9. Explicit claim scope that does not overstate per-kernel Metal proof.
 
 Until that milestone is approved, a real execution request must remain mechanically unreachable.

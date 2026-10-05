@@ -3,8 +3,9 @@
 ## Status and non-action boundary
 
 This schema-1.0 contract is prospective. It defines an exact supplied package-root byte closure,
-an exact model closure, a private finite worker protocol design, determinism controls, result
-semantics, and future authorization/custody requirements.
+an exact supplied model-root byte closure and present weight projection, a private finite worker
+protocol design, determinism controls, result semantics, and future authorization/custody
+requirements.
 It does **not** implement a production worker launch. No command in the `mlx` namespace imports
 MLX or MLX-LM, initializes Metal, queries a device, loads a tokenizer or model, performs inference,
 resolves/downloads a snapshot, starts a process, opens a socket, mutates a cache, consumes
@@ -14,8 +15,9 @@ The built-in package is deliberately incomplete. No exact preexisting local MLX 
 or discovered, and discovery would violate the explicit-path boundary. Wired/cache limits, active
 runtime/backend evidence, applicable dependency closure, Python standard-library/native-loader
 closure, production private-IPC/protocol/result-validation implementation, worker process birth,
-output-root identity, and authorization are also absent. `observed_execution_reachable`,
-`worker_process_may_start`, and `authorization_may_be_consumed` are therefore fixed `false`.
+strict model parameter key/shape load evidence, output-root identity, and authorization are also
+absent. `observed_execution_reachable`, `worker_process_may_start`, and
+`authorization_may_be_consumed` are therefore fixed `false`.
 
 ## Threat model
 
@@ -86,16 +88,23 @@ That future interpreter must start with exact flags `-I -S -E -s` and a descript
 root as its only explicit import root. Disabling user site alone is insufficient: `-S` prevents
 startup execution through `sitecustomize` before worker identity validation.
 
-## Exact model closure
+## Exact supplied model-root byte closure
 
 `mlx_model_manifest` 1.0 accepts one explicit, materialized, flat local directory. It requires:
 
 - `config.json`, `tokenizer_config.json`, a tokenizer vocabulary artifact, and one or more
   `model*.safetensors` files;
-- `model.safetensors.index.json` when more than one shard exists, with the exact present shard set;
+- `model.safetensors.index.json` for every canonical shard-form layout, with the exact present set;
 - the exact weight-index path, digest, and normalized referenced-shard projection;
 - the complete no-follow regular-file closure and physical root identity;
 - exact config, tokenizer-config, tokenizer, weight, and chat-template digests.
+
+Without an index, the only permitted weight layout is exactly `model.safetensors`. Indexed weights
+must use one canonical contiguous set from `model-00001-of-000NN.safetensors` through
+`model-000NN-of-000NN.safetensors`, all with the same total and exactly matching both the present
+files and index projection. Mixed monolith/shard layouts and malformed, incomplete, noncontiguous,
+or inconsistent shard names are rejected. This preserves the pinned loader's
+`model*.safetensors` scope while closing obvious filename-level incompleteness.
 
 Only the pinned loader's data extensions are admitted. Python/shared-library/custom-code files,
 executables, symlinks, special files, nested path escapes, remote-code markers (`model_file`,
@@ -106,6 +115,14 @@ missing.
 
 The repository does not search local caches or infer a snapshot from a model name. The built-in
 study therefore has no real model identity.
+
+The manifest does not prove semantic model-parameter completeness. Only a future worker using the
+pinned normal, non-custom-code, non-distributed (`sharding=None`) `mlx_lm.utils.load` / `load_model`
+path and
+`model.load_weights(..., strict=True)` can establish that tensor keys and shapes satisfy the
+instantiated model. That future strict-load result must be bound to the same worker and package;
+`strict_model_parameter_key_shape_load_evidence` remains a permanent schema-1.0 eligibility
+blocker even for a valid filesystem model manifest.
 
 ## Private worker custody and protocol
 

@@ -20,10 +20,13 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 >
 > The direct MLX milestone avoids that listener gap by specifying a parent-owned private-descriptor
 > worker. Strict additive schema-1.0 records bind a complete explicitly supplied package-root byte
-> closure, raw dependency metadata, model closure, worker bytes, a closed environment, finite
-> protocol design, exact controls, result semantics, and future custody. They do not prove
+> closure, raw dependency metadata, supplied model-root bytes and present weight projection, worker
+> bytes, a closed environment, finite protocol design, exact controls, result semantics, and future
+> custody. They do not prove
 > applicable dependency semantics, Python standard-library/native-loader closure, or a production
-> private-IPC/protocol/result-validation implementation; each remains an explicit blocker.
+> private-IPC/protocol/result-validation implementation. The model manifest binds supplied bytes
+> and exact present canonical shard projections, not semantic parameter key/shape completeness;
+> future pinned strict-load evidence is also an explicit blocker.
 > Production launch is absent. Repository code does not import installed MLX/MLX-LM modules,
 > initialize/query Metal, load a tokenizer/model, run inference, resolve/download a snapshot,
 > start a process, or open a socket. Its deterministic fixture is an ineligible refusal package,
@@ -66,7 +69,9 @@ is created, and no production IPC/protocol/result validator is implemented. The 
 manifest covers only its supplied package-root bytes: dependency markers/extras, applicable
 dependency distributions, Python standard-library bytes, `lib-dynload`, `libpython`, native shared
 libraries/frameworks, and the dynamic loader are not proven. Official MLX APIs cannot prove
-individual Metal kernels executed, so that claim remains unavailable.
+individual Metal kernels executed. The model-root manifest rejects obvious malformed/incomplete
+canonical shards but cannot prove tensor key/shape completeness without future pinned
+`model.load_weights(..., strict=True)` evidence. Both claims remain unavailable.
 
 ## Benchmark matrix
 
@@ -117,9 +122,9 @@ The direct MLX refusal fixture deterministically produces:
 | Runtime / model / package schemas | `mlx_runtime_manifest` / `mlx_model_manifest` / `mlx_direct_prospective_package` 1.0 |
 | Runtime manifest identity | `sha256:226617353dc742bda9efa02f6083b3733832659f77add8fb20c4da0e953c31b0` |
 | Model manifest identity | `sha256:b29d33d9fba77c827dc62c4b5b83536f65b5b78ad24d3bf5b84cf7379a08ebcf` |
-| Package identity | `sha256:e7b7ae52514822b988d14da7a6a3158f099cf5fc10d40724f6d2eba489521bcf` |
-| Synthetic bundle root | `sha256:b8e91f20366f1c84b027543a4f43a30bcb6e7b5be70c61dbc3e7ebc2e09d2244` |
-| Decision / missing requirements | `ineligible` / 15 |
+| Package identity | `sha256:7710436299a426d07cb235084a1891db87ed4c810b65a5e5215fba69b6797ddb` |
+| Synthetic bundle root | `sha256:fd99954d8c0643719510a8f3b9f3ed15e342bc1f775a3e0d6d2cd37b5e489454` |
+| Decision / missing requirements | `ineligible` / 16 |
 | Framework imports, Metal/device, model, process, socket, network, cloud, spend actions | 0 |
 
 Its sealed files are fake non-model bytes. Replay reconstructs closure and refusal semantics; it
@@ -245,9 +250,12 @@ regular-file interpreter, package root, worker bytes, distribution metadata, sel
 closed environment without importing or executing them. Model compilation scans one explicit,
 already-identified materialized directory; it never searches caches or resolves/downloads a
 snapshot. Symlinks, special files, hard-link aliases, path/import injection, remote/custom code,
-and inconsistent shards fail closed. Supplying both manifests still cannot make execution
-eligible: exact limits, output-root/nonce custody, worker birth/import/backend/cache evidence, and
-final synchronization remain missing, and no authorize/execute command exists.
+mixed or malformed/incomplete canonical shards, and inconsistent indexes fail closed. Supplying
+both manifests still cannot make execution eligible: applicable dependencies, Python
+standard-library/native-loader bytes, production IPC/protocol/result validation, strict model
+parameter key/shape load evidence, exact limits, output-root/nonce custody, worker
+birth/import/backend/cache evidence, and final synchronization remain missing, and no
+authorize/execute command exists.
 
 `declaration-spec`, `declaration-create`, `declaration-verify`, and `declaration-inspect` are
 declaration-only operations. They do not probe the host, read an Ollama endpoint, create
@@ -336,13 +344,13 @@ The project does not claim that:
 
 ## Roadmap
 
-1. Review the direct MLX supplied package-root/model closures, protocol design, exact controls, and
-   refusal fixture.
+1. Review the direct MLX supplied package/model-root byte closures and projections, protocol
+   design, exact controls, and refusal fixture.
 2. In a separately reviewed schema version, close applicable dependencies and Python
    standard-library/native-loader bytes, then implement retained runtime/model descriptors,
    parent-owned private IPC/protocol/result validation, same-process
-   import/backend/cache/synchronization attestation, and one-shot authorization before adding any
-   production worker start.
+   import/backend/cache/synchronization attestation, pinned strict model key/shape loading, and
+   one-shot authorization before adding any production worker start.
 3. Review the frozen Qwen3 declaration and fill only evidence obtainable without model or network
    action.
 4. Design a separately authorized future milestone for the two primitives named by the negative
