@@ -146,6 +146,37 @@ not a renewed socket-operation timeout. Failures are never retried. Production g
 disabled until the loopback listener process and active runner/Metal state can be mechanically
 attested.
 
+## Ollama repeatability-study declaration
+
+`ollama_repeatability_study_declaration` schema 1.0 is additive to the existing foundation and
+Ollama package schemas. It is a prospective declaration, not permission or observation. The
+canonical Qwen3 plan binds:
+
+- foundation commit `7f89682bdc50a944cf74e4729f5acffa48dc6f1a` and schema 1.0 contracts;
+- prior user-provided Ollama `0.35.1`, Qwen3 8B Q8 manifest
+  `sha256:e56358ca25dd14db6853a9f68a92d717aaa6f0a94250a72d1a0f3d86a9f30130`,
+  and Apple M5 Pro/macOS identity without converting them into fresh observed evidence;
+- one exact UTF-8 prompt, trusted generated request bytes/digest, explicit `think=false`,
+  `raw=true`, `stream=false`, `shift=false`, `truncate=false`, `keep_alive=0`, every sampler
+  control, context/output limit, numeric loopback endpoint, absolute call deadline, bounded reads,
+  and zero redirects/proxies/retries;
+- five serial, single-attempt, non-rerunnable repeats in
+  `cold_model_warm_process`, with no warm-up or warm prompt/KV claim;
+- a separately authorized four-call metadata preflight and per-run identity/generation phases;
+- terminal accepted/invalid/refused/interrupted handling and within-backend analysis only.
+
+Exact package closure is never inferred from a model name or path. Callers either provide every
+scheduled canonical package, which is verified and embedded, or provide none and receive an
+incomplete declaration. Bound repeats must share one exact runtime, model, host, and output-root
+identity. The global metadata-preflight phase identifies the first run's exact package and
+preflight nonce commitment; it remains separately unauthorized. Missing runtime/model bytes and
+package/nonce identities remain null. Output-root markers and nonce preimages are never created by
+declaration construction.
+
+Completeness does not imply generation eligibility. Schema 1.0 always reports observed generation
+and replay ineligible because it cannot content-bind the loopback listener owner or active internal
+runner/Metal state. Fixed seed and temperature remain controls, not determinism guarantees.
+
 ## Equality semantics
 
 Within each backend, runtime, model, host, protocol, process instance, model instance, cache

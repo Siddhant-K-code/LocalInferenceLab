@@ -27,6 +27,14 @@ from localinferencelab.ollama import (
     write_authorization,
     write_prospective_package,
 )
+from localinferencelab.ollama_declaration import (
+    build_study_declaration,
+    compile_declaration_fixture,
+    load_study_declaration,
+    qwen3_repeatability_study_spec,
+    replay_declaration_fixture,
+    write_study_declaration,
+)
 from localinferencelab.ollama_fixture import compile_ollama_contract_fixtures
 
 
@@ -101,6 +109,43 @@ def _parser() -> argparse.ArgumentParser:
         help="verify an exact prospective package offline",
     )
     verify_prospective.add_argument("package", type=Path)
+    ollama_commands.add_parser(
+        "declaration-spec",
+        help="emit the pinned Qwen3 repeatability study specification",
+    )
+    declaration_create = ollama_commands.add_parser(
+        "declaration-create",
+        help="construct a replayable preflight-only repeatability declaration",
+    )
+    declaration_create.add_argument("spec", type=Path)
+    declaration_create.add_argument("output", type=Path)
+    declaration_create.add_argument(
+        "--prospective-package",
+        type=Path,
+        action="append",
+        default=[],
+        help="exact verified per-run package; provide all declared runs or none",
+    )
+    declaration_verify = ollama_commands.add_parser(
+        "declaration-verify",
+        help="strictly verify a canonical repeatability declaration offline",
+    )
+    declaration_verify.add_argument("declaration", type=Path)
+    declaration_inspect = ollama_commands.add_parser(
+        "declaration-inspect",
+        help="inspect declaration completeness and fail-closed eligibility",
+    )
+    declaration_inspect.add_argument("declaration", type=Path)
+    declaration_fixture = ollama_commands.add_parser(
+        "declaration-fixture-compile",
+        help="publish deterministic non-observed declaration contract evidence",
+    )
+    declaration_fixture.add_argument("output_root", type=Path)
+    declaration_replay = ollama_commands.add_parser(
+        "declaration-replay",
+        help="replay a closed declaration fixture bundle offline",
+    )
+    declaration_replay.add_argument("bundle", type=Path)
     authorize = ollama_commands.add_parser(
         "authorize",
         help="create a separate phase-scoped one-shot authorization",
@@ -252,6 +297,78 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
                     "model_actions": 0,
                 },
             )
+            return 0
+        if args.ollama_command == "declaration-spec":
+            _emit(qwen3_repeatability_study_spec())
+            return 0
+        if args.ollama_command == "declaration-create":
+            spec_bytes = args.spec.read_bytes()
+            spec_value = load_json_bytes(spec_bytes)
+            if canonical_json(spec_value) != spec_bytes:
+                _error("Ollama repeatability study specification must use canonical JSON")
+            package_values = [
+                load_prospective_package(path).value for path in args.prospective_package
+            ]
+            declaration_value = build_study_declaration(
+                spec_value,
+                prospective_packages=package_values,
+            )
+            write_study_declaration(args.output, declaration_value)
+            declaration = load_study_declaration(args.output)
+            completeness = cast(
+                "dict[str, object]",
+                cast("dict[str, object]", declaration["eligibility"])["declaration_completeness"],
+            )
+            _emit(
+                {
+                    "status": "created",
+                    "declaration_id": declaration["declaration_id"],
+                    "declaration_complete": completeness["status"] == "complete",
+                    "physical_network_requests": 0,
+                    "model_actions": 0,
+                },
+            )
+            return 0
+        if args.ollama_command in {"declaration-verify", "declaration-inspect"}:
+            declaration = load_study_declaration(args.declaration)
+            eligibility = cast("dict[str, object]", declaration["eligibility"])
+            completeness = cast(
+                "dict[str, object]",
+                eligibility["declaration_completeness"],
+            )
+            observed = cast("dict[str, object]", eligibility["observed_generation"])
+            _emit(
+                {
+                    "status": (
+                        "valid" if args.ollama_command == "declaration-verify" else "inspected"
+                    ),
+                    "declaration_id": declaration["declaration_id"],
+                    "declaration_complete": completeness["status"] == "complete",
+                    "missing_fields": completeness["missing_fields"],
+                    "metadata_preflight": eligibility["metadata_preflight"],
+                    "observed_generation": observed,
+                    "scheduled_runs": len(
+                        cast("list[object]", declaration["run_schedule"]),
+                    ),
+                    "physical_network_requests": 0,
+                    "model_actions": 0,
+                },
+            )
+            return 0
+        if args.ollama_command == "declaration-fixture-compile":
+            fixture_path, replay = compile_declaration_fixture(args.output_root)
+            output = replay.to_dict()
+            output["status"] = "compiled"
+            output["path"] = fixture_path.name
+            output["evidence_status"] = "synthetic_declaration_contract_evidence_only"
+            _emit(output)
+            return 0
+        if args.ollama_command == "declaration-replay":
+            declaration_replay_result = replay_declaration_fixture(args.bundle)
+            output = declaration_replay_result.to_dict()
+            output["status"] = "replayed"
+            output["external_network_actions"] = 0
+            _emit(output)
             return 0
         if args.ollama_command == "authorize":
             authorization_package = load_prospective_package(args.package)
