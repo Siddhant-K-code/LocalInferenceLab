@@ -18,36 +18,131 @@ On 2026-10-04, the pinned Ollama revision was verified as current `main` (commit
 2026-10-02). The latest tagged release was `v0.35.1`, two docs-only commits behind that revision.
 The contract cites immutable source URLs; hosted docs are supplementary when their content can move.
 
-## MLX-LM normative sources
+## MLX/MLX-LM normative sources
 
-- [`generate_step`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/generate.py#L304-L330)
-  accepts a sampler, prompt cache, KV size and quantization controls, and prefill size. Its response
-  surfaces token, text, token counts, rates, peak memory, and finish reason through
-  [`GenerationResponse`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/generate.py#L266-L292).
-- [`make_sampler`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/sample_utils.py#L16-L31)
-  defines temperature, top-p, min-p, top-k, and XTC controls. Temperature zero selects greedy
-  sampling. The sampler does not accept a seed.
-- The CLI
-  [applies `mx.random.seed` only when a seed is supplied](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/generate.py#L2006-L2007).
-  MLX documents an implicit global PRNG state in its
-  [random API](https://ml-explore.github.io/mlx/build/html/python/random.html). This makes seed a
-  recorded control, not proof that all backend operations are bit-exact.
-- The MLX-LM server request fields
-  [do not include a per-request seed](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/SERVER.md#L66-L133).
-- Prompt caches can be created, saved, loaded, trimmed, rotated, quantized, and reused through
-  [`models/cache.py`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/models/cache.py#L15-L139).
-  Cache class and cache configuration belong in provenance.
-- Official benchmark instructions record both
-  [`python -m mlx --version` and `python -m mlx_lm --version`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/BENCHMARKS.md#L16-L19).
-  Runtime identity must bind both packages.
-- Model loading resolves a revision and allowed snapshot files through
-  [`snapshot_download`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/utils.py#L251-L291).
-  The [Hugging Face cache guide](https://huggingface.co/docs/huggingface_hub/en/guides/manage-cache)
-  documents revision snapshots and content-addressed blobs. An MLX model identity is therefore a
-  file-manifest closure, not a GGUF-style single-file digest.
+Retrieved and re-verified at the pinned commits on 2026-10-05. Links below are immutable source or
+official documentation in those repositories. No issue/discussion evidence is used for the direct
+runner contract.
 
-MLX-LM does not provide a normative claim that ordinary Metal generation is bit-exact across cache
-state or chip families. The protocol measures that property rather than assuming it.
+### Local model, tokenizer, and remote-code boundary
+
+- [`DEFAULT_ALLOW_PATTERNS`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/utils.py#L251-L262)
+  includes JSON, `model*.safetensors`, tokenizer formats, text/Jinja files, and Python. `_download`
+  at
+  [`utils.py` lines 264-292](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/utils.py#L264-L292)
+  returns an existing local path as-is; any non-existing path/name enters
+  `snapshot_download` without `local_files_only`. The direct contract therefore accepts only an
+  explicitly supplied, already-existing local directory and never resolves a name or revision.
+- [`load_config`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/utils.py#L362-L378)
+  requires `config.json` and merges only `eos_token_id` from optional `generation_config.json`.
+  [`load_model`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/utils.py#L408-L471)
+  requires `model*.safetensors` in strict mode. A configured `model_file` requires
+  `trust_remote_code=true` and is then imported/executed from the snapshot. Model Python is
+  forbidden by the manifest contract.
+- [`load`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/utils.py#L610-L668)
+  passes its `trust_remote_code` argument to model loading, but tokenizer loading separately
+  delegates to
+  [`AutoTokenizer.from_pretrained`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/tokenizer_utils.py#L660-L697)
+  with the caller's tokenizer-config dictionary. The CLI wires both gates from one option at
+  [`generate.py` lines 2026-2049](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/generate.py#L2026-L2049),
+  but a direct library caller cannot assume that convenience. The contract independently forbids
+  model and tokenizer custom code.
+- The import-time branch at
+  [`utils.py` lines 29-35](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/utils.py#L29-L35)
+  selects ModelScope when `MLXLM_USE_MODELSCOPE` lowercases to `true`. The closed worker
+  environment fixes it to `False`; explicit local-path custody remains the primary control.
+
+### Generation, token IDs, sampler, and cache lifecycle
+
+- [`generate_step`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/generate.py#L304-L475)
+  binds max tokens, sampler, prompt cache, KV size/quantization and prefill step. Prefill processes
+  bounded chunks, evaluates cache state, and clears the allocator cache. Decode pipelines one
+  step ahead with `async_eval`; the first token is explicitly evaluated and every yielded token ID
+  is converted through blocking scalar `.item()`. Output token IDs are therefore directly
+  preservable Python integers.
+- The generation stream is created at module import from the then-default device at
+  [`generate.py` line 225](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/generate.py#L225).
+  Changing the default device after import does not retarget that captured thread-local stream.
+  Exact environment/device setup must precede import in a future worker.
+- [`stream_generate`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/generate.py#L658-L756)
+  tokenizes strings, breaks on `tokenizer.eos_token_ids` before detokenizing/yielding the EOS token,
+  and wraps the call in `wired_limit`. Prompt IDs originate from the tokenizer's `.encode`;
+  generated IDs originate from `generate_step`.
+- [`make_sampler`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/sample_utils.py#L13-L75)
+  applies temperature/top-p/min-p/top-k/XTC controls. Temperature zero selects
+  [`greedy_sampler = mx.argmax`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/sample_utils.py#L133-L135)
+  and consumes no PRNG. Positive-temperature categorical sampling is compiled with implicit random
+  state and calls `mx.random.categorical` at
+  [`sample_utils.py` lines 271-285](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/sample_utils.py#L271-L285).
+- [`make_prompt_cache`](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/models/cache.py#L15-L41)
+  may delegate to a model-defined cache; otherwise it creates rotating caches when a maximum KV
+  size is supplied and plain `KVCache` otherwise. Save/load/trim lifecycle appears at
+  [`cache.py` lines 43-152](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/models/cache.py#L43-L152).
+  `KVCache` and `QuantizedKVCache` grow in 256-token increments at
+  [`cache.py` lines 251-421](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/models/cache.py#L251-L421).
+  Rotating-cache quantization is not implemented at
+  [`cache.py` lines 423-554](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/models/cache.py#L423-L554).
+  The future worker must report exact runtime cache classes rather than trusting a generic label.
+
+### PRNG, device/backend, synchronization, environment, and threads
+
+- MLX's Python PRNG key is explicitly thread-local at
+  [`python/src/random.cpp` lines 19-67](https://github.com/ml-explore/mlx/blob/0e3ff3643b1c3719f78814b98e0d222afbad867c/python/src/random.cpp#L19-L67);
+  `mx.random.seed` at
+  [`lines 122-131`](https://github.com/ml-explore/mlx/blob/0e3ff3643b1c3719f78814b98e0d222afbad867c/python/src/random.cpp#L122-L131)
+  seeds only the calling thread's implicit key. Unseeded state is lazily time-seeded. MLX-LM's CLI
+  seeds only when explicitly requested at
+  [`generate.py` lines 2007-2008](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/generate.py#L2007-L2008).
+  The direct design uses one generation thread and still treats seed as a control, not a guarantee.
+- [`default_device`](https://github.com/ml-explore/mlx/blob/0e3ff3643b1c3719f78814b98e0d222afbad867c/mlx/device.cpp)
+  selects GPU when the compiled GPU backend reports available, otherwise CPU. Metal-enabled and
+  no-Metal builds return constant availability from alternative source files:
+  [`metal.cpp`](https://github.com/ml-explore/mlx/blob/0e3ff3643b1c3719f78814b98e0d222afbad867c/mlx/backend/metal/metal.cpp)
+  and
+  [`no_metal.cpp`](https://github.com/ml-explore/mlx/blob/0e3ff3643b1c3719f78814b98e0d222afbad867c/mlx/backend/metal/no_metal.cpp).
+  These facts identify build/default configuration, not actual per-kernel execution.
+- Official
+  [`environment_variables.rst`](https://github.com/ml-explore/mlx/blob/0e3ff3643b1c3719f78814b98e0d222afbad867c/docs/src/usage/environment_variables.rst)
+  documents compile, TF32, distributed, Metal synchronization, command-buffer tuning, GPU
+  architecture and SDPA controls. Many are read when a subsystem first initializes. It defines no
+  runtime `MLX_DISABLE_METAL` or device-selection variable. The future environment is therefore a
+  closed allowlist established before imports.
+- [`mx.eval`](https://github.com/ml-explore/mlx/blob/0e3ff3643b1c3719f78814b98e0d222afbad867c/python/src/transforms.cpp#L1181-L1199)
+  blocks for graph evaluation; `async_eval` is explicitly experimental at
+  [`lines 1201-1230`](https://github.com/ml-explore/mlx/blob/0e3ff3643b1c3719f78814b98e0d222afbad867c/python/src/transforms.cpp#L1201-L1230).
+  [`mx.synchronize`](https://github.com/ml-explore/mlx/blob/0e3ff3643b1c3719f78814b98e0d222afbad867c/python/src/stream.cpp#L211-L228)
+  waits for the selected stream. `wired_limit` synchronizes supplied streams before restoring the
+  limit at
+  [`generate.py` lines 229-254](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/generate.py#L229-L254).
+- No subprocess or thread creation occurs in the reviewed single-sequence
+  load/generate/sample/cache path. `ThreadLocalStream` is a per-calling-thread stream abstraction,
+  not a thread creator. MLX subprocess use is confined to build/docs/benchmark/test utilities and
+  the opt-in distributed launcher
+  [`launch.py`](https://github.com/ml-explore/mlx/blob/0e3ff3643b1c3719f78814b98e0d222afbad867c/python/mlx/_distributed_utils/launch.py),
+  which the direct worker forbids.
+
+### Native metric scope and unavailable proof
+
+- At
+  [`generate.py` lines 718-740](https://github.com/ml-explore/mlx-lm/blob/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5/mlx_lm/generate.py#L718-L740),
+  prompt TPS covers prefill plus the first decode step. Generation TPS is the cumulative average
+  after that first token, not an instantaneous rate.
+- `mx.get_peak_memory` is cumulative since process start or the last `reset_peak_memory` according
+  to
+  [`python/src/memory.cpp`](https://github.com/ml-explore/mlx/blob/0e3ff3643b1c3719f78814b98e0d222afbad867c/python/src/memory.cpp).
+  MLX-LM does not reset it in the reviewed generation path. A future per-run use must explicitly
+  reset and record that action; process RSS is not substituted.
+- Official APIs expose default-device/build availability, stream synchronization, and memory
+  counters. They do not programmatically attest individual Metal kernel dispatch, order, fusion,
+  timing, or physical GPU identity. Metal trace capture requires external `MTL_CAPTURE_ENABLED=1`,
+  MLX capture calls, optional compile-time debug labels, and manual Xcode interpretation per
+  [`metal_debugger.rst`](https://github.com/ml-explore/mlx/blob/0e3ff3643b1c3719f78814b98e0d222afbad867c/docs/src/dev/metal_debugger.rst).
+  The contract therefore scopes future evidence as direct synchronized MLX runtime execution, not
+  proven per-kernel GPU execution.
+
+MLX/MLX-LM provide no normative claim that ordinary Metal generation is bit-exact across cache
+state, process lifetime, package versions, OS/driver versions, or chip families. The protocol
+measures repeatability within an exact closure rather than assuming it.
 
 ## llama.cpp normative sources
 

@@ -49,5 +49,12 @@ fixture:
 	attestation_b=$$(find .artifacts/attestation-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-ollama-attestation-synthetic-v1-*' -print -quit); \
 	diff -r "$$attestation_a" "$$attestation_b" && \
 	uv run localinferencelab ollama attestation-replay "$$attestation_a"
+	mkdir .artifacts/mlx-a .artifacts/mlx-b
+	uv run localinferencelab mlx fixture-compile .artifacts/mlx-a
+	uv run localinferencelab mlx fixture-compile .artifacts/mlx-b
+	mlx_a=$$(find .artifacts/mlx-a -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-direct-refused-synthetic-v1-*' -print -quit); \
+	mlx_b=$$(find .artifacts/mlx-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-direct-refused-synthetic-v1-*' -print -quit); \
+	diff -r "$$mlx_a" "$$mlx_b" && \
+	uv run localinferencelab mlx fixture-replay "$$mlx_a"
 
 validate: lint type test build-smoke fixture

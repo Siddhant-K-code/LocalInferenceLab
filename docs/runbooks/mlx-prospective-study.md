@@ -1,0 +1,119 @@
+# Prospective direct MLX study preparation
+
+This runbook performs static, offline preparation only. It must not be used to locate/download a
+model, import MLX/MLX-LM, query Metal, load a tokenizer/model, run inference, or start a worker.
+
+## 1. Inspect the pinned contract and capability boundary
+
+```bash
+localinferencelab mlx capability-report
+localinferencelab mlx prospective-spec > mlx-study-spec.json
+```
+
+The capability report must show `production_worker_launch=false`, `runtime_import=false`,
+`device_query=false`, `metal_initialization=false`, `inference=false`, `network=false`, and
+`subprocess=false`.
+
+## 2. Optionally compile an explicit runtime closure
+
+Prepare a canonical `mlx_runtime_scan_spec` 1.0 containing:
+
+- exact Python implementation, version, ABI, and platform strings;
+- the unique sorted set of every distribution name/version present under the explicit runtime root,
+  including `mlx` and `mlx-lm`;
+- the sorted selected module files, including `mlx/__init__.py`, `mlx_lm/__init__.py`,
+  `generate.py`, `utils.py`, `sample_utils.py`, and `models/cache.py`;
+- the exact closed environment emitted by the contract.
+
+Then identify, without executing them, an actual regular-file interpreter, package root, and future
+worker file:
+
+```bash
+localinferencelab mlx runtime-manifest-create \
+  runtime-scan-spec.json /explicit/runtime-root /explicit/python /explicit/worker.py \
+  runtime-manifest.json
+```
+
+The command scans only the supplied paths. It neither imports nor executes their bytes. Symlinked
+virtual-environment interpreters, hard-linked cache files, `.pth`, editable installs, mutable
+aliases, ambiguous/incomplete distribution roots, or private-path injection fail closed. Do not
+copy or mutate an installed runtime merely to satisfy this milestone.
+
+## 3. Optionally compile an already identified local model closure
+
+Only use a model directory the operator already identified before this runbook. Do not search a
+Hugging Face cache, resolve a repository/revision, download a snapshot, materialize symlinks, or
+rewrite files.
+
+```bash
+localinferencelab mlx model-manifest-create \
+  /explicit/preexisting/materialized-mlx-snapshot model-manifest.json
+```
+
+The compiler reads no-follow regular files only and rejects custom code, remote-code markers,
+symlinks, special files, nested paths, executable files, and inconsistent shards/indexes. It does
+not load config through MLX/Transformers, instantiate a tokenizer/model, or mutate a cache.
+
+If no suitable path is already known, skip this step. Absence is the correct built-in state.
+
+## 4. Construct and inspect the prospective package
+
+With no manifests:
+
+```bash
+localinferencelab mlx prospective-create \
+  mlx-study-spec.json mlx-prospective.json
+```
+
+Or with both static closures:
+
+```bash
+localinferencelab mlx prospective-create \
+  mlx-study-spec.json mlx-prospective.json \
+  --runtime-manifest runtime-manifest.json \
+  --model-manifest model-manifest.json
+```
+
+Then verify and inspect:
+
+```bash
+localinferencelab mlx prospective-verify mlx-prospective.json
+localinferencelab mlx eligibility-inspect mlx-prospective.json
+```
+
+Static closure completeness does not grant execution. The result remains ineligible because this
+PR has no worker start, process/import/backend synchronization attestation, exact memory limits,
+output-root instance, or one-shot authorization. No command exists to authorize or execute it.
+
+## 5. Repository-only deterministic validation
+
+```bash
+mkdir -p .artifacts/mlx-a .artifacts/mlx-b
+localinferencelab mlx fixture-compile .artifacts/mlx-a
+localinferencelab mlx fixture-compile .artifacts/mlx-b
+diff -r .artifacts/mlx-a .artifacts/mlx-b
+localinferencelab mlx fixture-replay \
+  .artifacts/mlx-a/localinferencelab-mlx-direct-refused-synthetic-v1-*
+```
+
+The fixture contains fake non-model bytes and never invokes a fake transport or worker. Replay
+reconstructs the exact ineligible package from sealed values and rejects extra/missing files,
+noncanonical JSON, manifest/package identity drift, positive eligibility, or coordinated
+record/index/receipt tampering.
+
+## 6. Future positive milestone
+
+Do not add a launch by calling a generic subprocess helper. A separately reviewed versioned schema
+must implement, test, and authorize all of the following together:
+
+1. Retained exact interpreter/runtime/model descriptors and closure revalidation.
+2. Parent-created private inherited IPC with unrelated descriptors closed.
+3. Worker process-birth, executable, worker-byte, import-module, environment, device/backend, cache,
+   limit, and stream identity bound before authorization.
+4. One-shot committed nonce custody and reserve-before-side-effect action ledger.
+5. One request per worker, concurrency 1, no retries/warmups/selective reruns.
+6. Exact prompt/template/token/sampler/cache controls and terminal raw-artifact custody.
+7. Final synchronization and correctly scoped native metrics.
+8. Explicit claim scope that does not overstate per-kernel Metal proof.
+
+Until that milestone is approved, a real execution request must remain mechanically unreachable.

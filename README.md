@@ -17,6 +17,14 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > generation and replay therefore remain disabled. Repository tests and recorded evidence use
 > no-socket fixtures: they do not contact Ollama, inspect a live process, execute a model, or make
 > a benchmark claim.
+>
+> The direct MLX milestone avoids that listener gap by specifying a parent-owned private-descriptor
+> worker. Strict additive schema-1.0 records bind offline runtime/model closures, worker bytes, a
+> closed environment, finite protocol, exact controls, result semantics, and future custody.
+> Production launch is absent. Repository code does not import installed MLX/MLX-LM modules,
+> initialize/query Metal, load a tokenizer/model, run inference, resolve/download a snapshot,
+> start a process, or open a socket. Its deterministic fixture is an ineligible refusal package,
+> not fake execution or hardware evidence.
 
 ## Trust boundary
 
@@ -25,10 +33,12 @@ flowchart LR
     P[Prospective protocol] --> I[Exact host, runtime, and model identities]
     I --> A{Content-addressed declaration}
     A -->|Forbidden or mismatch| X[No model action]
-    A -->|Exact declaration| G[Two one-shot authorization gates]
+    A -->|Ollama| G[Separate one-shot authorization gates]
+    A -->|Future direct MLX| W[Parent-owned private descriptor worker]
     G --> R[Raw run records and native counters]
-    F[Synthetic fixture] --> R
-    R --> C[Atomic closed bundle]
+    W -->|Not implemented| X
+    F[Synthetic fixtures] --> C[Atomic closed bundle]
+    R --> C
     C --> O[Strict offline replay]
     O --> N[Within-backend analysis]
 ```
@@ -46,6 +56,12 @@ because the canonical attestation verdict is `insufficient`. Loopback proves loc
 authentication. Metadata identity and `/api/ps` load state do not prove which process accepted the
 connection or which internal runner and Metal backend serviced the exact request.
 
+The MLX `W` node is contract-only. It freezes an inherited private `AF_UNIX` socketpair descriptor,
+bounded canonical-message order, one worker/request/attempt, concurrency 1, no retry/warmup/rerun,
+and exact same-process closure/backend/synchronization requirements. No socketpair or child process
+is created. Official MLX APIs cannot prove individual Metal kernels executed, so that claim remains
+unavailable.
+
 ## Benchmark matrix
 
 | Surface | MLX-LM | llama.cpp with Metal | Ollama |
@@ -54,8 +70,8 @@ connection or which internal runner and Metal backend serviced the exact request
 | Model identity schema | Snapshot file manifest, config, tokenizer | GGUF bytes and metadata | Manifest and layer digests |
 | Cache cohort contract | Prompt and KV cache state | Process, model, prompt/KV, context shift | Outer API state plus active runner and cache state |
 | Native metrics | Preserved when exposed | Preserved when exposed | Durations and token counts in native nanosecond units |
-| Live execution in v1 | Forbidden | Forbidden | Read-only preflight only; generation is implemented for fake contract evidence but production-refused pending listener/runner attestation |
-| Synthetic fixture | Exact repeat group | Text and token divergence group | Accepted, invalid, and identity-refused sealed-script bundles |
+| Live execution in v1 | Direct worker specified; production launch absent and ineligible | Forbidden | Read-only preflight only; generation is implemented for fake contract evidence but production-refused pending listener/runner attestation |
+| Synthetic fixture | Direct-worker refusal package plus foundation exact-repeat group | Text and token divergence group | Accepted, invalid, and identity-refused sealed-script bundles |
 
 MLX snapshots, GGUF files, and Ollama manifests are separate representations. A shared marketing
 name does not establish byte or behavioral equivalence. Cross-representation equivalence remains
@@ -87,6 +103,22 @@ The committed fixture deterministically produces:
 | Model, network, and download actions | 0 |
 
 These are synthetic contract results, not benchmark claims about hardware, a model, or a backend.
+
+The direct MLX refusal fixture deterministically produces:
+
+| Result | Value |
+|---|---:|
+| Runtime / model / package schemas | `mlx_runtime_manifest` / `mlx_model_manifest` / `mlx_direct_prospective_package` 1.0 |
+| Runtime manifest identity | `sha256:226617353dc742bda9efa02f6083b3733832659f77add8fb20c4da0e953c31b0` |
+| Model manifest identity | `sha256:b29d33d9fba77c827dc62c4b5b83536f65b5b78ad24d3bf5b84cf7379a08ebcf` |
+| Package identity | `sha256:2135c682f6fc5f1c85deb5e9fef901a417b12d207df8b761a71b012dc6565b31` |
+| Synthetic bundle root | `sha256:cfcc7d91b04d922ee2d0a86c6e0a478c331b4381ed1fd1b228ecf72a28b8eda5` |
+| Decision / missing requirements | `ineligible` / 11 |
+| Framework imports, Metal/device, model, process, socket, network, cloud, spend actions | 0 |
+
+Its sealed files are fake non-model bytes. Replay reconstructs closure and refusal semantics; it
+does not instantiate a fake worker/transport, claim producer-reachable generation, or record
+performance.
 
 The recorded Ollama sealed-script fixtures deterministically produce:
 
@@ -156,6 +188,17 @@ localinferencelab bundle replay BUNDLE
 localinferencelab host probe
 localinferencelab backend plan {mlx-lm,llama.cpp,ollama}
 localinferencelab backend probe BACKEND ARTIFACT --version VERSION [--commit COMMIT]
+localinferencelab mlx capability-report
+localinferencelab mlx prospective-spec > MLX-STUDY-SPEC.json
+localinferencelab mlx runtime-manifest-create RUNTIME-SCAN-SPEC.json \
+  RUNTIME_ROOT PYTHON_EXECUTABLE WORKER_PROGRAM RUNTIME-MANIFEST.json
+localinferencelab mlx model-manifest-create LOCAL-SNAPSHOT MODEL-MANIFEST.json
+localinferencelab mlx prospective-create MLX-STUDY-SPEC.json PACKAGE.json \
+  [--runtime-manifest RUNTIME-MANIFEST.json] [--model-manifest MODEL-MANIFEST.json]
+localinferencelab mlx prospective-verify PACKAGE.json
+localinferencelab mlx eligibility-inspect PACKAGE.json
+localinferencelab mlx fixture-compile OUTPUT_ROOT
+localinferencelab mlx fixture-replay CLOSED-BUNDLE
 localinferencelab ollama output-root-init OUTPUT_ROOT --nonce NONCE
 localinferencelab ollama authorization-nonce-init NONCE_FILE
 localinferencelab ollama prospective-create SPEC OUTPUT --runtime-artifact FILE \
@@ -190,6 +233,15 @@ probe` hashes one no-follow file descriptor without executing it and records onl
 Static probes remain explicitly incomplete until backend-specific observed capability evidence
 exists. Literal absence markers such as `unobserved`, `unknown`, and `unavailable` never satisfy an
 observed identity requirement.
+
+The `mlx` commands are static/offline only. Runtime compilation scans an explicitly supplied
+regular-file interpreter, package root, worker bytes, distribution metadata, selected modules, and
+closed environment without importing or executing them. Model compilation scans one explicit,
+already-identified materialized directory; it never searches caches or resolves/downloads a
+snapshot. Symlinks, special files, hard-link aliases, path/import injection, remote/custom code,
+and inconsistent shards fail closed. Supplying both manifests still cannot make execution
+eligible: exact limits, output-root/nonce custody, worker birth/import/backend/cache evidence, and
+final synchronization remain missing, and no authorize/execute command exists.
 
 `declaration-spec`, `declaration-create`, `declaration-verify`, and `declaration-inspect` are
 declaration-only operations. They do not probe the host, read an Ollama endpoint, create
@@ -252,10 +304,18 @@ extra or missing paths, swapped records, schedule drift, writable or foreign-own
 directories, action-budget drift, source-intent drift, analysis drift, and absent receipts. Digest
 and semantic checks use the same single-read byte snapshot.
 
+Direct MLX replay requires exactly the sealed fixture source, pinned study specification,
+synthetic runtime/model manifests, prospective package, index, and receipt. It reconstructs every
+identity and the ineligible decision and rejects extra/missing files, noncanonical JSON,
+closure/control/eligibility drift, or coordinated receipt-consistent tampering. The scanner and
+replay modules contain no MLX, socket, or subprocess imports.
+
 See [Architecture](docs/architecture.md), [Protocol](docs/protocol.md), and
 [Current source research](docs/research/current-sources.md). The exact Ollama boundary is specified
 in [Ollama runner contract](docs/ollama-runner-contract.md); prospective preparation is described in
-the [Ollama study runbook](docs/runbooks/ollama-prospective-study.md).
+the [Ollama study runbook](docs/runbooks/ollama-prospective-study.md). The new architecture is
+specified in [Direct MLX worker contract](docs/mlx-direct-runner-contract.md) and its static-only
+workflow in [Direct MLX runbook](docs/runbooks/mlx-prospective-study.md).
 
 ## Exact non-claims
 
@@ -270,14 +330,18 @@ The project does not claim that:
 
 ## Roadmap
 
-1. Review the frozen Qwen3 declaration and fill only evidence obtainable without model or network
+1. Review the direct MLX static closures, worker protocol, exact controls, and refusal fixture.
+2. In a separately reviewed schema version, implement retained runtime/model descriptors,
+   parent-owned private IPC, same-process import/backend/cache/synchronization attestation, and
+   one-shot authorization before adding any production worker start.
+3. Review the frozen Qwen3 declaration and fill only evidence obtainable without model or network
    action.
-2. Design a separately authorized future milestone for the two primitives named by the negative
+4. Design a separately authorized future milestone for the two primitives named by the negative
    assessment: privileged accepted-socket/process continuity plus in-process Ollama
    request-to-runner/model/Metal cooperation.
-3. Add separately authorized, preinstalled-resource runners for other backends.
-4. Publish observed bundles only after provenance, privacy, and positive-attestation review.
-5. Define a typed, indexed mapping-artifact protocol before any mapped cross-representation study.
+5. Add separately authorized, preinstalled-resource runners for other backends.
+6. Publish observed bundles only after provenance, privacy, and positive-attestation review.
+7. Define a typed, indexed mapping-artifact protocol before any mapped cross-representation study.
 
 ## Development
 
