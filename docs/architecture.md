@@ -15,6 +15,7 @@ Every trust transition is represented by immutable canonical data.
 | `host.py` | Privacy-preserving host probe through Python APIs, procfs, or `sysctlbyname` | Read-only |
 | `backends.py` | Static artifact digest and non-executable backend plans | Read-only |
 | `ollama.py` | Prospective package, direct numeric-loopback transport, one-shot authorization, bounded execution, terminal custody/replay | Explicit output-root writes; loopback calls only after authorization |
+| `ollama_declaration.py` | Canonical multi-run study intent, exact package closure binding, eligibility, and offline declaration fixture replay | Explicit declaration/fixture writes only; no host probe, socket, marker, authorization, or model |
 | `ollama_fixture.py` | Deterministic accepted/invalid/refused sealed-script evidence | Writes synthetic inputs and closed bundles; no socket or model |
 | `analysis.py` | Cohort-isolated exact equality and native metric summaries | None |
 | `custody.py` | Closed-set index, atomic publication, verification, replay | Writes only an explicit output root |
@@ -108,6 +109,26 @@ listener-process authentication; observed generation remains disabled for that r
 See
 [Ollama runner contract](ollama-runner-contract.md) for the dedicated threat boundary.
 
+## Qwen3 declaration layer
+
+The additive backend-specific `ollama_repeatability_study_declaration` schema 1.0 leaves the
+foundation records and runner/package schema 1.0 unchanged. It binds foundation commit
+`7f89682bdc50a944cf74e4729f5acffa48dc6f1a`, the runner/package contract versions, known prior
+Ollama/Qwen3/host identity, exact prompt and generated request bytes, five ordered attempts, the
+four-call metadata preflight, each nine-action run schedule, per-phase nonce commitments when
+packages exist, analysis rules, and custody policy.
+
+Exact prospective packages are accepted only as verified canonical values and embedded in the
+declaration. Their package/protocol/declaration/runtime/model/host/output-root/nonce identities and
+model artifact closure are derived rather than accepted as path or alias strings. Supplying some
+but not all scheduled packages fails. When package artifacts are unavailable, null closure fields
+and missing bindings produce a valid incomplete declaration rather than fabricated evidence.
+
+Declaration construction never initializes an output root or creates authorization. Metadata
+preflight remains separately authorized. Generation and observed-generation replay remain
+schema-ineligible with exactly two trust-gate blockers: missing content-bound listener-owner
+attestation and missing content-bound active internal runner/Metal attestation.
+
 ## Atomic publication
 
 Publication follows this order:
@@ -163,6 +184,11 @@ analysis, and checks synthetic side-effect/timing zeros. It also replays preflig
 exact four-call, zero-generation state machine. The current schema rejects `observed_execution`
 generation bundles entirely; a future schema may admit them only when listener-process and active
 runner/Metal attestation is required and validated.
+
+Declaration fixture replay is a separate closed-set path. It reconstructs the declaration from its
+canonical source specification, recomputes every derived request, schedule, policy, eligibility
+decision, identity, and synthetic bundle root, and requires explicit zero physical network, socket,
+model, cloud, and spend actions. It does not admit observed evidence.
 
 ## Privacy boundary
 

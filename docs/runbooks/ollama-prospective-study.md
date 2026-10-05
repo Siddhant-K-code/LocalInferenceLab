@@ -4,6 +4,23 @@ This runbook prepares records. Do not create authorization artifacts until an in
 confirms the exact study and source evidence. Repository validation uses only the final synthetic
 fixture command shown at the end.
 
+## 0. Freeze and inspect the declaration
+
+Emit the repository-pinned Qwen3 intent and construct the currently incomplete declaration:
+
+```bash
+localinferencelab ollama declaration-spec > study-spec.json
+localinferencelab ollama declaration-create study-spec.json study-declaration.json
+localinferencelab ollama declaration-verify study-declaration.json
+localinferencelab ollama declaration-inspect study-declaration.json
+```
+
+These commands perform no host probe, socket call, Ollama request, model action, output-root
+initialization, authorization, external network action, cloud action, or spend. The initial
+declaration intentionally reports missing runtime bytes, selected runner/Metal/build facts,
+manifest/config/layer closure, exact per-run packages, output-root binding, and nonce commitments.
+Do not fill any field from a path, tag, or guess.
+
 ## 1. Establish preinstalled identities
 
 Prepare, without running Ollama:
@@ -68,6 +85,22 @@ localinferencelab ollama prospective-verify prospective.json
 ```
 
 The command hashes local files only. A collision fails; it never replaces a package.
+
+The declaration has five exact run IDs. After constructing one reviewed package for every run,
+rebuild the declaration by providing all packages in run order:
+
+```bash
+localinferencelab ollama declaration-create study-spec.json complete-declaration.json \
+  --prospective-package run-001.json \
+  --prospective-package run-002.json \
+  --prospective-package run-003.json \
+  --prospective-package run-004.json \
+  --prospective-package run-005.json
+```
+
+Partial package sets fail. The packages are embedded and content-bound; their source paths are not
+recorded as identity. This can establish declaration completeness but cannot make observed
+generation eligible.
 
 ## 4. Optional read-only preflight
 
@@ -154,3 +187,17 @@ done
 Each dispatched fake call retains one exact indexed bounded response body so replay reconstructs
 the identity snapshots from raw envelopes. The generated fake durations are schema fixtures only
 and must never be reported as performance.
+
+Compile the independent declaration fixture twice and replay either closed bundle:
+
+```bash
+mkdir -p .artifacts/declaration-a .artifacts/declaration-b
+localinferencelab ollama declaration-fixture-compile .artifacts/declaration-a
+localinferencelab ollama declaration-fixture-compile .artifacts/declaration-b
+diff -r .artifacts/declaration-a .artifacts/declaration-b
+localinferencelab ollama declaration-replay \
+  .artifacts/declaration-a/localinferencelab-ollama-declaration-synthetic-v1-*
+```
+
+The source record is unmistakably synthetic declaration-contract evidence and fixes physical
+network, socket, model, external network, cloud, and spend actions at zero.

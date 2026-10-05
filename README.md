@@ -8,10 +8,12 @@ concurrency, exact execution order, native metrics, and raw outputs before it co
 not a tokens-per-second leaderboard and it does not infer determinism from a seed.
 
 > The Ollama runner is implemented but fail-closed. It can prepare and verify exact prospective
-> packages offline and perform separately authorized read-only loopback preflight calls. Observed
-> generation remains disabled until the listening Ollama process and its active runner/Metal state
-> can be mechanically attested. Repository tests and recorded evidence use a no-socket fake
-> transport: they do not contact Ollama, execute a model, or make a benchmark claim.
+> packages offline and perform separately authorized read-only loopback preflight calls. The
+> additive `ollama_repeatability_study_declaration` schema 1.0 freezes the planned Qwen3 study
+> without probing Ollama or precreating a host-bound output marker. Observed generation and replay
+> remain disabled until the listening Ollama process owner and its active internal runner/Metal
+> state can be mechanically attested. Repository tests and recorded evidence use no-socket
+> fixtures: they do not contact Ollama, execute a model, or make a benchmark claim.
 
 ## Trust boundary
 
@@ -94,6 +96,27 @@ public synthetic API cannot receive a transport object, and each response is act
 offline reconstruction. Their counters and timings are not observed Ollama behavior or performance
 evidence.
 
+The declaration fixture separately freezes five prospective Qwen3 8B Q8 repeats:
+
+| Result | Value |
+|---|---:|
+| Declaration schema | `ollama_repeatability_study_declaration` 1.0 |
+| Foundation commit | `7f89682bdc50a944cf74e4729f5acffa48dc6f1a` |
+| Ollama version evidence | `0.35.1` from prior user-provided identity |
+| Qwen3 manifest digest | `sha256:e56358ca25dd14db6853a9f68a92d717aaa6f0a94250a72d1a0f3d86a9f30130` |
+| Repeats / concurrency / attempts | 5 / 1 / 1 each |
+| Supported cache cohort | `cold_model_warm_process` only |
+| Declaration identity | `sha256:0b5b09440d2f1b772239dc7b79ecfb1eec17c6d1670988eba208386c1e029463` |
+| Synthetic declaration bundle root | `sha256:a8096d7c303cf06268f1c3bc82acb8c20887dcdc2aa6793f93c4ce5a40bd6b1d` |
+| Physical network, socket, model, cloud, spend actions | 0 |
+
+The fixture is intentionally incomplete: no runtime artifact digest, selected internal runner,
+Metal state, manifest/config/layer byte closure, exact per-run prospective package, output-root
+instance, or authorization nonce is manufactured. Completeness and metadata-preflight permission
+are separate from generation eligibility. Generation and generation replay remain ineligible
+specifically because schema 1.0 has no content-bound listener-owner or active internal
+runner/Metal attestation.
+
 ## CLI
 
 ```text
@@ -109,6 +132,13 @@ localinferencelab ollama authorization-nonce-init NONCE_FILE
 localinferencelab ollama prospective-create SPEC OUTPUT --runtime-artifact FILE \
   --model-manifest FILE --blob-root DIR
 localinferencelab ollama prospective-verify PACKAGE
+localinferencelab ollama declaration-spec > STUDY-SPEC.json
+localinferencelab ollama declaration-create STUDY-SPEC.json DECLARATION.json \
+  [--prospective-package EXACT-PACKAGE.json ...]
+localinferencelab ollama declaration-verify DECLARATION.json
+localinferencelab ollama declaration-inspect DECLARATION.json
+localinferencelab ollama declaration-fixture-compile OUTPUT_ROOT
+localinferencelab ollama declaration-replay CLOSED-BUNDLE
 localinferencelab ollama authorize PACKAGE {preflight_only,identity_guard,generation} \
   AUTHORIZATION --nonce-file NONCE_FILE
 localinferencelab ollama preflight PACKAGE AUTHORIZATION OUTPUT_ROOT \
@@ -125,6 +155,13 @@ probe` hashes one no-follow file descriptor without executing it and records onl
 Static probes remain explicitly incomplete until backend-specific observed capability evidence
 exists. Literal absence markers such as `unobserved`, `unknown`, and `unavailable` never satisfy an
 observed identity requirement.
+
+`declaration-spec`, `declaration-create`, `declaration-verify`, and `declaration-inspect` are
+declaration-only operations. They do not probe the host, read an Ollama endpoint, create
+authorization, initialize an output root, or execute a model. If exact prospective packages are
+provided, all scheduled runs must be covered and each package is strictly verified, embedded, and
+content-bound; filesystem paths and mutable model aliases are not identity. With no packages, the
+declaration remains valid but explicitly incomplete and ineligible.
 
 Ollama packages require an explicit `:local` request name. The canonical response/tag name is
 derived mechanically by removing `:local` and adding `:latest` only when no tag was supplied; it is
@@ -187,9 +224,10 @@ The project does not claim that:
 
 ## Roadmap
 
-1. Review and freeze the Ollama package, authorization, transport, and evidence records.
-2. Independently review one prospective Apple Silicon study and its out-of-band runner/Metal
-   evidence before creating any real authorization artifact.
+1. Review the frozen Qwen3 declaration and fill only evidence obtainable without model or network
+   action.
+2. Define and independently review a schema that content-binds listener ownership and active
+   internal runner/Metal attestation before creating any generation authorization artifact.
 3. Add separately authorized, preinstalled-resource runners for other backends.
 4. Publish observed bundles only after provenance and privacy review.
 5. Define a typed, indexed mapping-artifact protocol before any mapped cross-representation study.

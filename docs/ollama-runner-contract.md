@@ -31,6 +31,28 @@ Unknown keys and options fail. Request bytes are rebuilt in trusted code and com
 during verification; a caller cannot inject JSON, a URL, another model, or another option after
 authorization.
 
+## Repeatability-study declaration
+
+The runner package remains schema 1.0. A separate additive
+`ollama_repeatability_study_declaration` schema 1.0 composes verified per-run packages into a
+multi-repeat plan without broadening execution authority. It freezes the exact foundation commit,
+contract versions, Qwen3 identity evidence, prompt/request catalog, five-run order, cache cohort,
+authorization phases, action schedules, terminal policy, analysis policy, and custody/replay
+requirements.
+
+The declaration accepts no package path or mutable alias as identity. When all five canonical
+packages are supplied, it embeds them and derives package, protocol, execution-declaration,
+runtime, model, host, model-closure, output-root, and nonce identities. Partial coverage fails.
+When the local manifest/config/layer bytes and runtime artifacts are unavailable, construction
+records nulls and explicit missing package bindings; it does not query Ollama or manufacture
+closure digests.
+
+Declaration completeness, metadata-preflight authorization, and generation eligibility are
+separate outputs. Metadata preflight always requires its own one-shot authorization. Observed
+generation and observed replay remain ineligible regardless of declaration completeness until a
+future reviewed schema content-binds both listener ownership and active internal runner/Metal
+attestation.
+
 The request model name must end in `:local`. Pinned Ollama source permits an unspecified model
 reference backed by `RemoteHost`/`RemoteModel` metadata to proxy externally; `:local` turns such a
 case into a refusal. The local config blob is also inspected and any non-empty `remote_host` or
