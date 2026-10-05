@@ -991,6 +991,7 @@ def test_mlx_cli_help_describes_static_manifest_scope_exactly(
     captured = capfd.readouterr()
     assert captured.err == ""
     assert "supplied package-root byte closure" in captured.out
+    assert "supplied model-root byte closure" in captured.out
     assert "optional static manifests" in captured.out
     assert "explicit runtime closure" not in captured.out
     assert "optional static closures" not in captured.out

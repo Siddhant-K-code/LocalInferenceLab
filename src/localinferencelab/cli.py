@@ -134,7 +134,9 @@ def _parser() -> argparse.ArgumentParser:
     runtime_manifest.add_argument("output", type=Path)
     model_manifest = mlx_commands.add_parser(
         "model-manifest-create",
-        help="compile an explicit local snapshot closure without loading it",
+        help=(
+            "compile a supplied model-root byte closure and loader-scope projection without loading"
+        ),
     )
     model_manifest.add_argument("model_root", type=Path)
     model_manifest.add_argument("output", type=Path)
