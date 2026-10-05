@@ -18,6 +18,7 @@ from localinferencelab.canonical import (
 )
 from localinferencelab.cli import run
 from localinferencelab.contracts import (
+    Fact,
     HostIdentity,
     ModelIdentity,
     RuntimeFact,
@@ -72,6 +73,7 @@ def _bound_study(
     cache_support: str = "supported",
     disposition: str = "authorized",
     package_deadline_ms: int = 120_000,
+    mixed_identity: str | None = None,
 ) -> tuple[dict[str, JsonValue], list[dict[str, JsonValue]]]:
     root.mkdir()
     runtime_path = root / "ollama"
@@ -130,6 +132,28 @@ def _bound_study(
         ),
         True,
     )
+    alternate_runtime_path = root / "ollama-alternate"
+    alternate_runtime_path.write_bytes(
+        b"alternate synthetic preinstalled Ollama runtime for package binding"
+    )
+    alternate_runtime = RuntimeIdentity(
+        "runtime_identity",
+        "1.0",
+        "ollama",
+        "observed_execution",
+        "ollama-alternate",
+        None,
+        "0.35.1",
+        "alternate-fixture-source-commit",
+        digest_bytes(alternate_runtime_path.read_bytes()),
+        None,
+        (
+            RuntimeFact("runner", "mlx"),
+            RuntimeFact("metal", "enabled"),
+            RuntimeFact("build_info", "alternate-fixture-build"),
+        ),
+        True,
+    )
     model = ModelIdentity(
         "model_identity",
         "1.0",
@@ -137,6 +161,20 @@ def _bound_study(
         "ollama_manifest",
         "observed_execution",
         "synthetic-qwen3-binding-representation",
+        None,
+        artifact.manifest_sha256,
+        artifact.config.digest,
+        None,
+        artifact.closure_sha256,
+        "unproven",
+    )
+    alternate_model = ModelIdentity(
+        "model_identity",
+        "1.0",
+        "ollama",
+        "ollama_manifest",
+        "observed_execution",
+        "alternate-synthetic-qwen3-binding-representation",
         None,
         artifact.manifest_sha256,
         artifact.config.digest,
@@ -159,18 +197,34 @@ def _bound_study(
         "26A434",
         (),
     )
+    alternate_host = HostIdentity(
+        "host_identity",
+        "1.0",
+        "safe_host_probe",
+        "apple_silicon",
+        "arm64",
+        "Apple M5 Pro",
+        18,
+        18,
+        25_769_803_776,
+        "macOS",
+        "27.0.1",
+        "26A434",
+        (Fact("probe_method", "alternate-synthetic-package-binding"),),
+    )
     spec = _copy(qwen3_repeatability_study_spec())
     _dict(spec["study_design"])["repeats_per_prompt"] = 2
     known = _dict(spec["known_identity"])
     known_runtime = _dict(known["runtime"])
-    known_runtime.update(
-        {
-            "artifact_sha256": runtime.artifact_sha256,
-            "selected_internal_runner": "llama.cpp",
-            "metal_state": "enabled",
-            "build_info": "fixture-build",
-        },
-    )
+    if mixed_identity != "runtime":
+        known_runtime.update(
+            {
+                "artifact_sha256": runtime.artifact_sha256,
+                "selected_internal_runner": "llama.cpp",
+                "metal_state": "enabled",
+                "build_info": "fixture-build",
+            },
+        )
     known_model = _dict(known["model"])
     known_model.update(
         {
@@ -198,6 +252,14 @@ def _bound_study(
     packages: list[dict[str, JsonValue]] = []
     for repeat in range(1, 3):
         run_id = f"anchor-repeat-{repeat:03d}"
+        selected_runtime = (
+            alternate_runtime if mixed_identity == "runtime" and repeat == 2 else runtime
+        )
+        selected_runtime_path = (
+            alternate_runtime_path if mixed_identity == "runtime" and repeat == 2 else runtime_path
+        )
+        selected_model = alternate_model if mixed_identity == "model" and repeat == 2 else model
+        selected_host = alternate_host if mixed_identity == "host" and repeat == 2 else host
         package_spec: dict[str, JsonValue] = {
             "record_type": "ollama_study_spec",
             "schema_version": "1.0",
@@ -213,9 +275,9 @@ def _bound_study(
                 "ps_path": transport["ps_path"],
                 "generate_path": transport["generate_path"],
             },
-            "runtime": runtime.to_dict(),
-            "model": model.to_dict(),
-            "host": host.to_dict(),
+            "runtime": selected_runtime.to_dict(),
+            "model": selected_model.to_dict(),
+            "host": selected_host.to_dict(),
             "model_name": known_model["request_model"],
             "prompt_base64": prompt["prompt_base64"],
             "prompt_sha256": prompt["prompt_sha256"],
@@ -255,7 +317,7 @@ def _bound_study(
         packages.append(
             build_prospective_package(
                 package_spec,
-                runtime_artifact=runtime_path,
+                runtime_artifact=selected_runtime_path,
                 model_manifest=manifest_path,
                 blob_root=blobs,
             ),
@@ -319,6 +381,11 @@ def test_qwen3_declaration_is_exact_incomplete_and_fail_closed() -> None:
     assert observed["trust_gate_blockers"] == expected_gates
     assert observed_replay["decision"] == "ineligible"
     assert observed_replay["trust_gate_blockers"] == expected_gates
+    metadata_preflight = _dict(_dict(declaration["authorization_plan"])["metadata_preflight"])
+    assert metadata_preflight["run_id"] == "anchor-repeat-001"
+    assert metadata_preflight["package_id"] is None
+    assert metadata_preflight["nonce_sha256"] is None
+    assert metadata_preflight["currently_authorized"] is False
     assert _dict(declaration["non_actions"]) == {
         "physical_network_requests": 0,
         "socket_calls": 0,
@@ -403,6 +470,11 @@ def test_exact_packages_are_embedded_content_bound_and_complete(tmp_path: Path) 
     assert completeness == {"status": "complete", "missing_fields": []}
     authorization = _dict(declaration["authorization_plan"])
     assert authorization["all_nonce_commitments_content_bound"] is True
+    metadata_preflight = _dict(authorization["metadata_preflight"])
+    assert metadata_preflight["run_id"] == bindings[0]["run_id"]
+    assert metadata_preflight["package_id"] == bindings[0]["package_id"]
+    assert metadata_preflight["nonce_sha256"] == bindings[0]["preflight_nonce_sha256"]
+    assert metadata_preflight["currently_authorized"] is False
     custody = _dict(declaration["custody_policy"])
     assert custody["output_root_binding"] == "declared_output_root_identity_unverified_instance"
     analysis = _dict(declaration["analysis_policy"])
@@ -463,6 +535,27 @@ def test_exact_packages_reject_partial_duplicate_and_policy_drift(tmp_path: Path
         build_study_declaration(timeout_spec, prospective_packages=timeout_packages)
 
 
+@pytest.mark.parametrize(
+    ("mixed_identity", "field"),
+    [
+        ("runtime", "runtime_id"),
+        ("model", "model_id"),
+        ("host", "host_id"),
+    ],
+)
+def test_exact_packages_require_singleton_repeatability_identities(
+    tmp_path: Path,
+    mixed_identity: str,
+    field: str,
+) -> None:
+    spec, packages = _bound_study(
+        tmp_path / f"mixed-{mixed_identity}",
+        mixed_identity=mixed_identity,
+    )
+    with pytest.raises(ContractError, match=rf"must share one {field}"):
+        build_study_declaration(spec, prospective_packages=packages)
+
+
 def _top_unknown(value: dict[str, JsonValue]) -> None:
     value["unknown"] = True
 
@@ -501,6 +594,21 @@ def _authorization_forgery(value: dict[str, JsonValue]) -> None:
     metadata["currently_authorized"] = True
 
 
+def _metadata_preflight_run_drift(value: dict[str, JsonValue]) -> None:
+    metadata = _dict(_dict(value["authorization_plan"])["metadata_preflight"])
+    metadata["run_id"] = "anchor-repeat-002"
+
+
+def _metadata_preflight_package_forgery(value: dict[str, JsonValue]) -> None:
+    metadata = _dict(_dict(value["authorization_plan"])["metadata_preflight"])
+    metadata["package_id"] = digest_bytes(b"forged-package")
+
+
+def _metadata_preflight_nonce_forgery(value: dict[str, JsonValue]) -> None:
+    metadata = _dict(_dict(value["authorization_plan"])["metadata_preflight"])
+    metadata["nonce_sha256"] = digest_bytes(b"forged-preflight-nonce")
+
+
 def _output_root_forgery(value: dict[str, JsonValue]) -> None:
     _dict(value["custody_policy"])["output_root_id"] = digest_bytes(b"forged")
 
@@ -531,6 +639,9 @@ def _bool_integer_identity_ambiguity(value: dict[str, JsonValue]) -> None:
         _cache_drift,
         _analysis_claim_drift,
         _authorization_forgery,
+        _metadata_preflight_run_drift,
+        _metadata_preflight_package_forgery,
+        _metadata_preflight_nonce_forgery,
         _output_root_forgery,
         _eligibility_forgery,
         _attestation_forgery,
@@ -563,6 +674,9 @@ def test_declaration_rejects_tampering(
         (("request_controls", "truncate"), True),
         (("request_controls", "keep_alive_seconds"), 1),
         (("request_controls", "keep_alive_seconds"), False),
+        (("request_controls", "think_mode"), []),
+        (("request_controls", "think_mode"), {}),
+        (("request_controls", "think_mode"), False),
         (("transport", "retries"), False),
         (("study_design", "concurrency"), True),
         (("study_design", "attempts_per_run"), True),

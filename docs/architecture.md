@@ -121,8 +121,11 @@ packages exist, analysis rules, and custody policy.
 Exact prospective packages are accepted only as verified canonical values and embedded in the
 declaration. Their package/protocol/declaration/runtime/model/host/output-root/nonce identities and
 model artifact closure are derived rather than accepted as path or alias strings. Supplying some
-but not all scheduled packages fails. When package artifacts are unavailable, null closure fields
-and missing bindings produce a valid incomplete declaration rather than fabricated evidence.
+but not all scheduled packages fails, as does any cross-repeat runtime, model, host, or output-root
+identity change. The single metadata preflight names the first run, its exact package, and its
+prospectively committed preflight nonce without creating an authorization. When package artifacts
+are unavailable, those package/nonce fields and closure fields are null; missing bindings produce
+a valid incomplete declaration rather than fabricated evidence.
 
 Declaration construction never initializes an output root or creates authorization. Metadata
 preflight remains separately authorized. Generation and observed-generation replay remain

@@ -106,8 +106,8 @@ The declaration fixture separately freezes five prospective Qwen3 8B Q8 repeats:
 | Qwen3 manifest digest | `sha256:e56358ca25dd14db6853a9f68a92d717aaa6f0a94250a72d1a0f3d86a9f30130` |
 | Repeats / concurrency / attempts | 5 / 1 / 1 each |
 | Supported cache cohort | `cold_model_warm_process` only |
-| Declaration identity | `sha256:0b5b09440d2f1b772239dc7b79ecfb1eec17c6d1670988eba208386c1e029463` |
-| Synthetic declaration bundle root | `sha256:a8096d7c303cf06268f1c3bc82acb8c20887dcdc2aa6793f93c4ce5a40bd6b1d` |
+| Declaration identity | `sha256:ebf8c3758c83c353e6e0bd9ab0f12d4aeb30ed9d7c1ed8f20669f7948f30022e` |
+| Synthetic declaration bundle root | `sha256:52d39c95991d3151423f9de455eb734bfe0d9a0e17f516f4ad05771bb9c9714a` |
 | Physical network, socket, model, cloud, spend actions | 0 |
 
 The fixture is intentionally incomplete: no runtime artifact digest, selected internal runner,
@@ -160,8 +160,11 @@ observed identity requirement.
 declaration-only operations. They do not probe the host, read an Ollama endpoint, create
 authorization, initialize an output root, or execute a model. If exact prospective packages are
 provided, all scheduled runs must be covered and each package is strictly verified, embedded, and
-content-bound; filesystem paths and mutable model aliases are not identity. With no packages, the
-declaration remains valid but explicitly incomplete and ineligible.
+content-bound; every repeat must share one exact runtime, model, host, and output-root identity.
+Filesystem paths and mutable model aliases are not identity. The metadata-preflight plan names the
+first run's exact package and committed preflight nonce, but remains separately unauthorized. With
+no packages those identities are `null`, and the declaration remains valid but explicitly
+incomplete and ineligible.
 
 Ollama packages require an explicit `:local` request name. The canonical response/tag name is
 derived mechanically by removing `:local` and adding `:latest` only when no tag was supplied; it is

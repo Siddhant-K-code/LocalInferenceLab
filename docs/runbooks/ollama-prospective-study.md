@@ -99,8 +99,10 @@ localinferencelab ollama declaration-create study-spec.json complete-declaration
 ```
 
 Partial package sets fail. The packages are embedded and content-bound; their source paths are not
-recorded as identity. This can establish declaration completeness but cannot make observed
-generation eligible.
+recorded as identity. All five must share one exact runtime, model, host, and output-root identity.
+The rebuilt metadata-preflight plan identifies `anchor-repeat-001`, its exact package, and its
+committed `preflight_only` nonce; it still does not create authorization. This can establish
+declaration completeness but cannot make observed generation eligible.
 
 ## 4. Optional read-only preflight
 

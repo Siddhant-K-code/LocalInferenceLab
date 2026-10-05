@@ -167,8 +167,11 @@ canonical Qwen3 plan binds:
 
 Exact package closure is never inferred from a model name or path. Callers either provide every
 scheduled canonical package, which is verified and embedded, or provide none and receive an
-incomplete declaration. Missing runtime/model bytes remain null. Output-root markers and nonce
-preimages are never created by declaration construction.
+incomplete declaration. Bound repeats must share one exact runtime, model, host, and output-root
+identity. The global metadata-preflight phase identifies the first run's exact package and
+preflight nonce commitment; it remains separately unauthorized. Missing runtime/model bytes and
+package/nonce identities remain null. Output-root markers and nonce preimages are never created by
+declaration construction.
 
 Completeness does not imply generation eligibility. Schema 1.0 always reports observed generation
 and replay ineligible because it cannot content-bind the loopback listener owner or active internal

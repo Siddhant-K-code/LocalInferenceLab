@@ -43,9 +43,11 @@ requirements.
 The declaration accepts no package path or mutable alias as identity. When all five canonical
 packages are supplied, it embeds them and derives package, protocol, execution-declaration,
 runtime, model, host, model-closure, output-root, and nonce identities. Partial coverage fails.
-When the local manifest/config/layer bytes and runtime artifacts are unavailable, construction
-records nulls and explicit missing package bindings; it does not query Ollama or manufacture
-closure digests.
+Mixed runtime, model, host, or output-root identities across repeats also fail. The metadata
+preflight binds the first run's exact package and preflight nonce commitment while remaining
+separately unauthorized. When the local manifest/config/layer bytes and runtime artifacts are
+unavailable, construction records nulls and explicit missing package bindings; it does not query
+Ollama or manufacture closure digests.
 
 Declaration completeness, metadata-preflight authorization, and generation eligibility are
 separate outputs. Metadata preflight always requires its own one-shot authorization. Observed

@@ -415,8 +415,11 @@ def _parse_request_controls(value: JsonValue) -> dict[str, JsonValue]:
     for field, expected in fixed_booleans.items():
         if _boolean(controls[field], f"study_spec.request_controls.{field}") is not expected:
             raise ContractError(f"request control {field} must be {str(expected).lower()}")
-    if controls["think_mode"] not in {"false", "true"}:
-        raise ContractError("think_mode must be explicitly true or false")
+    think_mode = _literal(
+        controls["think_mode"],
+        {"false", "true"},
+        "study_spec.request_controls.think_mode",
+    )
     keep_alive = _integer(
         controls["keep_alive_seconds"],
         "study_spec.request_controls.keep_alive_seconds",
@@ -425,7 +428,7 @@ def _parse_request_controls(value: JsonValue) -> dict[str, JsonValue]:
         raise ContractError("keep_alive_seconds must be zero")
     parsed: dict[str, JsonValue] = {
         "raw": True,
-        "think_mode": cast("str", controls["think_mode"]),
+        "think_mode": think_mode,
         "stream": False,
         "shift": False,
         "truncate": False,
@@ -905,6 +908,13 @@ def _schedule_and_packages(
         )
     if packages and set(package_by_run) != {run_id for run_id, _request in run_inputs}:
         raise ContractError("prospective package run IDs do not match the exact schedule")
+    if packages:
+        for field in ("runtime_id", "model_id", "host_id", "output_root_id"):
+            values = {
+                _mapping(binding, "prospective_package_bindings[]")[field] for binding in bindings
+            }
+            if len(values) != 1:
+                raise ContractError(f"exact prospective packages must share one {field}")
     return schedule, bindings
 
 
@@ -954,6 +964,7 @@ def _authorization_plan(
         for binding in bindings
     )
     first_run = _mapping(schedule[0], "run_schedule[0]")
+    first_binding = _mapping(bindings[0], "prospective_package_bindings[0]")
     preflight_actions: list[JsonValue] = []
     for sequence, action_value in enumerate(
         _array(first_run["action_schedule"], "run_schedule[0].action_schedule")[:4],
@@ -967,6 +978,9 @@ def _authorization_plan(
         "ambient_authorization": "forbidden",
         "metadata_preflight": {
             "phase": "preflight_only",
+            "run_id": first_binding["run_id"],
+            "package_id": first_binding["package_id"],
+            "nonce_sha256": first_binding["preflight_nonce_sha256"],
             "request_budget": _PREFLIGHT_REQUESTS,
             "action_schedule": preflight_actions,
             "separate_one_shot_authorization_required": True,
