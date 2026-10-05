@@ -175,7 +175,45 @@ declaration construction.
 
 Completeness does not imply generation eligibility. Schema 1.0 always reports observed generation
 and replay ineligible because it cannot content-bind the loopback listener owner or active internal
-runner/Metal state. Fixed seed and temperature remain controls, not determinism guarantees.
+runner/Metal state. Its bytes and semantics remain unchanged from PR #3. The separate negative
+attestation verdict described below binds the immutable declaration identity and explains why the
+existing gate stays closed; it is not embedded in the declaration. Fixed seed and temperature
+remain controls, not determinism guarantees.
+
+## Ollama listener and runner attestation assessment
+
+The additive schema-1.0 assessment is a feasibility contract, not live evidence. It binds the
+merged declaration contract and exact built-in declaration identity, pinned source revisions,
+exact Qwen3 generation request digest, numeric IPv4 loopback endpoint, and a macOS
+27.0.1/arm64 non-root scope. Its normative requirements are intentionally stronger than process
+discovery:
+
+- the exact retained accepted connection must bind to owner UID, PID plus anti-reuse birth/unique
+  identity, and no-follow executable bytes;
+- that binding must survive close/rebind/replacement/proxy races through the response;
+- the canonical external request must bind to the exact internal scheduler `runnerRef`,
+  completion transport, runner process/artifact, model manifest/config/layer closure and one load
+  lifecycle;
+- actual backend and Metal execution must bind to that same internal request;
+- one request-scoped content chain must cover every link.
+
+Darwin `proc_pidinfo`/`proc_pidfdinfo`, TCP PCB data, dynamic code identity, endpoint checks,
+process listings, and `lsof` are candidate observations, not a retained atomic chain. Pinned Ollama
+`/api/ps` reports a load snapshot and pinned source holds richer state internally, but neither
+public API returns the request-to-runner/model/Metal linkage. Mutable argv, environment, logs,
+names, version strings, model tags, `size_vram`, and before/after agreement remain weak evidence.
+
+The only supported verdict is therefore `insufficient`. Every required ID appears in
+`missing_requirement_ids`, both observed-generation eligibility fields are false, and both positive
+attestation IDs are null. Verification reconstructs those values from the immutable pinned spec,
+so a caller cannot turn a negative result into eligibility. Metadata preflight remains a separate
+generation-free authorization decision.
+
+No acquisition abstraction is present. The offline commands and fixture perform no process probe,
+socket inspection, socket or subprocess call, Ollama request, nonce consumption, output-root
+consumption, model action, external network, cloud, or spend. A future positive schema requires a
+separately authorized privileged accepted-socket/process primitive plus reviewed in-process Ollama
+cooperation for runner/load/model/Metal dispatch and a cryptographic chain between them.
 
 ## Equality semantics
 

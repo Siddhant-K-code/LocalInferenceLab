@@ -27,6 +27,16 @@ from localinferencelab.ollama import (
     write_authorization,
     write_prospective_package,
 )
+from localinferencelab.ollama_attestation import (
+    attestation_feasibility_spec,
+    attestation_inspection,
+    build_attestation_assessment,
+    compile_attestation_fixture,
+    load_attestation_assessment,
+    load_attestation_spec,
+    replay_attestation_fixture,
+    write_attestation_assessment,
+)
 from localinferencelab.ollama_declaration import (
     build_study_declaration,
     compile_declaration_fixture,
@@ -146,6 +156,40 @@ def _parser() -> argparse.ArgumentParser:
         help="replay a closed declaration fixture bundle offline",
     )
     declaration_replay.add_argument("bundle", type=Path)
+    ollama_commands.add_parser(
+        "attestation-spec",
+        help="emit the pinned offline listener/runner feasibility specification",
+    )
+    attestation_create = ollama_commands.add_parser(
+        "attestation-create",
+        help="derive the fail-closed attestation assessment without live acquisition",
+    )
+    attestation_create.add_argument("output", type=Path)
+    attestation_create.add_argument(
+        "--spec",
+        type=Path,
+        help="explicit canonical pinned feasibility specification",
+    )
+    attestation_verify = ollama_commands.add_parser(
+        "attestation-verify",
+        help="strictly verify a canonical attestation assessment offline",
+    )
+    attestation_verify.add_argument("assessment", type=Path)
+    attestation_inspect = ollama_commands.add_parser(
+        "attestation-inspect",
+        help="inspect the derived verdict and exact missing primitives",
+    )
+    attestation_inspect.add_argument("assessment", type=Path)
+    attestation_fixture = ollama_commands.add_parser(
+        "attestation-fixture-compile",
+        help="publish deterministic offline attestation-feasibility evidence",
+    )
+    attestation_fixture.add_argument("output_root", type=Path)
+    attestation_replay = ollama_commands.add_parser(
+        "attestation-replay",
+        help="replay a closed attestation-feasibility fixture offline",
+    )
+    attestation_replay.add_argument("bundle", type=Path)
     authorize = ollama_commands.add_parser(
         "authorize",
         help="create a separate phase-scoped one-shot authorization",
@@ -366,6 +410,44 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
         if args.ollama_command == "declaration-replay":
             declaration_replay_result = replay_declaration_fixture(args.bundle)
             output = declaration_replay_result.to_dict()
+            output["status"] = "replayed"
+            output["external_network_actions"] = 0
+            _emit(output)
+            return 0
+        if args.ollama_command == "attestation-spec":
+            _emit(attestation_feasibility_spec())
+            return 0
+        if args.ollama_command == "attestation-create":
+            specification = (
+                attestation_feasibility_spec()
+                if args.spec is None
+                else load_attestation_spec(args.spec)
+            )
+            assessment_value = build_attestation_assessment(specification)
+            write_attestation_assessment(args.output, assessment_value)
+            output = attestation_inspection(load_attestation_assessment(args.output))
+            output["status"] = "created"
+            _emit(output)
+            return 0
+        if args.ollama_command in {"attestation-verify", "attestation-inspect"}:
+            assessment = load_attestation_assessment(args.assessment)
+            output = attestation_inspection(assessment)
+            output["status"] = (
+                "valid" if args.ollama_command == "attestation-verify" else "inspected"
+            )
+            _emit(output)
+            return 0
+        if args.ollama_command == "attestation-fixture-compile":
+            fixture_path, attestation_replay = compile_attestation_fixture(args.output_root)
+            output = attestation_replay.to_dict()
+            output["status"] = "compiled"
+            output["path"] = fixture_path.name
+            output["evidence_status"] = "synthetic_offline_feasibility_contract_evidence"
+            _emit(output)
+            return 0
+        if args.ollama_command == "attestation-replay":
+            attestation_replay = replay_attestation_fixture(args.bundle)
+            output = attestation_replay.to_dict()
             output["status"] = "replayed"
             output["external_network_actions"] = 0
             _emit(output)

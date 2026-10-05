@@ -41,6 +41,11 @@ from localinferencelab.ollama_declaration import (
     verify_study_declaration,
 )
 
+_PR3_DECLARATION_ID = "sha256:ebf8c3758c83c353e6e0bd9ab0f12d4aeb30ed9d7c1ed8f20669f7948f30022e"
+_PR3_DECLARATION_BUNDLE_ROOT = (
+    "sha256:52d39c95991d3151423f9de455eb734bfe0d9a0e17f516f4ad05771bb9c9714a"
+)
+
 
 def _copy(value: JsonValue) -> dict[str, JsonValue]:
     copied = json.loads(canonical_json(value))
@@ -730,6 +735,8 @@ def test_declaration_construction_and_replay_never_create_a_socket(
     second_path, second_result = compile_declaration_fixture(second)
     assert first_path.name == second_path.name
     assert first_result == second_result
+    assert first_result.declaration_id == _PR3_DECLARATION_ID
+    assert first_result.bundle_root == _PR3_DECLARATION_BUNDLE_ROOT
     assert first_result.declaration_complete is False
     assert first_result.physical_network_requests == 0
     assert first_result.model_actions == 0
@@ -737,6 +744,12 @@ def test_declaration_construction_and_replay_never_create_a_socket(
     first_files = read_closed_bundle(first_path)[1]
     second_files = read_closed_bundle(second_path)[1]
     assert first_files == second_files
+
+
+def test_pr3_builtin_declaration_remains_byte_compatible() -> None:
+    declaration = build_study_declaration(qwen3_repeatability_study_spec())
+    assert declaration["declaration_id"] == _PR3_DECLARATION_ID
+    assert verify_study_declaration(declaration) == declaration
 
 
 def test_replay_rejects_coordinated_fixture_tampering(tmp_path: Path) -> None:

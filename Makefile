@@ -40,7 +40,14 @@ fixture:
 	uv run localinferencelab ollama declaration-fixture-compile .artifacts/declaration-b
 	bundle_a=$$(find .artifacts/declaration-a -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-ollama-declaration-synthetic-v1-*' -print -quit); \
 	bundle_b=$$(find .artifacts/declaration-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-ollama-declaration-synthetic-v1-*' -print -quit); \
-	diff -r "$$bundle_a" "$$bundle_b"; \
+	diff -r "$$bundle_a" "$$bundle_b" && \
 	uv run localinferencelab ollama declaration-replay "$$bundle_a"
+	mkdir .artifacts/attestation-a .artifacts/attestation-b
+	uv run localinferencelab ollama attestation-fixture-compile .artifacts/attestation-a
+	uv run localinferencelab ollama attestation-fixture-compile .artifacts/attestation-b
+	attestation_a=$$(find .artifacts/attestation-a -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-ollama-attestation-synthetic-v1-*' -print -quit); \
+	attestation_b=$$(find .artifacts/attestation-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-ollama-attestation-synthetic-v1-*' -print -quit); \
+	diff -r "$$attestation_a" "$$attestation_b" && \
+	uv run localinferencelab ollama attestation-replay "$$attestation_a"
 
 validate: lint type test build-smoke fixture

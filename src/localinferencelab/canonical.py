@@ -5,7 +5,10 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
+import stat
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import NoReturn, TypeAlias
 
 JsonScalar: TypeAlias = None | bool | int | str
@@ -98,6 +101,32 @@ def load_json_bytes(data: bytes) -> JsonValue:
     except json.JSONDecodeError as error:
         raise ContractError(f"malformed JSON: {error.msg}") from error
     return validate_json_value(parsed)
+
+
+def load_canonical_json_file(path: Path, label: str) -> JsonValue:
+    """Read one no-follow regular file and require exact canonical JSON bytes."""
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags)
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ContractError(f"{label} must be a regular file")
+        blocks: list[bytes] = []
+        while block := os.read(descriptor, 1024 * 1024):
+            blocks.append(block)
+        data = b"".join(blocks)
+        if len(data) != metadata.st_size:
+            raise ContractError(f"{label} changed while it was read")
+    finally:
+        os.close(descriptor)
+    value = load_json_bytes(data)
+    if canonical_json(value) != data:
+        raise ContractError(f"{label} must use canonical JSON bytes")
+    return value
 
 
 def encode_bytes(data: bytes) -> str:

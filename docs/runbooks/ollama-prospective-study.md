@@ -21,6 +21,22 @@ declaration intentionally reports missing runtime bytes, selected runner/Metal/b
 manifest/config/layer closure, exact per-run packages, output-root binding, and nonce commitments.
 Do not fill any field from a path, tag, or guess.
 
+Create and inspect the repository-pinned attestation feasibility result:
+
+```bash
+localinferencelab ollama attestation-create attestation-assessment.json
+localinferencelab ollama attestation-verify attestation-assessment.json
+localinferencelab ollama attestation-inspect attestation-assessment.json
+```
+
+These are also pure offline operations. They do not inspect a live process or socket, invoke
+`lsof`, run a subprocess, contact Ollama, consume an authorization nonce/output root, or perform a
+model action. The expected verdict is `insufficient`; observed generation and observed replay must
+remain ineligible. The assessment is separate from the unchanged strict declaration record and
+binds its immutable identity; it does not revise or migrate declaration schema 1.0. An explicit
+`--spec` input must be canonical and byte-equivalent in meaning to the built-in pinned feasibility
+specification.
+
 ## 1. Establish preinstalled identities
 
 Prepare, without running Ollama:
@@ -147,9 +163,12 @@ or interrupted authorized phase remains consumed and must not be selectively rer
 ## 6. Execution gate
 
 The command surface is present, but production generation intentionally refuses before consuming
-either authorization or opening a socket. Ollama's public API cannot mechanically bind the
-declared runtime, selected runner, and Metal state to the process that owns the loopback listener.
-Do not attempt a real model run until a reviewed listener/runner attestor replaces this gate.
+either authorization or opening a socket. The separate schema-1.0 verdict is `insufficient`:
+public nonprivileged macOS observations cannot atomically bind the retained accepted connection to
+a stable listener process through response, and Ollama's public API does not bind the exact
+external request to its internal scheduler runner/model-load instance and actual Metal backend.
+Do not attempt a real model run until a separate reviewed milestone supplies both the privileged
+kernel socket/process assertion and in-process Ollama cooperation named by the assessment.
 
 After that future gate is implemented and only after package, source, privacy, cache, and threat
 review, the frozen command shape is:
@@ -203,3 +222,18 @@ localinferencelab ollama declaration-replay \
 
 The source record is unmistakably synthetic declaration-contract evidence and fixes physical
 network, socket, model, external network, cloud, and spend actions at zero.
+
+Compile the independent attestation fixture twice and replay either closed bundle:
+
+```bash
+mkdir -p .artifacts/attestation-a .artifacts/attestation-b
+localinferencelab ollama attestation-fixture-compile .artifacts/attestation-a
+localinferencelab ollama attestation-fixture-compile .artifacts/attestation-b
+diff -r .artifacts/attestation-a .artifacts/attestation-b
+localinferencelab ollama attestation-replay \
+  .artifacts/attestation-a/localinferencelab-ollama-attestation-synthetic-v1-*
+```
+
+Replay requires the exact source spec, assessment, index, and receipt; rebuilds the negative
+verdict; and rejects extra/missing files, noncanonical bytes, coordinated record/receipt tampering,
+or any positive eligibility field.

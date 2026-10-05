@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import stat
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +16,7 @@ from localinferencelab.canonical import (
     decode_bytes,
     digest_bytes,
     encode_bytes,
+    load_canonical_json_file,
     load_json_bytes,
     validate_json_value,
 )
@@ -114,31 +114,6 @@ def _sha256(value: JsonValue, label: str) -> str:
 
 def _optional_sha256(value: JsonValue, label: str) -> str | None:
     return None if value is None else _sha256(value, label)
-
-
-def _strict_canonical_file(path: Path, label: str) -> JsonValue:
-    flags = os.O_RDONLY
-    if hasattr(os, "O_CLOEXEC"):
-        flags |= os.O_CLOEXEC
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    descriptor = os.open(path, flags)
-    try:
-        metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode):
-            raise ContractError(f"{label} must be a regular file")
-        blocks: list[bytes] = []
-        while block := os.read(descriptor, 1024 * 1024):
-            blocks.append(block)
-        data = b"".join(blocks)
-        if len(data) != metadata.st_size:
-            raise ContractError(f"{label} changed while it was read")
-    finally:
-        os.close(descriptor)
-    value = load_json_bytes(data)
-    if canonical_json(value) != data:
-        raise ContractError(f"{label} must use canonical JSON bytes")
-    return value
 
 
 def _canonical_bytes(data: bytes, label: str) -> JsonValue:
@@ -1217,7 +1192,7 @@ def write_study_declaration(path: Path, value: JsonValue) -> None:
 
 def load_study_declaration(path: Path) -> dict[str, JsonValue]:
     """Load one strict canonical declaration without following a final symlink."""
-    return verify_study_declaration(_strict_canonical_file(path, "study declaration"))
+    return verify_study_declaration(load_canonical_json_file(path, "study declaration"))
 
 
 def qwen3_repeatability_study_spec() -> dict[str, JsonValue]:
