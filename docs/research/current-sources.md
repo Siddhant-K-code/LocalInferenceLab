@@ -141,6 +141,105 @@ state or chip families. The protocol measures that property rather than assuming
   `sha256-*` files. The contract hashes the raw manifest and every ordered config/layer blob and
   rechecks the closure before and after generation.
 
+## Ollama listener/runner attestation feasibility sources
+
+Retrieved 2026-10-05. The assessment scope is the declared macOS 27.0.1 build 26A434/arm64 host,
+non-root with no special entitlement, and same-effective-UID process inspection where Darwin
+permits it. Apple's public XNU source revision
+[`f6217f891ac0bb64f3d375211650a4c1ff8ca1ea`](https://github.com/apple-oss-distributions/xnu/tree/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea)
+and Security source revision
+[`db15acbe6a7f257a859ad9a3bb86097bfe0679d9`](https://github.com/apple-oss-distributions/Security/tree/db15acbe6a7f257a859ad9a3bb86097bfe0679d9)
+are pinned authoritative sources for the interfaces and fields they define. The assessment does
+not claim that those public source revisions are byte-identical to the exact shipped OS build.
+
+### Darwin normative source findings
+
+- [`proc_bsdinfo`](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/proc_info.h#L55-L82)
+  includes effective/real owner fields and process start seconds/microseconds. These fields can
+  reduce PID-reuse ambiguity but do not identify a request socket.
+- [`in_sockinfo` and TCP state`](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/proc_info.h#L377-L430)
+  expose local/foreign address and port, a per-instance generation count, and TCP state.
+  [`socket_info`](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/proc_info.h#L541-L575)
+  adds opaque socket/PCB handles and queue/state fields.
+- The header defines separate
+  [`PROC_PIDLISTFDS` and `PROC_PIDTBSDINFO` flavors](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/proc_info.h#L722-L730)
+  and a separate
+  [`PROC_PIDFDSOCKETINFO` lookup](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/proc_info.h#L781-L788).
+  Kernel implementation performs process lookup and later FD lookup in distinct calls; it checks
+  same-user policy for FD information at
+  [`proc_pidfdinfo`](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/proc_info.c#L2810-L2895).
+- The same-user rule and privileged bypass are explicit in
+  [`proc_security_policy`](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/proc_info.c#L3160-L3203).
+  A nonprivileged assessment cannot assume visibility into another user's process.
+- TCP PCB records include local/foreign ports and socket/PCB generation counts in
+  [`xinpcb_n` and `xinpgen`](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/netinet/in_pcb.h#L537-L577).
+  These support snapshot correlation, not a retained assertion that a particular process accepted
+  and serviced one exact HTTP request.
+- Apple's lsof source demonstrates the snapshot shape: it calls
+  [`proc_pidfdinfo(..., PROC_PIDFDSOCKETINFO, ...)`](https://github.com/apple-oss-distributions/lsof/blob/7a8a1b2a3c0f35c30a5fcd0927f31d441c3e5255/lsof/dialects/darwin/libproc/dsock.c#L481-L506)
+  for one PID and FD. lsof output is therefore evidence derived from those point-in-time lookups,
+  not a new atomic ownership primitive.
+- Security's dynamic-code API accepts PID and other guest selectors through
+  [`SecCodeCopyGuestWithAttributes`](https://github.com/apple-oss-distributions/Security/blob/db15acbe6a7f257a859ad9a3bb86097bfe0679d9/OSX/libsecurity_codesigning/lib/SecCode.h#L123-L190).
+  [`SecCodeCheckValidity`](https://github.com/apple-oss-distributions/Security/blob/db15acbe6a7f257a859ad9a3bb86097bfe0679d9/OSX/libsecurity_codesigning/lib/SecCode.h#L217-L227)
+  validates the dynamic code and its filesystem source against a requirement, while
+  [`SecCodeCopyDesignatedRequirement` and signing information](https://github.com/apple-oss-distributions/Security/blob/db15acbe6a7f257a859ad9a3bb86097bfe0679d9/OSX/libsecurity_codesigning/lib/SecCode.h#L307-L347)
+  expose signing identity. These APIs can strengthen executable identity; they do not bind code to
+  the accepted socket or internal Ollama request.
+
+### Pinned Ollama source findings
+
+- `GenerateHandler` obtains a scheduler runner and later sends one
+  [`CompletionRequest` to that exact in-process object](https://github.com/ollama/ollama/blob/42e911bc3d05798cad729cb474bf62f378cb2e26/server/routes.go#L693-L729).
+- The scheduler's
+  [`getRunner`](https://github.com/ollama/ollama/blob/42e911bc3d05798cad729cb474bf62f378cb2e26/server/sched.go#L174-L215)
+  chooses a loaded runner or queues a load. `useLoadedRunner` increments an internal refcount and
+  returns that `runnerRef` at
+  [`sched.go` lines 477-496](https://github.com/ollama/ollama/blob/42e911bc3d05798cad729cb474bf62f378cb2e26/server/sched.go#L477-L496).
+  New runner creation retains model, child PID, devices, options, and load state at
+  [`sched.go` lines 701-756](https://github.com/ollama/ollama/blob/42e911bc3d05798cad729cb474bf62f378cb2e26/server/sched.go#L701-L756).
+  The richer `runnerRef` state remains internal.
+- The llama-server path retains the child PID at
+  [`llama_server.go` lines 203-228](https://github.com/ollama/ollama/blob/42e911bc3d05798cad729cb474bf62f378cb2e26/llm/llama_server.go#L203-L228)
+  and starts the subprocess at
+  [`lines 426-442`](https://github.com/ollama/ollama/blob/42e911bc3d05798cad729cb474bf62f378cb2e26/llm/llama_server.go#L426-L442).
+  PID, argv, environment, and logs are not proof that the child served one exact request.
+- Completion builds a separate internal HTTP request and sends it to a runner loopback port at
+  [`llama_server.go` lines 1623-1742](https://github.com/ollama/ollama/blob/42e911bc3d05798cad729cb474bf62f378cb2e26/llm/llama_server.go#L1623-L1742).
+  The internal client
+  [disables keep-alive](https://github.com/ollama/ollama/blob/42e911bc3d05798cad729cb474bf62f378cb2e26/llm/llama_server.go#L194-L208),
+  so the completion uses a separate connection rather than a reusable content identity. No public
+  correlation token binds the external accepted socket, canonical request, scheduler `runnerRef`,
+  newly connected internal socket, and response.
+- `/api/ps` copies a scheduler snapshot into the public response at
+  [`routes.go` lines 2440-2462](https://github.com/ollama/ollama/blob/42e911bc3d05798cad729cb474bf62f378cb2e26/server/routes.go#L2440-L2462).
+  Its exact public type contains model/name, size, digest, details, expiry, `size_vram`, and context
+  length at
+  [`api/types.go` lines 856-865](https://github.com/ollama/ollama/blob/42e911bc3d05798cad729cb474bf62f378cb2e26/api/types.go#L856-L865).
+  It omits runner PID/process birth, backend/Metal state, load-instance identity, connection, and
+  request dispatch.
+
+### Candidate mechanism disposition
+
+| Candidate | Canonical status | Exact reason |
+|---|---|---|
+| Darwin owner and process-birth fields | `insufficient_snapshot` | Reduces PID reuse ambiguity but is separate from socket/request ownership. |
+| Darwin per-process FD/socket lookup | `insufficient_snapshot` | Endpoint, state, generation, and opaque handles are separate point-in-time calls with no retained request assertion. |
+| Darwin TCP PCB snapshot | `insufficient_snapshot` | Supports endpoint correlation heuristics, not atomic accept/owner/request continuity. |
+| Darwin dynamic code/signing identity | `insufficient_semantics` | Strengthens selected-process code identity but does not bind code to the accepted socket or internal dispatch. |
+| Ollama `/api/ps` | `unsupported_public_api` | Omits runner process identity, backend/Metal state, model-load instance, connection, and request correlation. |
+| Ollama internal scheduler state | `insufficient_semantics` | `runnerRef` and refcount are internal source behavior, not emitted signed runtime evidence. |
+| Ollama internal completion transport | `insufficient_semantics` | No unforgeable token spans external socket, scheduler runner, internal socket, and response. |
+| Ollama child-runner PID/launch data | `insufficient_semantics` | PID/argv/env/logs do not bind executable bytes, active backend, or exact request service. |
+| Future privileged accepted-socket assertion | `required_future_primitive` | Must retain stable kernel socket and process/audit identity through response; not implemented. |
+| Future Ollama cooperative assertion | `required_future_primitive` | Must bind request digest, runner/load/model closure, and actual Metal execution, then chain to socket evidence; not implemented. |
+
+The canonical verdict is `insufficient`. This is not a claim that Apple or Ollama can never expose
+the needed evidence. It is the narrower finding that the reviewed pinned public interfaces and
+source do not provide a nonprivileged, request-scoped, content-bound chain today. A future positive
+path requires both the privileged retained socket/process assertion and in-process Ollama
+cooperation; either one alone leaves a trust gap.
+
 ### Non-normative Ollama evidence
 
 - [Issue `#16860`](https://github.com/ollama/ollama/issues/16860) reports MLX prompt-cache restore

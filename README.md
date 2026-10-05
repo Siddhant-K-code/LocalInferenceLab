@@ -10,10 +10,13 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > The Ollama runner is implemented but fail-closed. It can prepare and verify exact prospective
 > packages offline and perform separately authorized read-only loopback preflight calls. The
 > additive `ollama_repeatability_study_declaration` schema 1.0 freezes the planned Qwen3 study
-> without probing Ollama or precreating a host-bound output marker. Observed generation and replay
-> remain disabled until the listening Ollama process owner and its active internal runner/Metal
-> state can be mechanically attested. Repository tests and recorded evidence use no-socket
-> fixtures: they do not contact Ollama, execute a model, or make a benchmark claim.
+> without probing Ollama or precreating a host-bound output marker. The additive schema-1.0
+> attestation assessment now records the reviewed result: public nonprivileged macOS and Ollama
+> surfaces are **insufficient** to content-bind the exact accepted connection and request to one
+> stable listener process and active runner/model/Metal instance through response. Observed
+> generation and replay therefore remain disabled. Repository tests and recorded evidence use
+> no-socket fixtures: they do not contact Ollama, inspect a live process, execute a model, or make
+> a benchmark claim.
 
 ## Trust boundary
 
@@ -39,7 +42,9 @@ preimage. A distinct identity authorization is consumed before
 four pre- and four post-request checks; a distinct generation authorization is consumed only after
 the pre-check passes. Neither gate can start Ollama, pull or mutate a model, follow a redirect, use
 a proxy, or retry. Production generation currently refuses before consumption or socket access
-because listener-process attestation is not yet portable and reviewed.
+because the canonical attestation verdict is `insufficient`. Loopback proves locality, not process
+authentication. Metadata identity and `/api/ps` load state do not prove which process accepted the
+connection or which internal runner and Metal backend serviced the exact request.
 
 ## Benchmark matrix
 
@@ -106,8 +111,8 @@ The declaration fixture separately freezes five prospective Qwen3 8B Q8 repeats:
 | Qwen3 manifest digest | `sha256:e56358ca25dd14db6853a9f68a92d717aaa6f0a94250a72d1a0f3d86a9f30130` |
 | Repeats / concurrency / attempts | 5 / 1 / 1 each |
 | Supported cache cohort | `cold_model_warm_process` only |
-| Declaration identity | `sha256:ebf8c3758c83c353e6e0bd9ab0f12d4aeb30ed9d7c1ed8f20669f7948f30022e` |
-| Synthetic declaration bundle root | `sha256:52d39c95991d3151423f9de455eb734bfe0d9a0e17f516f4ad05771bb9c9714a` |
+| Declaration identity | `sha256:24ba4d251493cccf5f95b95bf06782b88a6f4cb09b3f22bc512975250f695f59` |
+| Synthetic declaration bundle root | `sha256:00a7933522a88eaca321f8fdf2d01ccef389379bf28d2f661fb044bf1dfaf1c5` |
 | Physical network, socket, model, cloud, spend actions | 0 |
 
 The fixture is intentionally incomplete: no runtime artifact digest, selected internal runner,
@@ -116,6 +121,27 @@ instance, or authorization nonce is manufactured. Completeness and metadata-pref
 are separate from generation eligibility. Generation and generation replay remain ineligible
 specifically because schema 1.0 has no content-bound listener-owner or active internal
 runner/Metal attestation.
+
+The independent offline attestation fixture freezes the feasibility decision:
+
+| Result | Value |
+|---|---:|
+| Assessment schema | `ollama_attestation_assessment` 1.0 |
+| Assessment identity | `sha256:5fab901d52f9038f3db6776bf69545bf290cfa4499f1e428b7e1e2aee603446b` |
+| Feasibility identity | `sha256:d38b69ce1400cf9ff0974e48ae1161a24086069c44d2d124d84abe87f5e34b9f` |
+| Verdict identity | `sha256:a7aed7b4abe6360a5d7d365b7a87c98c0866bd37bbbaae693a98a03940398990` |
+| Verdict | `insufficient` |
+| Synthetic bundle root | `sha256:e7e96b3b44c624bf955b048ab1f95bac5e1d0bf3ab8448ebc32154993e3ff87f` |
+| Live process probes, sockets, subprocesses, Ollama/model actions | 0 |
+
+The record distinguishes normative requirements from candidate evidence and from the final
+verdict. Darwin `libproc`, TCP PCB data, and code-signing APIs are authoritative only for their
+documented fields; their separate snapshots do not create a request-scoped ownership assertion.
+Pinned Ollama source retains `runnerRef`, child PID, model state, and internal completion transport
+inside the server, but the public API does not export a content-bound chain. A future positive path
+would need both a privileged retained accepted-socket/process assertion and reviewed in-process
+Ollama cooperation binding the request digest, runner/load instance, model closure, and actual
+Metal execution through the response.
 
 ## CLI
 
@@ -139,6 +165,12 @@ localinferencelab ollama declaration-verify DECLARATION.json
 localinferencelab ollama declaration-inspect DECLARATION.json
 localinferencelab ollama declaration-fixture-compile OUTPUT_ROOT
 localinferencelab ollama declaration-replay CLOSED-BUNDLE
+localinferencelab ollama attestation-spec
+localinferencelab ollama attestation-create ASSESSMENT.json [--spec PINNED-SPEC.json]
+localinferencelab ollama attestation-verify ASSESSMENT.json
+localinferencelab ollama attestation-inspect ASSESSMENT.json
+localinferencelab ollama attestation-fixture-compile OUTPUT_ROOT
+localinferencelab ollama attestation-replay CLOSED-BUNDLE
 localinferencelab ollama authorize PACKAGE {preflight_only,identity_guard,generation} \
   AUTHORIZATION --nonce-file NONCE_FILE
 localinferencelab ollama preflight PACKAGE AUTHORIZATION OUTPUT_ROOT \
@@ -165,6 +197,14 @@ Filesystem paths and mutable model aliases are not identity. The metadata-prefli
 first run's exact package and committed preflight nonce, but remains separately unauthorized. With
 no packages those identities are `null`, and the declaration remains valid but explicitly
 incomplete and ineligible.
+
+The attestation commands are pure offline contract operations. `attestation-create` uses the
+built-in pinned feasibility specification unless an exact canonical copy is supplied. It has no
+live acquisition mode and cannot accept a transport or process probe. Verification recomputes the
+only supported verdict; changing a candidate, omitting a requirement, adding a positive
+attestation ID, or setting generation eligibility to true fails. `attestation-fixture-compile`
+publishes the source specification and derived assessment through the same closed-bundle custody
+path, and `attestation-replay` rebuilds the result with zero physical actions.
 
 Ollama packages require an explicit `:local` request name. The canonical response/tag name is
 derived mechanically by removing `:local` and adding `:latest` only when no tag was supplied; it is
@@ -229,10 +269,11 @@ The project does not claim that:
 
 1. Review the frozen Qwen3 declaration and fill only evidence obtainable without model or network
    action.
-2. Define and independently review a schema that content-binds listener ownership and active
-   internal runner/Metal attestation before creating any generation authorization artifact.
+2. Design a separately authorized future milestone for the two primitives named by the negative
+   assessment: privileged accepted-socket/process continuity plus in-process Ollama
+   request-to-runner/model/Metal cooperation.
 3. Add separately authorized, preinstalled-resource runners for other backends.
-4. Publish observed bundles only after provenance and privacy review.
+4. Publish observed bundles only after provenance, privacy, and positive-attestation review.
 5. Define a typed, indexed mapping-artifact protocol before any mapped cross-representation study.
 
 ## Development

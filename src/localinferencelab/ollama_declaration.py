@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import stat
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +16,7 @@ from localinferencelab.canonical import (
     decode_bytes,
     digest_bytes,
     encode_bytes,
+    load_canonical_json_file,
     load_json_bytes,
     validate_json_value,
 )
@@ -26,6 +26,7 @@ from localinferencelab.ollama import (
     build_generate_request,
     verify_prospective_package,
 )
+from localinferencelab.ollama_attestation import build_attestation_assessment
 
 SCHEMA_VERSION = "1.0"
 FOUNDATION_COMMIT = "7f89682bdc50a944cf74e4729f5acffa48dc6f1a"
@@ -116,31 +117,6 @@ def _optional_sha256(value: JsonValue, label: str) -> str | None:
     return None if value is None else _sha256(value, label)
 
 
-def _strict_canonical_file(path: Path, label: str) -> JsonValue:
-    flags = os.O_RDONLY
-    if hasattr(os, "O_CLOEXEC"):
-        flags |= os.O_CLOEXEC
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    descriptor = os.open(path, flags)
-    try:
-        metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode):
-            raise ContractError(f"{label} must be a regular file")
-        blocks: list[bytes] = []
-        while block := os.read(descriptor, 1024 * 1024):
-            blocks.append(block)
-        data = b"".join(blocks)
-        if len(data) != metadata.st_size:
-            raise ContractError(f"{label} changed while it was read")
-    finally:
-        os.close(descriptor)
-    value = load_json_bytes(data)
-    if canonical_json(value) != data:
-        raise ContractError(f"{label} must use canonical JSON bytes")
-    return value
-
-
 def _canonical_bytes(data: bytes, label: str) -> JsonValue:
     value = load_json_bytes(data)
     if canonical_json(value) != data:
@@ -157,6 +133,7 @@ def _foundation_contract() -> dict[str, JsonValue]:
         "ollama_runner_contract_schema": RUNNER_CONTRACT_SCHEMA,
         "ollama_prospective_package_schema": PROSPECTIVE_PACKAGE_SCHEMA,
         "ollama_repeatability_declaration_schema": SCHEMA_VERSION,
+        "ollama_attestation_assessment_schema": SCHEMA_VERSION,
     }
     return {
         "descriptor": descriptor,
@@ -1096,6 +1073,12 @@ def build_study_declaration(
     identity = _mapping(spec["known_identity"], "known_identity")
     missing = _missing_fields(identity, bindings)
     complete = not missing
+    attestation_assessment = build_attestation_assessment()
+    attestation_verdict = _mapping(
+        attestation_assessment["verdict"],
+        "attestation_assessment.verdict",
+    )
+    attestation_verdict_id = attestation_assessment["verdict_id"]
     eligibility: dict[str, JsonValue] = {
         "declaration_completeness": {
             "status": "complete" if complete else "incomplete",
@@ -1109,6 +1092,8 @@ def build_study_declaration(
         "observed_generation": {
             "decision": "ineligible",
             "trust_gate_blockers": list(_ATTESTATION_GATES),
+            "attestation_verdict_id": attestation_verdict_id,
+            "attestation_decision": attestation_verdict["decision"],
             "attestation_content_bound": False,
             "authorization_may_be_consumed": False,
             "socket_may_be_opened": False,
@@ -1117,6 +1102,8 @@ def build_study_declaration(
         "observed_generation_replay": {
             "decision": "ineligible",
             "trust_gate_blockers": list(_ATTESTATION_GATES),
+            "attestation_verdict_id": attestation_verdict_id,
+            "attestation_decision": attestation_verdict["decision"],
             "attestation_content_bound": False,
         },
     }
@@ -1137,7 +1124,11 @@ def build_study_declaration(
         "analysis_policy": _analysis_policy(),
         "custody_policy": _custody_policy(bindings),
         "attestation_gate": {
-            "schema_status": "not_available_in_schema_1_0",
+            "schema_status": "feasibility_schema_1_0_no_positive_attestor",
+            "attestation_assessment_id": attestation_assessment["assessment_id"],
+            "attestation_feasibility_id": attestation_assessment["feasibility_id"],
+            "attestation_verdict_id": attestation_verdict_id,
+            "attestation_verdict": attestation_verdict["decision"],
             "listener_owner_attestation_id": None,
             "active_internal_runner_metal_attestation_id": None,
             "gate_may_be_forged_by_caller": False,
@@ -1217,7 +1208,7 @@ def write_study_declaration(path: Path, value: JsonValue) -> None:
 
 def load_study_declaration(path: Path) -> dict[str, JsonValue]:
     """Load one strict canonical declaration without following a final symlink."""
-    return verify_study_declaration(_strict_canonical_file(path, "study declaration"))
+    return verify_study_declaration(load_canonical_json_file(path, "study declaration"))
 
 
 def qwen3_repeatability_study_spec() -> dict[str, JsonValue]:

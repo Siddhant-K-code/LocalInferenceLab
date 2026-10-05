@@ -16,6 +16,7 @@ Every trust transition is represented by immutable canonical data.
 | `backends.py` | Static artifact digest and non-executable backend plans | Read-only |
 | `ollama.py` | Prospective package, direct numeric-loopback transport, one-shot authorization, bounded execution, terminal custody/replay | Explicit output-root writes; loopback calls only after authorization |
 | `ollama_declaration.py` | Canonical multi-run study intent, exact package closure binding, eligibility, and offline declaration fixture replay | Explicit declaration/fixture writes only; no host probe, socket, marker, authorization, or model |
+| `ollama_attestation.py` | Pinned listener/runner feasibility requirements, candidate evidence, derived negative verdict, and offline fixture replay | Explicit assessment/fixture writes only; no live process probe, socket, subprocess, Ollama call, authorization, output-root consumption, or model |
 | `ollama_fixture.py` | Deterministic accepted/invalid/refused sealed-script evidence | Writes synthetic inputs and closed bundles; no socket or model |
 | `analysis.py` | Cohort-isolated exact equality and native metric summaries | None |
 | `custody.py` | Closed-set index, atomic publication, verification, replay | Writes only an explicit output root |
@@ -26,7 +27,8 @@ No module imports an ML framework, starts a process, or downloads/mutates a mode
 `LoopbackHTTPTransport` can open a socket. An explicit, separately authorized Ollama `preflight`
 may use it after output-root and artifact validation. The `execute` surface validates its package
 and artifacts but production-refuses before authorization consumption or socket access until the
-listening process and active runner/Metal state can be mechanically attested.
+listening process and active runner/Metal state can be mechanically attested. The attestation
+module intentionally imports no socket, subprocess, HTTP transport, host probe, or runtime probe.
 
 ## Identity graph
 
@@ -130,7 +132,40 @@ a valid incomplete declaration rather than fabricated evidence.
 Declaration construction never initializes an output root or creates authorization. Metadata
 preflight remains separately authorized. Generation and observed-generation replay remain
 schema-ineligible with exactly two trust-gate blockers: missing content-bound listener-owner
-attestation and missing content-bound active internal runner/Metal attestation.
+attestation and missing content-bound active internal runner/Metal attestation. The declaration
+now also binds the exact canonical `insufficient` attestation verdict ID; a caller cannot replace
+that record with eligibility fields.
+
+## Ollama attestation feasibility layer
+
+The additive `ollama_attestation_feasibility_spec`,
+`ollama_attestation_feasibility`, `ollama_attestation_verdict`, and enclosing
+`ollama_attestation_assessment` records remain schema 1.0. They bind declaration commit
+`8f97e3de113bc334ce6928c3d135edea6fbe3b8c`, pinned Ollama revision
+`42e911bc3d05798cad729cb474bf62f378cb2e26`, the exact generation request digest, the declared
+IPv4 numeric-loopback endpoint, and a narrow macOS 27.0.1/arm64/non-root/no-special-entitlement
+scope. Public XNU source parity with that exact OS build is explicitly not claimed.
+
+The record has three separate layers:
+
+1. Normative requirements cover the exact accepted connection, owner UID and anti-reuse process
+   identity, no-follow executable closure, socket continuity, external-request-to-scheduler
+   correlation, exact runner/process/model-load identity, model closure, actual Metal execution,
+   and continuity through the response.
+2. Candidate mechanisms record precise authority and weakness. `libproc`, TCP PCB, and code-signing
+   fields are useful observations but do not atomically bind the retained request. `/api/ps`
+   exposes load metadata, not runner PID, load-instance identity, backend, Metal state, or request
+   dispatch. Pinned internal source shows the required `runnerRef` and child PID exist only inside
+   Ollama.
+3. The verdict is derived as `insufficient`; all requirements remain missing and both observed
+   generation eligibility booleans are fixed false. The schema contains no positive verdict path.
+
+A positive future path needs two cooperating assertions: a privileged kernel mechanism retaining
+the accepted socket and stable process/audit identity through response, and reviewed in-process
+Ollama evidence that binds the canonical request to one scheduler runner/load instance, runner
+artifact/model closure, and actual backend/Metal execution. Those assertions then need one
+cryptographic request-scoped chain. A port match, `lsof`, process list, `/api/ps`, argv,
+environment, log line, model tag, `size_vram`, or pre/post sample cannot substitute for that chain.
 
 ## Atomic publication
 
@@ -192,6 +227,12 @@ Declaration fixture replay is a separate closed-set path. It reconstructs the de
 canonical source specification, recomputes every derived request, schedule, policy, eligibility
 decision, identity, and synthetic bundle root, and requires explicit zero physical network, socket,
 model, cloud, and spend actions. It does not admit observed evidence.
+
+Attestation fixture replay is another closed-set path. It verifies the pinned source specification,
+rebuilds the assessment and every identity, derives the negative verdict, and requires exact zero
+counts for live process probes, socket inspection/calls, subprocesses, Ollama requests,
+authorization/output-root consumption, model activity, external network, cloud, and spend.
+Receipt-consistent coordinated tampering still fails semantic reconstruction.
 
 ## Privacy boundary
 

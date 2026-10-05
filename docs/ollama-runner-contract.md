@@ -13,6 +13,11 @@ Implementation evidence is not an observed model benchmark. It establishes no de
 memory, energy, backend quality, or model quality claim. Seed and temperature are controls, not
 guarantees.
 
+Loopback is locality, not process authentication. A numeric peer check proves where the client
+connected, not which executable accepted the connection. Metadata identity, model tags, process
+names, `/api/ps`, `size_vram`, argv, environment, and logs do not prove that the same process,
+internal runner, model-load instance, or Metal backend serviced one exact request.
+
 ## Frozen package
 
 `ollama_prospective_package` embeds and content-binds:
@@ -53,7 +58,8 @@ Declaration completeness, metadata-preflight authorization, and generation eligi
 separate outputs. Metadata preflight always requires its own one-shot authorization. Observed
 generation and observed replay remain ineligible regardless of declaration completeness until a
 future reviewed schema content-binds both listener ownership and active internal runner/Metal
-attestation.
+attestation. The declaration now binds the reviewed schema-1.0 feasibility verdict, which is
+`insufficient`; this records why the gate is closed without creating a positive attestation.
 
 The request model name must end in `:local`. Pinned Ollama source permits an unspecified model
 reference backed by `RemoteHost`/`RemoteModel` metadata to proxy externally; `:local` turns such a
@@ -70,6 +76,10 @@ credentials, fragments, alternate paths, Unix forwarding, TLS ambiguity, redirec
 encoding, duplicate content lengths, and environment proxy discovery are unavailable by
 construction. `HTTPConnection` connects directly to the numeric address. The connected peer is
 checked against the exact declared loopback address before request bytes are sent.
+Each outer API call creates its own connection; agreement across separate preflight, generation,
+and postflight peers cannot prove that one stable process owned every connection. Pinned Ollama
+also disables keep-alive for its separate internal runner HTTP client, so process/port correlation
+cannot substitute for an external-to-internal request identity.
 
 Every call has one monotonic absolute deadline spanning connect, peer verification, request send,
 response headers, and every body read; it is not a fresh timeout per socket operation. Each call
@@ -106,6 +116,20 @@ unreviewed runner/Metal evidence blocks package construction, and production gen
 refuses before authorization consumption or socket access until a portable listener-process and
 active-runner attestor is implemented. The synthetic path remains executable because it cannot
 open a socket or perform model work.
+
+The feasibility assessment evaluated Darwin process owner/start fields, per-process FD/socket
+records, TCP PCB generations, dynamic code identity, `/api/ps`, and pinned Ollama scheduler,
+runner-launch, and completion-dispatch source. Each candidate is explicitly marked
+`insufficient_snapshot`, `insufficient_semantics`, or `unsupported_public_api`. Separate snapshots
+cannot close listener rebind, PID reuse, accepted-socket replacement, child-runner replacement, or
+model-load drift across the request. Pinned Ollama holds the scheduler `runnerRef`, refcount, child
+PID, and internal completion call only in process; it does not publish a signed request-scoped
+chain or active Metal execution assertion.
+
+Future positive eligibility would require both a privileged retained accepted-socket/process
+assertion and in-process Ollama cooperation that emits the exact external request digest,
+runner/load instance, runner artifact, model closure, and actual backend/Metal state through the
+response. No live acquisition command exists in this milestone.
 
 ## Authorization and pre-action accounting
 

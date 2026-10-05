@@ -3225,8 +3225,8 @@ def _execute_at(
         if marker["binding_mode"] != "physical_instance":
             raise ContractError("observed execution requires a physical output-root binding")
         raise ContractError(
-            "observed generation is disabled until the listening process and active "
-            "runner/Metal state can be mechanically attested"
+            "observed generation is disabled until mechanically attested: the pinned "
+            "listener/runner verdict is insufficient and no positive schema exists"
         )
     _check_artifacts(package, runtime_artifact, model_manifest, blob_root)
     _consume_authorization_at(
@@ -3998,7 +3998,8 @@ def replay_ollama_bundle(bundle: Path) -> OllamaReplayResult:
     synthetic = evidence_kind == "synthetic_transport_contract_evidence"
     if not synthetic:
         raise ContractError(
-            "observed execution replay is disabled until attestation is required by schema"
+            "observed execution replay is disabled until mechanically attested: the pinned "
+            "listener/runner verdict is insufficient and no positive schema exists"
         )
     if (
         source["record_type"] != "ollama_evidence_source"
