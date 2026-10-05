@@ -44,23 +44,29 @@ change the foundation, Ollama package, declaration, or attestation schemas or id
 Runtime and model compilers operate only on explicit paths. They traverse from retained directory
 descriptors, reject symlinks/special files/hard-link aliases/path injection, enforce fixed depth,
 count, path and byte bounds, and store only relative file names plus device/inode/mode/size/digest
-identity. The runtime closure additionally binds the regular-file Python executable, declared
-implementation/version/ABI/platform, every direct distribution metadata record and complete
-package-root file closure, selected MLX/MLX-LM modules, future worker bytes, and a closed
-environment. The model closure requires materialized config/tokenizer/weight files, exact shard
-index agreement, chat-template identity, and absence of executable/custom/remote code.
+identity. The runtime manifest binds the regular-file Python executable, declared
+implementation/version/ABI/platform, every direct distribution metadata record and complete byte
+closure of the explicitly supplied package root, selected MLX/MLX-LM module-file declarations,
+future worker bytes, and a closed environment. Raw `Requires-Dist` headers are recorded but not
+evaluated; applicable dependency distributions, the Python standard library, `lib-dynload`,
+`libpython`, dynamic loader, native libraries, and frameworks are not proven. The model closure
+requires materialized config/tokenizer/weight files, exact shard index agreement, chat-template
+identity, and absence of executable/custom/remote code.
 
-Static closure evidence remains prospective. The built-in study does not search for a model and
-therefore reports no real model manifest. Even when explicit manifests are supplied, execution is
-ineligible pending exact memory limits, output-root binding, one-shot authorization, process birth,
-active imported-module closure, exact cache classes, worker-side backend/stream facts, and final
-synchronization evidence.
+Static supplied package-root/model evidence remains prospective. The built-in study does not
+search for a model and therefore reports no real model manifest. Even when explicit manifests are
+supplied, execution is
+ineligible pending applicable dependency and Python standard-library/native-loader closure,
+production private-IPC/protocol/result-validation implementation, exact memory limits, output-root
+binding, one-shot authorization, process birth, active imported-module closure, exact cache
+classes, worker-side backend/stream facts, and final synchronization evidence.
 
 The future protocol removes the Ollama listener-authentication gap by making the parent create and
 own a one-shot worker and inherited `AF_UNIX` socketpair descriptor. It defines a fixed bounded
 canonical-message sequence and forbids bind/listen/accept, DNS, proxies, redirects, arbitrary
 commands, shell, unrelated descriptors, retries, warmups, concurrency, and selective reruns. This
-PR records that architecture but intentionally contains no launch or IPC implementation.
+PR records that architecture but intentionally contains no launch, private IPC, protocol
+state-machine, or worker-result-validation implementation.
 
 Pinned MLX APIs can report default device, compiled Metal availability, and synchronized stream
 completion. They cannot programmatically prove per-kernel Metal dispatch. The eligibility and

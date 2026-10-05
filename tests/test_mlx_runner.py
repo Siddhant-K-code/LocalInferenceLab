@@ -163,6 +163,14 @@ def _reidentify(value: dict[str, JsonValue], identity_field: str) -> None:
     value[identity_field] = canonical_identity(content)
 
 
+_PERMANENT_RUNTIME_BLOCKERS = {
+    "applicable_dependency_distribution_closure",
+    "production_worker_private_ipc_protocol_and_result_validation_implementation",
+    "python_native_runtime_and_dynamic_loader_closure",
+    "python_standard_library_closure",
+}
+
+
 def test_pinned_spec_defines_private_worker_and_closed_execution_gate() -> None:
     spec = verify_mlx_study_spec(mlx_study_spec())
     binding = _dict(spec["contract_binding"])
@@ -195,13 +203,23 @@ def test_pinned_spec_defines_private_worker_and_closed_execution_gate() -> None:
     assert result["generated_token_ids"] == "required_exact_sequence"
     assert result["ttft"] == "unavailable_not_manufactured"
     assert "do_not_prove" in cast("str", result["backend_fact_limit"])
+    runtime_closure = _dict(spec["runtime_closure"])
+    assert runtime_closure["supplied_package_root_byte_closure"] == ("complete_for_explicit_root")
+    assert runtime_closure["requires_dist_headers"] == "recorded_not_parsed_or_evaluated"
+    assert runtime_closure["applicable_dependency_distribution_closure"] == (
+        "required_future_not_proven"
+    )
+    assert runtime_closure["python_standard_library_closure"] == "required_future_not_proven"
+    assert runtime_closure["python_native_runtime_and_dynamic_loader_closure"] == (
+        "required_future_not_proven"
+    )
     gate = _dict(spec["execution_gate"])
     assert gate["production_worker_start_implemented"] is False
     assert gate["observed_execution_reachable"] is False
     assert gate["authorization_may_be_consumed"] is False
 
 
-def test_runtime_and_model_compilers_are_static_complete_closures(tmp_path: Path) -> None:
+def test_runtime_supplied_root_and_model_compilers_are_static_closures(tmp_path: Path) -> None:
     runtime, interpreter, worker = _write_runtime_tree(tmp_path)
     runtime_manifest = compile_runtime_manifest(
         _runtime_scan_spec(),
@@ -237,6 +255,47 @@ def test_runtime_and_model_compilers_are_static_complete_closures(tmp_path: Path
     assert load_model_manifest(model_path) == model_manifest
 
 
+def test_absent_requires_dist_remains_static_evidence_and_permanent_blocker(
+    tmp_path: Path,
+) -> None:
+    runtime, interpreter, worker = _write_runtime_tree(tmp_path)
+    (runtime / "mlx_lm-0.30.6.dist-info" / "METADATA").write_bytes(
+        b"Metadata-Version: 2.4\n"
+        b"Name: mlx-lm\n"
+        b"Version: 0.30.6\n"
+        b'Requires-Dist: absent-runtime-dependency>=9; python_version >= "3.0"\n'
+        b"Requires-Dist: mlx==0.29.3\n\n"
+    )
+    runtime_manifest = compile_runtime_manifest(
+        _runtime_scan_spec(),
+        runtime,
+        interpreter,
+        worker,
+    )
+    mlx_lm_distribution = next(
+        _dict(item)
+        for item in _list(runtime_manifest["distributions"])
+        if _dict(item)["name"] == "mlx-lm"
+    )
+    assert 'absent-runtime-dependency>=9; python_version >= "3.0"' in _list(
+        mlx_lm_distribution["requires_dist"]
+    )
+
+    model_manifest = compile_model_manifest(_write_model_tree(tmp_path))
+    inspection = mlx_eligibility_inspection(
+        build_mlx_prospective_package(
+            mlx_study_spec(),
+            runtime_manifest=runtime_manifest,
+            model_manifest=model_manifest,
+        )
+    )
+    missing = set(cast("list[str]", inspection["missing_requirements"]))
+    assert _PERMANENT_RUNTIME_BLOCKERS.issubset(missing)
+    assert "non_synthetic_runtime_manifest" not in missing
+    assert "non_synthetic_model_manifest" not in missing
+    assert inspection["worker_process_may_start"] is False
+
+
 def test_builtin_package_is_explicitly_incomplete_and_ineligible() -> None:
     package = build_mlx_prospective_package(mlx_study_spec())
     inspection = mlx_eligibility_inspection(package)
@@ -255,6 +314,7 @@ def test_builtin_package_is_explicitly_incomplete_and_ineligible() -> None:
         "active_backend_device_evidence",
         "one_shot_authorization",
     }.issubset(missing)
+    assert _PERMANENT_RUNTIME_BLOCKERS.issubset(missing)
     assert inspection["physical_gpu_actions"] == 0
     assert inspection["model_actions"] == 0
     assert inspection["network_actions"] == 0
@@ -274,6 +334,7 @@ def test_static_manifests_do_not_unlock_execution() -> None:
     assert "non_synthetic_model_manifest" in missing
     assert "exact_runtime_manifest" not in missing
     assert "exact_local_model_manifest" not in missing
+    assert _PERMANENT_RUNTIME_BLOCKERS.issubset(missing)
 
 
 def test_synthetic_manifests_cannot_be_relabeled_as_filesystem_evidence() -> None:
@@ -635,6 +696,19 @@ def test_package_rejects_forged_eligibility_identity_and_noncanonical_bytes(
     with pytest.raises(ContractError, match="integer"):
         verify_mlx_prospective_package(package)
 
+    package = _copy(
+        build_mlx_prospective_package(
+            mlx_study_spec(),
+            runtime_manifest=synthetic_runtime_manifest(),
+            model_manifest=synthetic_model_manifest(),
+        )
+    )
+    missing = _list(_dict(package["eligibility"])["missing_requirements"])
+    missing.remove("applicable_dependency_distribution_closure")
+    _reidentify(package, "package_id")
+    with pytest.raises(ContractError, match="semantic or eligibility drift"):
+        verify_mlx_prospective_package(package)
+
     package_path = tmp_path / "package.json"
     package_path.write_text(
         json.dumps(build_mlx_prospective_package(mlx_study_spec()), indent=2),
@@ -660,6 +734,7 @@ def test_fixture_is_byte_identical_refused_and_closed(tmp_path: Path) -> None:
     assert first.name == second.name
     assert first_result == second_result
     assert first_result.decision == "ineligible"
+    assert first_result.missing_requirements == 15
     assert first_result.physical_actions == 0
     assert read_closed_bundle(first)[1] == read_closed_bundle(second)[1]
     assert replay_mlx_fixture(first) == first_result
@@ -789,12 +864,34 @@ def test_capability_report_never_overclaims_backend_or_metal() -> None:
     report = mlx_capability_report()
     assert report["architecture"] == "parent_owned_private_inherited_descriptor_worker"
     assert report["production_worker_launch"] is False
+    assert report["supplied_package_root_byte_closure"] is True
+    assert report["applicable_dependency_distribution_closure"] is False
+    assert report["python_standard_library_closure"] is False
+    assert report["python_native_runtime_and_dynamic_loader_closure"] is False
+    assert (
+        report["production_worker_private_ipc_protocol_and_result_validation_implementation"]
+        is False
+    )
     assert report["runtime_import"] is False
     assert report["device_query"] is False
     assert report["metal_initialization"] is False
     assert report["inference"] is False
     assert report["subprocess"] is False
     assert report["metal_claim"] == "per_kernel_execution_not_programmatically_provable"
+
+
+def test_mlx_cli_help_describes_static_manifest_scope_exactly(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        run(["mlx", "--help"])
+    assert exit_info.value.code == 0
+    captured = capfd.readouterr()
+    assert captured.err == ""
+    assert "supplied package-root byte closure" in captured.out
+    assert "optional static manifests" in captured.out
+    assert "explicit runtime closure" not in captured.out
+    assert "optional static closures" not in captured.out
 
 
 def test_mlx_cli_spec_manifest_package_inspection_fixture_and_replay(

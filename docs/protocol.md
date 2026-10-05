@@ -164,16 +164,19 @@ generate_once -> result_or_terminal_error -> shutdown -> shutdown_ack
 ```
 
 The parent owns process birth and must bind PID/birth identity, executable bytes, worker bytes,
-runtime/model closure, actual selected module files, closed environment, cache class/state,
-default device, compiled Metal availability, generation-stream device, and exact memory limits
-before revealing the committed one-shot nonce. Unrelated descriptors, shell, user commands,
-network aliases, retries, warmups, concurrency, and reruns are forbidden. The future ledger
-reserves every action before side effects and closes accepted/invalid/refused/interrupted outcomes
-through the existing atomic bundle custody.
+applicable dependency distributions, Python standard-library/native-runtime/dynamic-loader bytes,
+the supplied package-root and model closures, actual selected module files, closed environment,
+cache class/state, default device, compiled Metal availability, generation-stream device, and
+exact memory limits before revealing the committed one-shot nonce. Unrelated descriptors, shell,
+user commands, network aliases, retries, warmups, concurrency, and reruns are forbidden. The
+future ledger reserves every action before side effects and closes accepted, invalid, refused, or
+interrupted outcomes through the existing atomic bundle custody.
 
-Schema 1.0 defines but does not implement that state machine. No launch, socketpair, authorization,
-model load, or generation function is reachable. The deterministic fixture reconstructs a refused
-package from sealed fake byte closures rather than simulating success.
+Schema 1.0 defines but does not implement that state machine. It also does not implement the
+private-IPC framing, protocol order enforcement, timeout/termination logic, or untrusted worker
+result validation. No launch, socketpair, authorization, model load, or generation function is
+reachable. The deterministic fixture reconstructs a refused package from sealed fake byte
+closures rather than simulating success.
 
 The pinned sampler is greedy temperature-zero argmax. The seed is still recorded and must be set on
 the generation thread because MLX random state is thread-local, but greedy sampling consumes no

@@ -125,7 +125,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     runtime_manifest = mlx_commands.add_parser(
         "runtime-manifest-create",
-        help="compile an explicit runtime closure without imports or execution",
+        help="compile an explicit supplied package-root byte closure without imports or execution",
     )
     runtime_manifest.add_argument("scan_spec", type=Path)
     runtime_manifest.add_argument("runtime_root", type=Path)
@@ -140,7 +140,7 @@ def _parser() -> argparse.ArgumentParser:
     model_manifest.add_argument("output", type=Path)
     mlx_prospective = mlx_commands.add_parser(
         "prospective-create",
-        help="create a fail-closed direct-worker package from optional static closures",
+        help="create a fail-closed direct-worker package from optional static manifests",
     )
     mlx_prospective.add_argument("spec", type=Path)
     mlx_prospective.add_argument("output", type=Path)

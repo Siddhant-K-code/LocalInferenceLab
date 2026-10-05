@@ -374,7 +374,9 @@ def _reject_runtime_injection(path: str) -> None:
     basename = pure_path.name.casefold()
     top_level_stem = pure_path.parts[0].split(".", 1)[0].casefold()
     if basename.endswith((".pth", ".egg-link")) or top_level_stem in _FORBIDDEN_RUNTIME_STEMS:
-        raise ContractError(f"runtime closure contains import-path injection: {path}")
+        raise ContractError(
+            f"supplied package-root byte closure contains import-path injection: {path}"
+        )
 
 
 def _read_relative_file(
@@ -470,7 +472,7 @@ def verify_runtime_scan_spec(value: JsonValue) -> dict[str, JsonValue]:
         )
         distributions.append({"name": name, "version": version})
     if len(distributions) < MIN_REQUIRED_DISTRIBUTIONS:
-        raise ContractError("runtime scan must bind MLX, MLX-LM, and their dependencies")
+        raise ContractError("runtime scan must bind at least MLX and MLX-LM")
     names = [cast("str", item["name"]) for item in distributions]
     if names != sorted(names) or len(names) != len(set(names)):
         raise ContractError("expected distributions must be unique and sorted")
@@ -807,7 +809,7 @@ def compile_runtime_manifest(
     interpreter: Path,
     worker_program: Path,
 ) -> dict[str, JsonValue]:
-    """Compile a no-import runtime closure from explicitly supplied local paths."""
+    """Compile a no-import supplied package-root byte closure."""
     spec = verify_runtime_scan_spec(scan_spec)
     root_descriptor = _open_directory(runtime_root)
     try:
@@ -820,7 +822,8 @@ def compile_runtime_manifest(
             module_path = cast("str", module)
             if module_path not in file_records:
                 raise ContractError(
-                    f"selected module is absent from runtime closure: {module_path}"
+                    "selected module is absent from supplied package-root byte closure: "
+                    f"{module_path}"
                 )
         distributions = _runtime_distributions(root_descriptor, files)
     finally:
@@ -875,7 +878,7 @@ def compile_runtime_manifest(
 
 
 def verify_runtime_manifest(value: JsonValue) -> dict[str, JsonValue]:
-    """Verify one strict runtime closure without importing or executing it."""
+    """Verify one supplied package-root byte closure without importing it."""
     manifest = _mapping(value, "mlx_runtime_manifest")
     fields = {
         "record_type",

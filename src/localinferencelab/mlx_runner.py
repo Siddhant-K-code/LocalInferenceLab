@@ -233,9 +233,13 @@ def mlx_study_spec() -> dict[str, JsonValue]:
         "runtime_closure": {
             "python_executable": "no_follow_regular_file_identity_and_digest",
             "python_implementation_version_abi_platform": "required_exact",
-            "distribution_metadata_and_package_files": "required_complete",
-            "selected_imported_module_files": "required_exact",
-            "dependency_distributions": "required_complete",
+            "supplied_package_root_byte_closure": "complete_for_explicit_root",
+            "direct_distribution_metadata": "complete_for_supplied_root",
+            "requires_dist_headers": "recorded_not_parsed_or_evaluated",
+            "applicable_dependency_distribution_closure": "required_future_not_proven",
+            "python_standard_library_closure": "required_future_not_proven",
+            "python_native_runtime_and_dynamic_loader_closure": "required_future_not_proven",
+            "selected_module_file_declarations": "required_exact_within_supplied_root",
             "worker_program_bytes": "required_exact",
             "environment": "closed_allowlist_execve_style",
             "interpreter_startup_flags": ["-I", "-S", "-E", "-s"],
@@ -438,11 +442,15 @@ def _missing_requirements(
 ) -> list[JsonValue]:
     missing = {
         "active_backend_device_evidence",
+        "applicable_dependency_distribution_closure",
         "cache_limit_bytes",
         "exact_cache_class_worker_evidence",
         "final_stream_synchronization_evidence",
         "one_shot_authorization",
         "output_root_physical_binding",
+        "production_worker_private_ipc_protocol_and_result_validation_implementation",
+        "python_native_runtime_and_dynamic_loader_closure",
+        "python_standard_library_closure",
         "worker_process_birth_and_executable_binding",
         "worker_reported_imported_module_closure",
         "wired_limit_bytes",
@@ -493,8 +501,10 @@ def _assemble_mlx_prospective_package(
         "missing_requirements": missing,
         "exact_metal_kernel_execution": "unavailable_through_official_programmatic_api",
         "reason": (
-            "static closures do not attest the future worker process, imported runtime, "
-            "active backend, stream completion, limits, output root, or authorization"
+            "static supplied-root bytes do not prove applicable dependency, Python standard "
+            "library, native runtime, or dynamic-loader closure; production private IPC, "
+            "protocol, and result validation are not implemented; future process, imported "
+            "runtime, backend, stream, limits, output root, and authorization are unattested"
         ),
     }
     package: dict[str, JsonValue] = {
@@ -633,10 +643,15 @@ def mlx_capability_report() -> dict[str, JsonValue]:
         "schema_version": SCHEMA_VERSION,
         "architecture": "parent_owned_private_inherited_descriptor_worker",
         "runtime_manifest_compiler": True,
+        "supplied_package_root_byte_closure": True,
+        "applicable_dependency_distribution_closure": False,
+        "python_standard_library_closure": False,
+        "python_native_runtime_and_dynamic_loader_closure": False,
         "model_manifest_compiler": True,
         "prospective_package": True,
         "offline_fixture_replay": True,
         "production_worker_launch": False,
+        "production_worker_private_ipc_protocol_and_result_validation_implementation": False,
         "runtime_import": False,
         "model_load": False,
         "device_query": False,

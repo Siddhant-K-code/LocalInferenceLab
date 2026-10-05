@@ -10,17 +10,20 @@ localinferencelab mlx capability-report
 localinferencelab mlx prospective-spec > mlx-study-spec.json
 ```
 
-The capability report must show `production_worker_launch=false`, `runtime_import=false`,
+The capability report must show `production_worker_launch=false`,
+`production_worker_private_ipc_protocol_and_result_validation_implementation=false`,
+`applicable_dependency_distribution_closure=false`, `python_standard_library_closure=false`,
+`python_native_runtime_and_dynamic_loader_closure=false`, `runtime_import=false`,
 `device_query=false`, `metal_initialization=false`, `inference=false`, `network=false`, and
 `subprocess=false`.
 
-## 2. Optionally compile an explicit runtime closure
+## 2. Optionally compile an explicit supplied package-root byte closure
 
 Prepare a canonical `mlx_runtime_scan_spec` 1.0 containing:
 
 - exact Python implementation, version, ABI, and platform strings;
-- the unique sorted set of every distribution name/version present under the explicit runtime root,
-  including `mlx` and `mlx-lm`;
+- the unique sorted set of every direct distribution name/version present under the explicit
+  package root, including `mlx` and `mlx-lm`;
 - the sorted selected module files, including `mlx/__init__.py`, `mlx_lm/__init__.py`,
   `generate.py`, `utils.py`, `sample_utils.py`, and `models/cache.py`;
 - the exact closed environment emitted by the contract.
@@ -36,8 +39,14 @@ localinferencelab mlx runtime-manifest-create \
 
 The command scans only the supplied paths. It neither imports nor executes their bytes. Symlinked
 virtual-environment interpreters, hard-linked cache files, `.pth`, editable installs, mutable
-aliases, ambiguous/incomplete distribution roots, or private-path injection fail closed. Do not
-copy or mutate an installed runtime merely to satisfy this milestone.
+aliases, unlisted direct metadata present in that root, or private-path injection fail closed. Do
+not copy or mutate an installed runtime merely to satisfy this milestone.
+
+The result proves only a complete byte closure of that supplied package root. Raw `Requires-Dist`
+headers are recorded but markers/extras are not evaluated, and applicable dependency
+distributions are not required. The interpreter's standard library, `lib-dynload`, `libpython`,
+dynamic loader, native shared libraries, and frameworks are also outside this manifest. Do not
+describe it as a complete Python dependency or execution-runtime closure.
 
 ## 3. Optionally compile an already identified local model closure
 
@@ -65,7 +74,7 @@ localinferencelab mlx prospective-create \
   mlx-study-spec.json mlx-prospective.json
 ```
 
-Or with both static closures:
+Or with both static manifests:
 
 ```bash
 localinferencelab mlx prospective-create \
@@ -81,9 +90,11 @@ localinferencelab mlx prospective-verify mlx-prospective.json
 localinferencelab mlx eligibility-inspect mlx-prospective.json
 ```
 
-Static closure completeness does not grant execution. The result remains ineligible because this
-PR has no worker start, process/import/backend synchronization attestation, exact memory limits,
-output-root instance, or one-shot authorization. No command exists to authorize or execute it.
+Static supplied-root/model closure completeness does not grant execution. The result remains
+ineligible because applicable dependency semantics, Python standard-library/native-loader closure,
+production private IPC/protocol/result validation, worker start, process/import/backend
+synchronization attestation, exact memory limits, output-root instance, and one-shot authorization
+are absent. No command exists to authorize or execute it.
 
 ## 5. Repository-only deterministic validation
 
@@ -106,8 +117,10 @@ record/index/receipt tampering.
 Do not add a launch by calling a generic subprocess helper. A separately reviewed versioned schema
 must implement, test, and authorize all of the following together:
 
-1. Retained exact interpreter/runtime/model descriptors and closure revalidation.
-2. Parent-created private inherited IPC with unrelated descriptors closed.
+1. Applicable dependency resolution plus exact Python standard-library, native-runtime,
+   dynamic-loader, interpreter, package-root, and model descriptor closure/revalidation.
+2. Parent-created private inherited IPC with unrelated descriptors closed, implemented frame/state
+   validation, bounded result validation, timeout, termination, and terminal-error behavior.
 3. Worker process-birth, executable, worker-byte, import-module, environment, device/backend, cache,
    limit, and stream identity bound before authorization.
 4. One-shot committed nonce custody and reserve-before-side-effect action ledger.

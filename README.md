@@ -19,8 +19,11 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > a benchmark claim.
 >
 > The direct MLX milestone avoids that listener gap by specifying a parent-owned private-descriptor
-> worker. Strict additive schema-1.0 records bind offline runtime/model closures, worker bytes, a
-> closed environment, finite protocol, exact controls, result semantics, and future custody.
+> worker. Strict additive schema-1.0 records bind a complete explicitly supplied package-root byte
+> closure, raw dependency metadata, model closure, worker bytes, a closed environment, finite
+> protocol design, exact controls, result semantics, and future custody. They do not prove
+> applicable dependency semantics, Python standard-library/native-loader closure, or a production
+> private-IPC/protocol/result-validation implementation; each remains an explicit blocker.
 > Production launch is absent. Repository code does not import installed MLX/MLX-LM modules,
 > initialize/query Metal, load a tokenizer/model, run inference, resolve/download a snapshot,
 > start a process, or open a socket. Its deterministic fixture is an ineligible refusal package,
@@ -59,8 +62,11 @@ connection or which internal runner and Metal backend serviced the exact request
 The MLX `W` node is contract-only. It freezes an inherited private `AF_UNIX` socketpair descriptor,
 bounded canonical-message order, one worker/request/attempt, concurrency 1, no retry/warmup/rerun,
 and exact same-process closure/backend/synchronization requirements. No socketpair or child process
-is created. Official MLX APIs cannot prove individual Metal kernels executed, so that claim remains
-unavailable.
+is created, and no production IPC/protocol/result validator is implemented. The static runtime
+manifest covers only its supplied package-root bytes: dependency markers/extras, applicable
+dependency distributions, Python standard-library bytes, `lib-dynload`, `libpython`, native shared
+libraries/frameworks, and the dynamic loader are not proven. Official MLX APIs cannot prove
+individual Metal kernels executed, so that claim remains unavailable.
 
 ## Benchmark matrix
 
@@ -111,9 +117,9 @@ The direct MLX refusal fixture deterministically produces:
 | Runtime / model / package schemas | `mlx_runtime_manifest` / `mlx_model_manifest` / `mlx_direct_prospective_package` 1.0 |
 | Runtime manifest identity | `sha256:226617353dc742bda9efa02f6083b3733832659f77add8fb20c4da0e953c31b0` |
 | Model manifest identity | `sha256:b29d33d9fba77c827dc62c4b5b83536f65b5b78ad24d3bf5b84cf7379a08ebcf` |
-| Package identity | `sha256:2135c682f6fc5f1c85deb5e9fef901a417b12d207df8b761a71b012dc6565b31` |
-| Synthetic bundle root | `sha256:cfcc7d91b04d922ee2d0a86c6e0a478c331b4381ed1fd1b228ecf72a28b8eda5` |
-| Decision / missing requirements | `ineligible` / 11 |
+| Package identity | `sha256:e7b7ae52514822b988d14da7a6a3158f099cf5fc10d40724f6d2eba489521bcf` |
+| Synthetic bundle root | `sha256:b8e91f20366f1c84b027543a4f43a30bcb6e7b5be70c61dbc3e7ebc2e09d2244` |
+| Decision / missing requirements | `ineligible` / 15 |
 | Framework imports, Metal/device, model, process, socket, network, cloud, spend actions | 0 |
 
 Its sealed files are fake non-model bytes. Replay reconstructs closure and refusal semantics; it
@@ -330,10 +336,13 @@ The project does not claim that:
 
 ## Roadmap
 
-1. Review the direct MLX static closures, worker protocol, exact controls, and refusal fixture.
-2. In a separately reviewed schema version, implement retained runtime/model descriptors,
-   parent-owned private IPC, same-process import/backend/cache/synchronization attestation, and
-   one-shot authorization before adding any production worker start.
+1. Review the direct MLX supplied package-root/model closures, protocol design, exact controls, and
+   refusal fixture.
+2. In a separately reviewed schema version, close applicable dependencies and Python
+   standard-library/native-loader bytes, then implement retained runtime/model descriptors,
+   parent-owned private IPC/protocol/result validation, same-process
+   import/backend/cache/synchronization attestation, and one-shot authorization before adding any
+   production worker start.
 3. Review the frozen Qwen3 declaration and fill only evidence obtainable without model or network
    action.
 4. Design a separately authorized future milestone for the two primitives named by the negative

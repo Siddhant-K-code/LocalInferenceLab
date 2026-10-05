@@ -2,8 +2,9 @@
 
 ## Status and non-action boundary
 
-This schema-1.0 contract is prospective. It defines exact static closures, a private finite worker
-protocol, determinism controls, result semantics, and future authorization/custody requirements.
+This schema-1.0 contract is prospective. It defines an exact supplied package-root byte closure,
+an exact model closure, a private finite worker protocol design, determinism controls, result
+semantics, and future authorization/custody requirements.
 It does **not** implement a production worker launch. No command in the `mlx` namespace imports
 MLX or MLX-LM, initializes Metal, queries a device, loads a tokenizer or model, performs inference,
 resolves/downloads a snapshot, starts a process, opens a socket, mutates a cache, consumes
@@ -11,9 +12,10 @@ authorization, or claims observed hardware evidence.
 
 The built-in package is deliberately incomplete. No exact preexisting local MLX model was supplied
 or discovered, and discovery would violate the explicit-path boundary. Wired/cache limits, active
-runtime/backend evidence, worker process birth, output-root identity, and authorization are also
-absent. `observed_execution_reachable`, `worker_process_may_start`, and
-`authorization_may_be_consumed` are therefore fixed `false`.
+runtime/backend evidence, applicable dependency closure, Python standard-library/native-loader
+closure, production private-IPC/protocol/result-validation implementation, worker process birth,
+output-root identity, and authorization are also absent. `observed_execution_reachable`,
+`worker_process_may_start`, and `authorization_may_be_consumed` are therefore fixed `false`.
 
 ## Threat model
 
@@ -33,7 +35,7 @@ Static manifests are declarations about one no-follow read. A future positive ex
 re-scan and match the same closure, then bind the retained descriptors and selected imported files
 to the same worker process before consuming one-shot authorization.
 
-## Exact runtime closure
+## Exact supplied package-root byte closure
 
 `mlx_runtime_manifest` 1.0 is compiled only from explicit local paths. The compiler:
 
@@ -46,10 +48,18 @@ to the same worker process before consuming one-shot authorization.
 5. Hashes one stable descriptor snapshot and records relative path, device, inode, mode, link count,
    size, and digest without publishing an absolute path.
 6. Binds the executable Python regular file, implementation/version/ABI/platform declaration,
-   complete runtime-root file closure, every direct `.dist-info/METADATA` name/version/digest and
-   dependency header, any `direct_url.json` digest, selected MLX/MLX-LM module files, exact worker
-   bytes, and the closed future worker environment. Verification reconstructs the runtime scan
-   specification from those projections and requires its identity to match.
+   complete byte closure of the explicitly supplied package root, every direct
+   `.dist-info/METADATA` name/version/digest and raw `Requires-Dist` header, any `direct_url.json`
+   digest, selected MLX/MLX-LM module-file declarations, exact worker bytes, and the closed future
+   worker environment. Verification reconstructs the runtime scan specification from those
+   projections and requires its identity to match.
+
+This is not a complete Python execution-runtime or dependency closure. The compiler records raw
+`Requires-Dist` strings but does not parse/evaluate environment markers or extras and does not
+require applicable dependency distributions or versions to be present. It binds the interpreter
+file but does not discover or bind its standard library, `lib-dynload`, `libpython`, dynamic
+loader, native shared libraries, or frameworks. Those are permanent explicit eligibility blockers
+in this schema, even when filesystem runtime and model manifests are supplied.
 
 `synthetic_fixture` and `offline_filesystem_manifest` evidence are mechanically separated: every
 physical root and file scope must respectively be `synthetic_fixture` or `current_effective_user`.
@@ -127,6 +137,10 @@ reserves process and inference actions before side effects and closes accepted, 
 or interrupted outcomes through receipt-last atomic publication.
 
 This PR records that finite state machine but intentionally provides no launch or transport object.
+It also provides no production frame parser, state-machine enforcement, worker identity/result
+validation, timeout/termination handling, or descriptor-passing implementation. That complete
+private-IPC/protocol/result-validation implementation is an explicit eligibility blocker rather
+than an inference from `worker_process_may_start=false`.
 The public synthetic surface accepts only an output root and internally sealed immutable values;
 it cannot receive custom dispatch, scripts, probes, transports, subclasses, or production objects.
 
