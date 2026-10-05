@@ -23,7 +23,8 @@ build-smoke: build
 	UV_NO_NETWORK=1 uv pip install --python .artifacts/install-wheel/bin/python --no-index dist/*.whl
 	.artifacts/install-wheel/bin/python -c "import localinferencelab; assert localinferencelab.__version__ == '0.1.0'"
 	uv venv .artifacts/install-sdist
-	UV_NO_NETWORK=1 uv pip install --python .artifacts/install-sdist/bin/python dist/*.tar.gz
+	UV_NO_NETWORK=1 uv pip install --offline --python .artifacts/install-sdist/bin/python 'hatchling==1.27.0'
+	UV_NO_NETWORK=1 uv pip install --python .artifacts/install-sdist/bin/python --no-index --no-build-isolation dist/*.tar.gz
 	.artifacts/install-sdist/bin/python -c "import localinferencelab; assert localinferencelab.__version__ == '0.1.0'"
 
 fixture:
