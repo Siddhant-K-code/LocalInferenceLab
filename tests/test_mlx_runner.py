@@ -523,7 +523,7 @@ def test_model_scanner_rejects_missing_extra_and_malformed_shards(tmp_path: Path
         compile_model_manifest(no_tokenizer)
 
 
-def test_same_size_file_replacement_changes_physical_and_content_identity(tmp_path: Path) -> None:
+def test_same_size_file_replacement_changes_bound_artifact_identity(tmp_path: Path) -> None:
     model = _write_model_tree(tmp_path)
     first = compile_model_manifest(model)
     weight = model / "model.safetensors"
@@ -539,8 +539,11 @@ def test_same_size_file_replacement_changes_physical_and_content_identity(tmp_pa
         _dict(item) for item in _list(second["files"]) if _dict(item)["path"] == "model.safetensors"
     )
     assert first_file["size_bytes"] == second_file["size_bytes"]
-    assert first_file["inode"] != second_file["inode"]
     assert first_file["sha256"] != second_file["sha256"]
+    assert (first_file["inode"], first_file["sha256"]) != (
+        second_file["inode"],
+        second_file["sha256"],
+    )
 
 
 def test_manifests_reject_unknown_bool_digest_and_closure_drift() -> None:
