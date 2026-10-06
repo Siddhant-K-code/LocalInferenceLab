@@ -2,14 +2,16 @@
 
 ## Status and non-action boundary
 
-This schema-1.0 contract is prospective. It defines an exact supplied package-root byte closure,
+The original schema-1.0 package contract remains prospective. It defines an exact supplied package-root byte closure,
 an exact supplied model-root byte closure and present weight projection, a private finite worker
 protocol design, determinism controls, result semantics, and future authorization/custody
 requirements.
-It does **not** implement a production worker launch. No command in the `mlx` namespace imports
+The additive inert-custody schema implements a refusal-only worker launch, not a production MLX
+worker. No command in the `mlx` namespace imports
 MLX or MLX-LM, initializes Metal, queries a device, loads a tokenizer or model, performs inference,
-resolves/downloads a snapshot, starts a process, opens a socket, mutates a cache, consumes
-authorization, or claims observed hardware evidence.
+resolves/downloads a snapshot, mutates a cache, or claims observed hardware evidence. Only the
+explicit `custody-self-test` starts a process/opens a private socket and consumes authorization,
+and that authorization is fixed to `inert_refusal_only`.
 
 The built-in package is deliberately incomplete. No exact preexisting local MLX model was supplied
 or discovered, and discovery would violate the explicit-path boundary. Wired/cache limits, active
@@ -126,7 +128,7 @@ blocker even for a valid filesystem model manifest.
 
 ## Private worker custody and protocol
 
-The future parent, not the worker, owns lifecycle and authorization. The frozen design uses one
+The parent, not the worker, owns lifecycle and authorization. The frozen design uses one
 parent-created inherited `AF_UNIX` socketpair descriptor, assigned to child FD 3. There is no bind,
 listen, accept, DNS, proxy, redirect, shell, arbitrary command, or ambient user-controlled import.
 Unrelated descriptors are closed before worker code runs.
@@ -153,11 +155,16 @@ must revalidate those facts before revealing the committed nonce preimage. A fut
 reserves process and inference actions before side effects and closes accepted, invalid, refused,
 or interrupted outcomes through receipt-last atomic publication.
 
-This PR records that finite state machine but intentionally provides no launch or transport object.
-It also provides no production frame parser, state-machine enforcement, worker identity/result
-validation, timeout/termination handling, or descriptor-passing implementation. That complete
-private-IPC/protocol/result-validation implementation is an explicit eligibility blocker rather
-than an inference from `worker_process_may_start=false`.
+The inert custody surface implements the finite exchange with `os.posix_spawn`, exact interpreter
+flags, child FD 3, enumerated descriptor close actions, a closed environment, strict canonical
+framing, one absolute deadline, parent-owned termination/wait, one-shot authorization, and
+descriptor-relative publication. Every interpreter and source path component is root/current-owner
+and not group/world writable. The verified worker bytes are copied into an unlinked mode-0400
+regular-file snapshot under the retained private output-root descriptor and supplied on stdin, so
+the child never reopens a mutable repository pathname. Its result validator accepts only the stable refusal
+`mlx_execution_unimplemented_and_unauthorized`; no accepted or invalid generated-result producer
+exists. The legacy production-IPC blocker is therefore split, not silently removed: inert
+IPC/refusal validation is proven, while generated-result production/validation remains missing.
 The public synthetic surface accepts only an output root and internally sealed immutable values;
 it cannot receive custom dispatch, scripts, probes, transports, subclasses, or production objects.
 
@@ -226,3 +233,30 @@ downloads, cache mutation, authorization/output-root consumption, cloud, and spe
 The fixture is declaration/refusal evidence only. There is no synthetic accepted execution path,
 because implementing a fake worker transport before the real process and attestation design is
 reviewed would create misleading assurance.
+
+## Physical inert custody self-test
+
+Create an explicit private output directory and run:
+
+```bash
+mkdir -m 700 .artifacts/mlx-inert
+localinferencelab mlx custody-self-test .artifacts/mlx-inert
+localinferencelab mlx custody-replay \
+  .artifacts/mlx-inert/localinferencelab-mlx-inert-custody-v1-*
+localinferencelab mlx custody-inspect \
+  .artifacts/mlx-inert/localinferencelab-mlx-inert-custody-v1-*
+```
+
+The self-test deliberately performs one process start, one private socketpair creation, eight
+frames, one atomic authorization consumption, and one terminal wait. It publishes no absolute
+path. The authorization binds the exact legacy built-in prospective package ID and full-record
+digest, study/protocol/worker IDs, parent/worker nonces, physical output-root identity, action, wall
+expiry, and monotonic deadline. The closed bundle records exact bounded frame bytes/digests, action
+and non-action ledgers, child wait status, refusal, and blocker reconstruction.
+
+On Linux the parent additionally compares `/proc/<pid>/exe` device/inode to the exact interpreter
+launch target. macOS has no equally robust stdlib-only parent-observed running-executable primitive,
+so cross-platform running-executable observation remains explicit. The worker's self-report is
+never presented as sufficient proof by itself. Replay requires the worker PID to match both
+parent-recorded process evidence and the parent-owned wait result, and requires authorization
+nonces and deadlines to match the verified hello and worker identity.

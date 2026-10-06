@@ -13,6 +13,12 @@ from localinferencelab.contracts import parse_record, record_id
 from localinferencelab.custody import replay_bundle
 from localinferencelab.fixture import compile_fixture
 from localinferencelab.host import probe_host
+from localinferencelab.mlx_custody import (
+    inert_custody_capability_report,
+    inspect_inert_custody_bundle,
+    replay_inert_custody_bundle,
+    run_inert_custody_self_test,
+)
 from localinferencelab.mlx_fixture import compile_mlx_fixture, replay_mlx_fixture
 from localinferencelab.mlx_manifest import (
     compile_model_manifest,
@@ -120,6 +126,10 @@ def _parser() -> argparse.ArgumentParser:
         help="report implemented direct-worker capabilities without probing MLX or Metal",
     )
     mlx_commands.add_parser(
+        "custody-capability-report",
+        help="report the additive refusal-only custody surface without starting a process",
+    )
+    mlx_commands.add_parser(
         "prospective-spec",
         help="emit the pinned execution-ineligible direct MLX study specification",
     )
@@ -168,6 +178,24 @@ def _parser() -> argparse.ArgumentParser:
         help="replay one closed MLX refusal fixture offline",
     )
     mlx_replay.add_argument("bundle", type=Path)
+    mlx_custody = mlx_commands.add_parser(
+        "custody-self-test",
+        help=(
+            "start one inert local child/private socket and consume one synthetic refusal-only "
+            "authorization/output root; perform zero model or backend actions"
+        ),
+    )
+    mlx_custody.add_argument("output_root", type=Path)
+    mlx_custody_replay = mlx_commands.add_parser(
+        "custody-replay",
+        help="replay one inert custody bundle process-free with zero model or backend actions",
+    )
+    mlx_custody_replay.add_argument("bundle", type=Path)
+    mlx_custody_inspect = mlx_commands.add_parser(
+        "custody-inspect",
+        help="inspect reconstructed inert-custody blocker splits without starting a process",
+    )
+    mlx_custody_inspect.add_argument("bundle", type=Path)
 
     ollama = commands.add_parser(
         "ollama",
@@ -367,6 +395,9 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
         if args.mlx_command == "capability-report":
             _emit(mlx_capability_report())
             return 0
+        if args.mlx_command == "custody-capability-report":
+            _emit(inert_custody_capability_report())
+            return 0
         if args.mlx_command == "prospective-spec":
             _emit_document(mlx_study_spec())
             return 0
@@ -430,6 +461,29 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
             output["status"] = "compiled"
             output["path"] = path.name
             output["evidence_status"] = "synthetic_offline_refusal_contract_evidence"
+            _emit(output)
+            return 0
+        if args.mlx_command == "custody-self-test":
+            path, custody_replay = run_inert_custody_self_test(args.output_root)
+            output = custody_replay.to_dict()
+            output["status"] = "refused"
+            output["path"] = path.name
+            output["action"] = "inert_refusal_only"
+            _emit(output)
+            return 0
+        if args.mlx_command == "custody-replay":
+            custody_replay = replay_inert_custody_bundle(args.bundle)
+            output = custody_replay.to_dict()
+            output["status"] = "replayed"
+            output["process_actions_during_replay"] = 0
+            output["socket_actions_during_replay"] = 0
+            _emit(output)
+            return 0
+        if args.mlx_command == "custody-inspect":
+            output = inspect_inert_custody_bundle(args.bundle)
+            output["status"] = "inspected"
+            output["process_actions_during_inspection"] = 0
+            output["socket_actions_during_inspection"] = 0
             _emit(output)
             return 0
         mlx_replay_result = replay_mlx_fixture(args.bundle)

@@ -154,7 +154,7 @@ attested.
 
 ## Direct MLX worker protocol
 
-The direct architecture does not use a discoverable TCP listener. A future parent creates one
+The direct architecture does not use a discoverable TCP listener. The inert custody parent creates one
 worker per run and one inherited private `AF_UNIX` socketpair endpoint at child FD 3. Frames are
 bounded length-prefixed canonical JSON. The only order is:
 
@@ -163,14 +163,18 @@ parent_hello -> worker_identity -> authorize_once -> authorization_ack ->
 generate_once -> result_or_terminal_error -> shutdown -> shutdown_ack
 ```
 
-The parent owns process birth and must bind PID/birth identity, executable bytes, worker bytes,
+The inert parent owns process birth and binds PID/PPID, exact launch-target bytes, worker bytes,
+the exact FD set, closed environment, package/protocol/spec IDs, nonces, physical output root,
+authorization, terminal refusal, and wait status. Verified worker bytes are executed from a
+parent-created unlinked private regular-file snapshot on stdin, not reopened from the repository
+path. Replay cross-binds the authorization nonces/deadline and worker PID to the hello, identity,
+parent process evidence, and wait result. A future generation-capable parent must also bind
 applicable dependency distributions, Python standard-library/native-runtime/dynamic-loader bytes,
 the supplied package/model-root byte closures, actual selected module files, closed environment,
 cache class/state, default device, compiled Metal availability, generation-stream device, and
 exact memory limits before revealing the committed one-shot nonce. Unrelated descriptors, shell,
-user commands, network aliases, retries, warmups, concurrency, and reruns are forbidden. The
-future ledger reserves every action before side effects and closes accepted, invalid, refused, or
-interrupted outcomes through the existing atomic bundle custody.
+user commands, network aliases, retries, warmups, concurrency, and reruns are forbidden. The inert
+ledger admits only one refusal. Accepted and invalid generated results are unreachable.
 
 The static model manifest binds supplied bytes and exact present monolith/canonical indexed-shard
 projections, not semantic tensor completeness. Before authorization, the future worker must use
@@ -178,11 +182,10 @@ the pinned normal non-distributed (`sharding=None`) `mlx_lm.utils.load` / `load_
 `model.load_weights(..., strict=True)`, and bind successful parameter key/shape validation to the
 same worker, package, and result.
 
-Schema 1.0 defines but does not implement that state machine. It also does not implement the
-private-IPC framing, protocol order enforcement, timeout/termination logic, or untrusted worker
-result validation. No launch, socketpair, authorization, model load, or generation function is
-reachable. The deterministic fixture reconstructs a refused package from sealed fake byte
-closures rather than simulating success.
+The additive inert-custody schema 1.0 implements framing, exact order/direction, absolute deadlines,
+termination/wait, authorization consumption, refusal validation, and output custody. It does not
+implement or authorize MLX import, model load, device action, or generation. The legacy
+prospective schema and deterministic static fixture remain unchanged.
 
 The pinned sampler is greedy temperature-zero argmax. The seed is still recorded and must be set on
 the generation thread because MLX random state is thread-local, but greedy sampling consumes no
