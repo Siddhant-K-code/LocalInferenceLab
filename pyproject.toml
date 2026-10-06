@@ -55,7 +55,10 @@ testpaths = ["tests"]
 [tool.coverage.run]
 branch = true
 source = ["localinferencelab"]
-omit = ["src/localinferencelab/__main__.py"]
+omit = [
+  "src/localinferencelab/__main__.py",
+  "src/localinferencelab/mlx_runtime_preflight_worker.py",
+]
 
 [tool.coverage.report]
 fail_under = 80

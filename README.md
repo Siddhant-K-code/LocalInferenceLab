@@ -31,10 +31,23 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > generated-result implementation. The model manifest binds supplied bytes
 > and exact present canonical shard projections, not semantic parameter key/shape completeness;
 > future pinned strict-load evidence is also an explicit blocker.
-> The deliberately explicit `mlx custody-self-test` command starts exactly one inert child and one
-> private socketpair. All other MLX commands remain process-free. No command imports installed
-> MLX/MLX-LM modules, initializes/queries Metal, loads a tokenizer/model, runs inference,
-> resolves/downloads a snapshot, mutates a model cache, or makes network/cloud/spend actions.
+> The deliberately explicit `mlx custody-self-test` command remains refusal-only. The separate
+> runtime-preflight protocol implementation remains covered by sealed synthetic tests, but public
+> schema-1.0 execution is unreachable: MLX-LM `0.30.6` declares `mlx>=0.30.4` on Darwin while the
+> reviewed runtime pins MLX `0.29.3`. `mlx runtime-preflight` therefore validates and rejects the
+> receipt before any output-root access, socket, child, authorization, MLX import, or probe. A
+> compatible source/version pair requires a separately reviewed schema and new authorization.
+> Capability/spec and negative/failure replay remain process-free.
+> The first authorized Apple Silicon runtime preflight **failed closed** after authorization
+> consumption because the worker reported a forbidden-action attempt. It was not retried. The
+> rejected worker frame was not retained by the original failure path, so no runtime import,
+> backend/device, imported-module-closure, synchronization fact, exact attempted-action category,
+> or completed-forbidden-action ledger is accepted from that attempt. The Python audit guard is not
+> an OS sandbox.
+> A pinned privacy-safe negative projection records the exact retained raw bindings and this
+> evidence limitation; revised failure custody preserves future rejected-frame digests and numeric
+> completed-runtime actions, model non-actions, Python-audited attempts, and separately unaccepted
+> worker-reported completed-forbidden-action projections.
 
 ## Trust boundary
 
@@ -92,7 +105,7 @@ completeness without future pinned `model.load_weights(..., strict=True)` eviden
 | Model identity schema | Snapshot file manifest, config, tokenizer | GGUF bytes and metadata | Manifest and layer digests |
 | Cache cohort contract | Prompt and KV cache state | Process, model, prompt/KV, context shift | Outer API state plus active runner and cache state |
 | Native metrics | Preserved when exposed | Preserved when exposed | Durations and token counts in native nanosecond units |
-| Live execution in v1 | One inert refusal-only custody child; generation remains absent and ineligible | Forbidden | Read-only preflight only; generation is implemented for fake contract evidence but production-refused pending listener/runner attestation |
+| Live execution in v1 | One observed runtime-only import/device/synchronization preflight; model actions remain absent and ineligible | Forbidden | Read-only preflight only; generation is implemented for fake contract evidence but production-refused pending listener/runner attestation |
 | Synthetic fixture | Direct-worker refusal package plus foundation exact-repeat group | Text and token divergence group | Accepted, invalid, and identity-refused sealed-script bundles |
 
 MLX snapshots, GGUF files, and Ollama manifests are separate representations. A shared marketing

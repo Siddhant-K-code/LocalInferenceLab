@@ -19,6 +19,8 @@ Every trust transition is represented by immutable canonical data.
 | `mlx_fixture.py` | Deterministic sealed package/model-root byte manifests and ineligible-package replay | Closed-bundle writes only; no fake transport, worker, model, or hardware action |
 | `mlx_custody.py` | POSIX supervisor, strict framing/state validation, one-shot inert authorization, physical output-root custody, transcript publication, and process-free replay | One child and one private socketpair only for explicit `custody-self-test`; replay is process/socket-free |
 | `mlx_inert_worker.py` | Standalone stdlib refusal-only FD-3 worker | Reads/writes the inherited socket only; no model/backend/network/generated-result surface |
+| `mlx_runtime_preflight.py` | Separate exact-runtime lock/receipt validation, schema-1.0 execution gate, synthetic one-shot runtime-preflight custody, strict result/import-closure validation, closed publication, and offline replay | Public `runtime-preflight` validates then rejects the dependency-incompatible observed receipt before physical action; only exact internal synthetic fixtures may start one child/socketpair |
+| `mlx_runtime_preflight_worker.py` | Standalone sealed FD-3 runtime-only synthetic worker | After synthetic authorization only, imports bound fake `mlx.core` and `mlx_lm`, queries model-free backend/device/stream facts, and synchronizes; no model action or network/command surface |
 | `ollama.py` | Prospective package, direct numeric-loopback transport, one-shot authorization, bounded execution, terminal custody/replay | Explicit output-root writes; loopback calls only after authorization |
 | `ollama_declaration.py` | Canonical multi-run study intent, exact package closure binding, eligibility, and offline declaration fixture replay | Explicit declaration/fixture writes only; no host probe, socket, marker, authorization, or model |
 | `ollama_attestation.py` | Pinned listener/runner feasibility requirements, candidate evidence, derived negative verdict, and offline fixture replay | Explicit assessment/fixture writes only; no live process probe, socket, subprocess, Ollama call, authorization, output-root consumption, or model |
@@ -28,13 +30,17 @@ Every trust transition is represented by immutable canonical data.
 | `fixture.py` | Source-custodied synthetic records for two backends | Publishes through custody |
 | `cli.py` | Narrow command routing and fail-closed errors | Command-dependent |
 
-No module imports an ML framework or downloads/mutates a model. The explicit MLX custody self-test
-uses `socket.socketpair` and `os.posix_spawn`; the parent copies the selected interpreter into a
-private mode-0500 output-root snapshot, reopens it read-only, and copies verified worker bytes into
-an unlinked mode-0400 snapshot. The child executes the exact interpreter copy with the original
-fixed `argv[0]`, reads the
-exact worker object from stdin, verifies the interpreter object through transient FD 4, then closes
-FD 4 before reporting its final descriptor set. All static MLX operations remain process-free. Only
+No parent module imports an ML framework or downloads/mutates a model. The explicit MLX custody
+self-test uses `socket.socketpair` and `os.posix_spawn`; the parent copies the selected interpreter
+into a private mode-0500 output-root snapshot, reopens it read-only, and copies verified worker
+bytes into an unlinked mode-0400 snapshot. The child executes the exact interpreter copy with the
+original fixed `argv[0]`, reads the exact worker object from stdin, verifies the interpreter object
+through transient FD 4, then closes FD 4 before reporting its final descriptor set. The separate
+runtime-preflight protocol is executable only through exact internal synthetic fixtures: that
+worker inherits the bound fake package root at FD 5 and imports it only after its exact synthetic
+one-shot authorization is consumed. Public schema-1.0 execution rejects before output-root,
+socket/process, authorization, import, or probe action. All static and replay MLX operations remain
+process-free. Only
 `LoopbackHTTPTransport` can open a socket. An explicit, separately authorized Ollama `preflight`
 may use it after output-root and artifact validation. The `execute` surface validates its package
 and artifacts but production-refuses before authorization consumption or socket access until the
@@ -78,6 +84,33 @@ milestone implements the process/IPC/state/auth/output-root/refusal path, but in
 no generated-result producer, MLX import, model load, backend action, or generation authorization.
 Replay cross-binds the hello, worker identity, authorization, child wait, process evidence, and
 terminal frames; inspection projects eligibility from the same verified bundle snapshot.
+
+The additive runtime-preflight protocol is separate from the frozen inert records. Its synthetic
+authorization binds the exact runtime lock, install receipt, runtime manifest, worker/spec/protocol,
+allowed probe set, output root, nonces, and wall/monotonic expiry. The synthetic worker starts with
+`-I -S -E -s -B`, an exact closed environment, FD 3 control transport, FD 4 transient interpreter
+identity, and FD 5 retained runtime root. It reports every imported Python module after imports;
+the parent requires every non-stdlib file to match the supplied-root manifest's relative path,
+digest, and physical identity. Exact MLX `0.29.3` and MLX-LM `0.30.6` are retained despite the
+reviewed MLX-LM Darwin declaration `mlx>=0.30.4`; no newer MLX is substituted, and semantic
+dependency closure remains explicitly blocked. That mismatch makes the observed receipt
+execution-ineligible for schema 1.0. Public `mlx runtime-preflight` is a pure validation/refusal
+surface and no public flag bypasses the gate. A compatible source/version pair requires a
+separately reviewed schema and new authorization.
+
+The first authorized observed attempt closed negatively at parent validation of
+`preflight_result`. Authorization was consumed, one child was started and reaped, and no retry was
+performed. The original failure path discarded the rejected frame after detecting a nonzero
+forbidden-action ledger, so the exact audited event and worker-internal phase cannot be recovered
+offline. The committed projection therefore accepts no import/backend/device/stream/module-closure
+fact, attempted-action category, or completed-forbidden-action claim and closes no
+observed-runtime eligibility blocker. It binds the retained terminal, consumption, and
+authorization identities and records only the custody rejection path. Updated failure custody
+retains a bounded rejected-frame digest/projection and separates `guarded_action_attempts`
+(Python-audited network/process-or-command/filesystem-mutation attempts),
+`completed_forbidden_actions` (worker-reported completion, required to be zero for acceptance),
+and ordinary `model_non_actions`. The audit hook is defense in depth, not an OS sandbox. A rejected
+frame is untrusted, so its completed ledger is not accepted as parent proof.
 
 Pinned MLX APIs can report default device, compiled Metal availability, and synchronized stream
 completion. They cannot programmatically prove per-kernel Metal dispatch. The eligibility and

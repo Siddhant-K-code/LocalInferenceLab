@@ -455,6 +455,7 @@ def verify_runtime_scan_spec(value: JsonValue) -> dict[str, JsonValue]:
     )
     for field_name in ("implementation", "version", "abi", "platform"):
         _text(python[field_name], f"runtime_scan_spec.python.{field_name}", maximum=256)
+    python_abi = cast("str", python["abi"])
     distributions: list[dict[str, JsonValue]] = []
     for index, item in enumerate(
         _array(
@@ -492,14 +493,18 @@ def verify_runtime_scan_spec(value: JsonValue) -> dict[str, JsonValue]:
     if not modules or modules != sorted(modules) or len(modules) != len(set(modules)):
         raise ContractError("selected module files must be non-empty, unique, and sorted")
     required_modules = {
-        "mlx/__init__.py",
         "mlx_lm/__init__.py",
         "mlx_lm/generate.py",
         "mlx_lm/models/cache.py",
         "mlx_lm/sample_utils.py",
         "mlx_lm/utils.py",
     }
-    if not required_modules.issubset(modules):
+    mlx_import_module = (
+        "mlx/__init__.py" in modules
+        or "mlx/core/__init__.py" in modules
+        or f"mlx/core.cpython-{python_abi[2:]}-darwin.so" in modules
+    )
+    if not mlx_import_module or not required_modules.issubset(modules):
         raise ContractError("selected module closure omits required direct-runner modules")
     environment = _array(spec["environment"], "runtime_scan_spec.environment", maximum=32)
     expected_environment = closed_runtime_environment()
