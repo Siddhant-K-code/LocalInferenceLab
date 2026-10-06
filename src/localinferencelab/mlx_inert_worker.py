@@ -557,7 +557,7 @@ def _worker_main() -> None:
     )
     interpreter = _file_identity_from_descriptor(
         INTERPRETER_IDENTITY_FD,
-        Path(sys.executable).name,
+        "python-interpreter",
         executable=True,
     )
     os.close(INTERPRETER_IDENTITY_FD)

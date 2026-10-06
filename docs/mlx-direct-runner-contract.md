@@ -160,8 +160,9 @@ flags, child FD 3, enumerated descriptor close actions, a closed environment, st
 framing, one absolute deadline, parent-owned termination/wait, one-shot authorization, and
 descriptor-relative publication. The no-follow worker-source and private output-root launch paths
 reject untrusted writable components (while permitting protected sticky shared ancestors). The
-selected interpreter bytes are stably read and copied into a private mode-0500 output-root snapshot;
-verified worker bytes are copied into an unlinked mode-0400 snapshot and supplied on stdin. The
+selected interpreter bytes are stably read, copied into a private mode-0500 output-root snapshot,
+and reopened read-only before spawn; verified worker bytes are copied into an unlinked mode-0400
+snapshot and supplied on stdin. The
 worker verifies the interpreter snapshot through transient FD 4 and closes it before reporting the
 exact final descriptor set. The interpreter copy is removed only after wait because macOS kills a
 running copied interpreter if its final name is unlinked. The selected source bytes are not

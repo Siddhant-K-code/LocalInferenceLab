@@ -30,8 +30,9 @@ Every trust transition is represented by immutable canonical data.
 
 No module imports an ML framework or downloads/mutates a model. The explicit MLX custody self-test
 uses `socket.socketpair` and `os.posix_spawn`; the parent copies the selected interpreter into a
-private mode-0500 output-root snapshot and verified worker bytes into an unlinked mode-0400
-snapshot. The child executes the exact interpreter copy with the original fixed `argv[0]`, reads the
+private mode-0500 output-root snapshot, reopens it read-only, and copies verified worker bytes into
+an unlinked mode-0400 snapshot. The child executes the exact interpreter copy with the original
+fixed `argv[0]`, reads the
 exact worker object from stdin, verifies the interpreter object through transient FD 4, then closes
 FD 4 before reporting its final descriptor set. All static MLX operations remain process-free. Only
 `LoopbackHTTPTransport` can open a socket. An explicit, separately authorized Ollama `preflight`

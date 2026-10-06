@@ -138,11 +138,11 @@ localinferencelab mlx custody-inspect \
   .artifacts/mlx-inert/localinferencelab-mlx-inert-custody-v1-*
 ```
 
-The parent copies the selected interpreter into a private mode-0500 output-root snapshot and the
-verified repository worker into an unlinked mode-0400 snapshot. It launches the exact interpreter
-copy, supplies the worker snapshot on stdin, verifies the interpreter object through transient FD 4,
-and removes the named interpreter copy after child wait. Replacing the repository worker pathname
-after verification cannot change the launched bytes.
+The parent copies the selected interpreter into a private mode-0500 output-root snapshot, reopens it
+read-only, and copies the verified repository worker into an unlinked mode-0400 snapshot. It launches
+the exact interpreter copy, supplies the worker snapshot on stdin, verifies the interpreter object
+through transient FD 4, and removes the named interpreter copy after child wait. Replacing the
+repository worker pathname after verification cannot change the launched bytes.
 
 Do not treat this as model execution. It performs zero MLX/MLX-LM imports, Metal/device actions,
 tokenizer/model loads, inference, snapshot resolution/download, model-cache mutation, network,

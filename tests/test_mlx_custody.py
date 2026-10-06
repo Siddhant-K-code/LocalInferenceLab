@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import builtins
+import fcntl
 import json
 import os
 import socket
@@ -526,6 +527,7 @@ def test_physical_self_test_exercises_exact_process_socket_and_refusal(
         "shutdowns": 1,
     }
     assert all(value == 0 for value in _dict(record["non_actions"]).values())
+    assert _dict(record["interpreter"])["basename"] == "python-interpreter"
     assert _dict(record["interpreter"])["mode"] == 0o500
     assert _dict(record["worker_program"])["mode"] == 0o400
     assert _dict(record["worker_program"])["sha256"] == EXPECTED_WORKER_PROGRAM_SHA256
@@ -608,6 +610,30 @@ def test_launch_target_rejects_group_or_world_writable_ancestor(tmp_path: Path) 
         trusted_source=False,
     )
     assert identity["sha256"] == digest_bytes(data)
+
+
+def test_interpreter_snapshot_is_reopened_read_only(tmp_path: Path) -> None:
+    output_root = _private_directory(tmp_path / "interpreter-snapshot")
+    root_descriptor = _open_private_output_root(output_root)
+    snapshot_descriptor: int | None = None
+    snapshot_name: str | None = None
+    try:
+        snapshot_descriptor, identity, snapshot_name = (
+            mlx_custody_module._create_interpreter_snapshot_at(  # noqa: SLF001
+                root_descriptor,
+                b"interpreter fixture",
+            )
+        )
+        flags = fcntl.fcntl(snapshot_descriptor, fcntl.F_GETFL)
+        assert flags & os.O_ACCMODE == os.O_RDONLY
+        assert identity["basename"] == "python-interpreter"
+        assert identity["mode"] == 0o500
+    finally:
+        if snapshot_descriptor is not None:
+            os.close(snapshot_descriptor)
+        if snapshot_name is not None:
+            os.unlink(snapshot_name, dir_fd=root_descriptor)
+        os.close(root_descriptor)
 
 
 def _republish_mutation(

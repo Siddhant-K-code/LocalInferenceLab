@@ -49,7 +49,7 @@ SCHEMA_VERSION = "1.0"
 DEFAULT_DEADLINE_NS = AUTHORIZATION_LIFETIME_NS
 MAX_BUNDLE_FILE_BYTES = 1024 * 1024
 EXPECTED_WORKER_PROGRAM_SHA256 = (
-    "sha256:b9e17499536f47efb28c3c33dd2ee0842fee5a40f0766354da566765edd8b417"
+    "sha256:fe082ec48bd15f1443df53c21f7f66529faa1cfdf07d70d2267049a94c6a9f4a"
 )
 _DIGEST_LENGTH = 71
 _CONTROL_LIMIT = 32
@@ -240,7 +240,9 @@ def inert_custody_spec() -> dict[str, JsonValue]:
             "mechanism": "os_posix_spawn_parent_sealed_interpreter_and_worker_snapshots",
             "interpreter_flags": ["-I", "-S", "-E", "-s", "-"],
             "worker_arguments": [],
-            "interpreter_snapshot": ("private_mode_0500_output_root_copy_removed_after_child_wait"),
+            "interpreter_snapshot": (
+                "private_mode_0500_reopened_read_only_copy_removed_after_child_wait"
+            ),
             "interpreter_argv0": "resolved_source_path_used_only_for_python_runtime_prefix",
             "interpreter_source_claim": (
                 "stable_selected_bytes_not_cross_platform_running_process_proof"
@@ -611,17 +613,40 @@ def _create_worker_snapshot_at(
 def _create_interpreter_snapshot_at(
     output_root_descriptor: int,
     interpreter_bytes: bytes,
-    basename: str,
 ) -> tuple[int, dict[str, JsonValue], str]:
-    return _create_launch_snapshot_at(
+    writable_descriptor, identity, name = _create_launch_snapshot_at(
         output_root_descriptor,
         interpreter_bytes,
-        basename,
+        "python-interpreter",
         label="interpreter",
         name_prefix="interpreter",
         mode=0o500,
         anonymous=False,
     )
+    readable_descriptor: int | None = None
+    complete = False
+    try:
+        readable_descriptor = os.open(
+            name,
+            _file_flags(),
+            dir_fd=output_root_descriptor,
+        )
+        metadata = os.fstat(readable_descriptor)
+        if (
+            metadata.st_dev != identity["device"]
+            or metadata.st_ino != identity["inode"]
+            or metadata.st_size != identity["size_bytes"]
+            or stat.S_IMODE(metadata.st_mode) != identity["mode"]
+        ):
+            raise ContractError("interpreter snapshot changed while it was reopened")
+        complete = True
+        return readable_descriptor, identity, name
+    finally:
+        os.close(writable_descriptor)
+        if not complete:
+            if readable_descriptor is not None:
+                os.close(readable_descriptor)
+            os.unlink(name, dir_fd=output_root_descriptor)
 
 
 def _verify_file_identity(value: JsonValue, label: str) -> dict[str, JsonValue]:
@@ -1510,7 +1535,6 @@ def run_inert_custody_self_test(
         ) = _create_interpreter_snapshot_at(
             root_descriptor,
             interpreter_bytes,
-            interpreter_path.name,
         )
         sealed_interpreter_path = resolved_output_root / interpreter_snapshot_name
         parent_pid = os.getpid()

@@ -67,8 +67,9 @@ authentication. Metadata identity and `/api/ps` load state do not prove which pr
 connection or which internal runner and Metal backend serviced the exact request.
 
 The MLX `W` node has a real refusal-only custody path. The parent copies the selected interpreter
-bytes into a private mode-0500 output-root snapshot and verified standalone-worker bytes into an
-unlinked mode-0400 snapshot, then launches those exact objects with `os.posix_spawn`. The worker
+bytes into a private mode-0500 output-root snapshot, reopens it read-only, and copies verified
+standalone-worker bytes into an unlinked mode-0400 snapshot, then launches those exact objects with
+`os.posix_spawn`. The worker
 source arrives on stdin; a transient FD 4 binds the interpreter snapshot and is closed before the
 worker reports only descriptors `[0,1,2,3]`. The private interpreter copy remains named only until
 the child is waited, as required by macOS, and is then removed. The parent installs the private
