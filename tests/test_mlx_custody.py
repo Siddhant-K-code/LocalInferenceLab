@@ -599,6 +599,15 @@ def test_launch_target_rejects_group_or_world_writable_ancestor(tmp_path: Path) 
             "test launch target",
             executable=False,
         )
+    target.chmod(0o777)
+    identity, data = mlx_custody_module._read_launch_target(  # noqa: SLF001
+        target,
+        "selected interpreter source",
+        executable=True,
+        trusted_ancestors=False,
+        trusted_source=False,
+    )
+    assert identity["sha256"] == digest_bytes(data)
 
 
 def _republish_mutation(

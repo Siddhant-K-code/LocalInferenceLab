@@ -164,7 +164,9 @@ selected interpreter bytes are stably read and copied into a private mode-0500 o
 verified worker bytes are copied into an unlinked mode-0400 snapshot and supplied on stdin. The
 worker verifies the interpreter snapshot through transient FD 4 and closes it before reporting the
 exact final descriptor set. The interpreter copy is removed only after wait because macOS kills a
-running copied interpreter if its final name is unlinked. Its result validator accepts only the stable refusal
+running copied interpreter if its final name is unlinked. The selected source bytes are not
+presented as cross-platform proof of the already-running parent interpreter; that remains an
+explicit blocker. Its result validator accepts only the stable refusal
 `mlx_execution_unimplemented_and_unauthorized`; no accepted or invalid generated-result producer
 exists. The legacy production-IPC blocker is therefore split, not silently removed: inert
 IPC/refusal validation is proven, while generated-result production/validation remains missing.

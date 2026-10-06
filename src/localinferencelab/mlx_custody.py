@@ -242,6 +242,9 @@ def inert_custody_spec() -> dict[str, JsonValue]:
             "worker_arguments": [],
             "interpreter_snapshot": ("private_mode_0500_output_root_copy_removed_after_child_wait"),
             "interpreter_argv0": "resolved_source_path_used_only_for_python_runtime_prefix",
+            "interpreter_source_claim": (
+                "stable_selected_bytes_not_cross_platform_running_process_proof"
+            ),
             "worker_source": "parent_sealed_unlinked_output_root_snapshot_on_stdin",
             "child_ipc_fd": WORKER_FD,
             "transient_interpreter_identity_fd": INTERPRETER_IDENTITY_FD,
@@ -474,6 +477,7 @@ def _read_launch_target(
     *,
     executable: bool,
     trusted_ancestors: bool = True,
+    trusted_source: bool = True,
 ) -> tuple[dict[str, JsonValue], bytes]:
     resolved = path.resolve(strict=True)
     parent = _open_directory_no_follow(
@@ -489,7 +493,8 @@ def _read_launch_target(
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode):
             raise ContractError(f"{label} must be a regular file")
-        _require_trusted_launch_metadata(before, label)
+        if trusted_source:
+            _require_trusted_launch_metadata(before, label)
         if executable and before.st_mode & 0o111 == 0:
             raise ContractError(f"{label} must be executable")
         blocks: list[bytes] = []
@@ -1484,6 +1489,7 @@ def run_inert_custody_self_test(
             "Python interpreter",
             executable=True,
             trusted_ancestors=False,
+            trusted_source=False,
         )
         source_worker_program, worker_bytes = _read_launch_target(
             worker_program_path,
