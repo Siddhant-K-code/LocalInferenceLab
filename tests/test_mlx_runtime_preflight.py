@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import json
 import platform
+import shutil
 import sys
 import sysconfig
 from pathlib import Path
@@ -65,6 +66,20 @@ def _private_directory(path: Path) -> Path:
     path.mkdir()
     path.chmod(0o700)
     return path.resolve(strict=True)
+
+
+def _private_interpreter(root: Path) -> Path:
+    prefix = root / "private-python-prefix"
+    binary_root = prefix / "bin"
+    binary_root.mkdir(parents=True)
+    (prefix / "lib").symlink_to(
+        Path(sysconfig.get_path("stdlib")).resolve(strict=True).parent,
+        target_is_directory=True,
+    )
+    interpreter = binary_root / "python"
+    shutil.copyfile(Path(sys.executable).resolve(strict=True), interpreter)
+    interpreter.chmod(0o700)
+    return interpreter.resolve(strict=True)
 
 
 def _write_fake_runtime(
@@ -272,7 +287,7 @@ def _synthetic_receipt(
 @pytest.fixture
 def fake_preflight_bundle(tmp_path: Path) -> tuple[Path, dict[str, JsonValue]]:
     runtime = _write_fake_runtime(tmp_path)
-    interpreter = Path(sys.executable).resolve(strict=True)
+    interpreter = _private_interpreter(tmp_path)
     worker = (
         Path(preflight_module.__file__)
         .with_name("mlx_runtime_preflight_worker.py")
@@ -446,7 +461,7 @@ def test_runtime_preflight_terminal_import_error_is_closed_and_replayable(
     tmp_path: Path,
 ) -> None:
     runtime = _write_fake_runtime(tmp_path, mlx_lm_import_error=True)
-    interpreter = Path(sys.executable).resolve(strict=True)
+    interpreter = _private_interpreter(tmp_path)
     worker = (
         Path(preflight_module.__file__)
         .with_name("mlx_runtime_preflight_worker.py")
@@ -527,7 +542,7 @@ def test_runtime_preflight_forbidden_attempt_failure_custody_is_truthful_and_rep
     tmp_path: Path,
 ) -> None:
     runtime = _write_fake_runtime(tmp_path, forbidden_write_attempt=True)
-    interpreter = Path(sys.executable).resolve(strict=True)
+    interpreter = _private_interpreter(tmp_path)
     worker = (
         Path(preflight_module.__file__)
         .with_name("mlx_runtime_preflight_worker.py")
@@ -602,7 +617,7 @@ def test_runtime_preflight_forbidden_attempt_failure_custody_is_truthful_and_rep
 
 def test_runtime_lock_receipt_and_package_reject_drift(tmp_path: Path) -> None:
     runtime = _write_fake_runtime(tmp_path)
-    interpreter = Path(sys.executable).resolve(strict=True)
+    interpreter = _private_interpreter(tmp_path)
     worker = (
         Path(preflight_module.__file__)
         .with_name("mlx_runtime_preflight_worker.py")
