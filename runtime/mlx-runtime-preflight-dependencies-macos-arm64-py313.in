@@ -1,0 +1,11 @@
+# The reviewed pair cannot share one semantic resolver closure because MLX-LM
+# 0.30.6 declares mlx>=0.30.4 while this milestone pins MLX 0.29.3. This file
+# locks the remaining applicable base dependencies; replay keeps the declared
+# MLX requirement mismatch as an explicit blocker.
+jinja2
+mlx-metal==0.29.3
+numpy
+protobuf
+pyyaml
+sentencepiece
+transformers>=5.0.0

@@ -192,6 +192,23 @@ counts only completed actions. Failure custody separately records whether a chil
 when it was, the exact parent-owned wait evidence that proves reaping; pre-spawn failures carry no
 child-reaped claim.
 
+The additive runtime-preflight schema uses a distinct action, protocol, and worker. Its fixed order
+is:
+
+```text
+parent_hello -> worker_identity -> authorize_once -> authorization_ack ->
+preflight_once -> preflight_result -> shutdown -> shutdown_ack
+```
+
+The authorization permits only exact distribution-version checks, imports of bound `mlx.core` and
+`mlx_lm`, `default_device`, `metal.is_available`, `default_stream`, and `synchronize`. MLX imports
+are absent before acknowledgment. The worker reports import timing and possible initialization,
+strict backend/device/stream representations, synchronization completion, completed action and
+non-action ledgers, and its actual imported-module closure. The parent requires all non-stdlib
+module files to belong to the retained supplied-root manifest. Terminal import/probe errors remain
+closed and replayable; protocol/process failures retain parent-owned wait custody. Replay imports
+nothing and starts no process or socket.
+
 The pinned sampler is greedy temperature-zero argmax. The seed is still recorded and must be set on
 the generation thread because MLX random state is thread-local, but greedy sampling consumes no
 PRNG. Fixed controls are not a determinism guarantee. Prompt/template/tokenization bytes, generated

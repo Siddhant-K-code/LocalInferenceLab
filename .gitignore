@@ -217,6 +217,9 @@ tempCodeRunnerFile.py
 # Local validation artifacts
 .artifacts/
 
+# Isolated observed MLX runtime and private package receipts
+.mlx-runtime/
+
 # Marimo
 marimo/_static/
 marimo/_lsp/

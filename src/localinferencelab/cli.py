@@ -23,6 +23,7 @@ from localinferencelab.mlx_fixture import compile_mlx_fixture, replay_mlx_fixtur
 from localinferencelab.mlx_manifest import (
     compile_model_manifest,
     compile_runtime_manifest,
+    load_runtime_manifest,
     load_runtime_scan_spec,
     write_manifest,
 )
@@ -35,6 +36,17 @@ from localinferencelab.mlx_runner import (
     mlx_eligibility_inspection,
     mlx_study_spec,
     write_mlx_prospective_package,
+)
+from localinferencelab.mlx_runtime_preflight import (
+    inspect_runtime_preflight_bundle,
+    load_install_receipt,
+    load_runtime_lock,
+    replay_observed_negative_projection,
+    replay_runtime_preflight_bundle,
+    replay_runtime_preflight_terminal_failure,
+    run_runtime_preflight,
+    runtime_preflight_capability_report,
+    runtime_preflight_spec,
 )
 from localinferencelab.ollama import (
     build_prospective_package,
@@ -130,6 +142,14 @@ def _parser() -> argparse.ArgumentParser:
         help="report the additive refusal-only custody surface without starting a process",
     )
     mlx_commands.add_parser(
+        "runtime-preflight-capability-report",
+        help="report runtime-only preflight capabilities without imports or process actions",
+    )
+    mlx_commands.add_parser(
+        "runtime-preflight-spec",
+        help="emit the exact runtime-only preflight specification without imports",
+    )
+    mlx_commands.add_parser(
         "prospective-spec",
         help="emit the pinned execution-ineligible direct MLX study specification",
     )
@@ -196,6 +216,43 @@ def _parser() -> argparse.ArgumentParser:
         help="inspect reconstructed inert-custody blocker splits without starting a process",
     )
     mlx_custody_inspect.add_argument("bundle", type=Path)
+    runtime_preflight_disclosure = (
+        "Start one local child, import MLX/MLX-LM, query Apple runtime/Metal and the "
+        "default device/stream, and synchronize. This consumes one one-shot authorization "
+        "and one mode-0700 output root, but performs no model/tokenizer discovery, download, "
+        "or load; no prompt, cache, inference, generation, benchmark, cloud, or spend action."
+    )
+    runtime_preflight = mlx_commands.add_parser(
+        "runtime-preflight",
+        help="execute the explicitly authorized runtime-only import and metadata preflight",
+        description=runtime_preflight_disclosure,
+    )
+    runtime_preflight.add_argument("runtime_manifest", type=Path)
+    runtime_preflight.add_argument("runtime_lock", type=Path)
+    runtime_preflight.add_argument("install_receipt", type=Path)
+    runtime_preflight.add_argument("runtime_root", type=Path)
+    runtime_preflight.add_argument("interpreter", type=Path)
+    runtime_preflight.add_argument("output_root", type=Path)
+    runtime_preflight_replay = mlx_commands.add_parser(
+        "runtime-preflight-replay",
+        help="replay one closed runtime preflight without imports, processes, or sockets",
+    )
+    runtime_preflight_replay.add_argument("bundle", type=Path)
+    runtime_preflight_inspect = mlx_commands.add_parser(
+        "runtime-preflight-inspect",
+        help="inspect runtime-preflight facts and blockers without imports or processes",
+    )
+    runtime_preflight_inspect.add_argument("bundle", type=Path)
+    runtime_preflight_failure_replay = mlx_commands.add_parser(
+        "runtime-preflight-failure-replay",
+        help="replay one failed-closed runtime preflight record without imports or processes",
+    )
+    runtime_preflight_failure_replay.add_argument("failure_record", type=Path)
+    runtime_preflight_negative_replay = mlx_commands.add_parser(
+        "runtime-preflight-negative-replay",
+        help="replay the pinned failed observed-attempt projection without imports or processes",
+    )
+    runtime_preflight_negative_replay.add_argument("projection", type=Path)
 
     ollama = commands.add_parser(
         "ollama",
@@ -398,6 +455,12 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
         if args.mlx_command == "custody-capability-report":
             _emit(inert_custody_capability_report())
             return 0
+        if args.mlx_command == "runtime-preflight-capability-report":
+            _emit(runtime_preflight_capability_report())
+            return 0
+        if args.mlx_command == "runtime-preflight-spec":
+            _emit_document(runtime_preflight_spec())
+            return 0
         if args.mlx_command == "prospective-spec":
             _emit_document(mlx_study_spec())
             return 0
@@ -484,6 +547,64 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
             output["status"] = "inspected"
             output["process_actions_during_inspection"] = 0
             output["socket_actions_during_inspection"] = 0
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-preflight":
+            runtime_manifest = load_runtime_manifest(args.runtime_manifest)
+            runtime_lock = load_runtime_lock(args.runtime_lock)
+            install_receipt = load_install_receipt(
+                args.install_receipt,
+                runtime_lock=runtime_lock,
+                runtime_manifest=runtime_manifest,
+            )
+            path, preflight_replay = run_runtime_preflight(
+                runtime_manifest,
+                runtime_lock,
+                install_receipt,
+                args.runtime_root,
+                args.interpreter,
+                args.output_root,
+            )
+            output = preflight_replay.to_dict()
+            output["status"] = (
+                "completed"
+                if preflight_replay.terminal_state == "completed_and_closed"
+                else "terminal_error"
+            )
+            output["path"] = path.name
+            output["action"] = "mlx_runtime_preflight_only"
+            _emit(output)
+            return 0 if preflight_replay.terminal_state == "completed_and_closed" else 2
+        if args.mlx_command == "runtime-preflight-replay":
+            preflight_replay = replay_runtime_preflight_bundle(args.bundle)
+            output = preflight_replay.to_dict()
+            output["status"] = "replayed"
+            output["mlx_imports_during_replay"] = 0
+            output["process_actions_during_replay"] = 0
+            output["socket_actions_during_replay"] = 0
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-preflight-inspect":
+            output = inspect_runtime_preflight_bundle(args.bundle)
+            output["status"] = "inspected"
+            output["mlx_imports_during_inspection"] = 0
+            output["process_actions_during_inspection"] = 0
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-preflight-failure-replay":
+            output = replay_runtime_preflight_terminal_failure(args.failure_record)
+            output["status"] = "replayed_failed_closed"
+            output["mlx_imports_during_replay"] = 0
+            output["process_actions_during_replay"] = 0
+            output["socket_actions_during_replay"] = 0
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-preflight-negative-replay":
+            output = replay_observed_negative_projection(args.projection)
+            output["status"] = "replayed_failed_closed"
+            output["mlx_imports_during_replay"] = 0
+            output["process_actions_during_replay"] = 0
+            output["socket_actions_during_replay"] = 0
             _emit(output)
             return 0
         mlx_replay_result = replay_mlx_fixture(args.bundle)

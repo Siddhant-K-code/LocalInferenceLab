@@ -1,0 +1,7 @@
+# Compile only for the explicitly authorized Apple Silicon runtime:
+# uv pip compile --python-version 3.13 --python-platform aarch64-apple-darwin \
+#   --generate-hashes --no-deps \
+#   --output-file runtime/mlx-runtime-preflight-macos-arm64-py313.lock \
+#   runtime/mlx-runtime-preflight-macos-arm64-py313.in
+mlx==0.29.3
+mlx-lm==0.30.6
