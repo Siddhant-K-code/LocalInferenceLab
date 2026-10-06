@@ -17,6 +17,8 @@ Every trust transition is represented by immutable canonical data.
 | `mlx_manifest.py` | Bounded descriptor-relative supplied package/model-root byte-manifest compilers | Explicit local-file reads and manifest writes only; no imports, loads, resolution, process, device, or network |
 | `mlx_runner.py` | Pinned direct-worker threat model, finite inherited-descriptor protocol, controls, eligibility, and prospective package | Explicit package writes only; production launch and authorization are absent |
 | `mlx_fixture.py` | Deterministic sealed package/model-root byte manifests and ineligible-package replay | Closed-bundle writes only; no fake transport, worker, model, or hardware action |
+| `mlx_custody.py` | POSIX supervisor, strict framing/state validation, one-shot inert authorization, physical output-root custody, transcript publication, and process-free replay | One child and one private socketpair only for explicit `custody-self-test`; replay is process/socket-free |
+| `mlx_inert_worker.py` | Standalone stdlib refusal-only FD-3 worker | Reads/writes the inherited socket only; no model/backend/network/generated-result surface |
 | `ollama.py` | Prospective package, direct numeric-loopback transport, one-shot authorization, bounded execution, terminal custody/replay | Explicit output-root writes; loopback calls only after authorization |
 | `ollama_declaration.py` | Canonical multi-run study intent, exact package closure binding, eligibility, and offline declaration fixture replay | Explicit declaration/fixture writes only; no host probe, socket, marker, authorization, or model |
 | `ollama_attestation.py` | Pinned listener/runner feasibility requirements, candidate evidence, derived negative verdict, and offline fixture replay | Explicit assessment/fixture writes only; no live process probe, socket, subprocess, Ollama call, authorization, output-root consumption, or model |
@@ -26,9 +28,13 @@ Every trust transition is represented by immutable canonical data.
 | `fixture.py` | Source-custodied synthetic records for two backends | Publishes through custody |
 | `cli.py` | Narrow command routing and fail-closed errors | Command-dependent |
 
-No module imports an ML framework, starts a process, or downloads/mutates a model. The MLX modules
-also import no socket or subprocess library and expose no production launch/authorization
-entrypoint. Only
+No module imports an ML framework or downloads/mutates a model. The explicit MLX custody self-test
+uses `socket.socketpair` and `os.posix_spawn`; the parent copies the selected interpreter into a
+private mode-0500 output-root snapshot, reopens it read-only, and copies verified worker bytes into
+an unlinked mode-0400 snapshot. The child executes the exact interpreter copy with the original
+fixed `argv[0]`, reads the
+exact worker object from stdin, verifies the interpreter object through transient FD 4, then closes
+FD 4 before reporting its final descriptor set. All static MLX operations remain process-free. Only
 `LoopbackHTTPTransport` can open a socket. An explicit, separately authorized Ollama `preflight`
 may use it after output-root and artifact validation. The `execute` surface validates its package
 and artifacts but production-refuses before authorization consumption or socket access until the
@@ -64,12 +70,14 @@ binding, one-shot authorization, process birth, active imported-module closure, 
 classes, pinned strict model parameter key/shape load evidence, worker-side backend/stream facts,
 and final synchronization evidence.
 
-The future protocol removes the Ollama listener-authentication gap by making the parent create and
-own a one-shot worker and inherited `AF_UNIX` socketpair descriptor. It defines a fixed bounded
+The inert custody protocol removes the listener-authentication gap by making the parent create and
+own a one-shot worker and inherited `AF_UNIX` socketpair descriptor. It implements a fixed bounded
 canonical-message sequence and forbids bind/listen/accept, DNS, proxies, redirects, arbitrary
 commands, shell, unrelated descriptors, retries, warmups, concurrency, and selective reruns. This
-PR records that architecture but intentionally contains no launch, private IPC, protocol
-state-machine, or worker-result-validation implementation.
+milestone implements the process/IPC/state/auth/output-root/refusal path, but intentionally contains
+no generated-result producer, MLX import, model load, backend action, or generation authorization.
+Replay cross-binds the hello, worker identity, authorization, child wait, process evidence, and
+terminal frames; inspection projects eligibility from the same verified bundle snapshot.
 
 Pinned MLX APIs can report default device, compiled Metal availability, and synchronized stream
 completion. They cannot programmatically prove per-kernel Metal dispatch. The eligibility and
@@ -282,6 +290,12 @@ rebuilds the assessment and every identity, derives the negative verdict, and re
 counts for live process probes, socket inspection/calls, subprocesses, Ollama requests,
 authorization/output-root consumption, model activity, external network, cloud, and spend.
 Receipt-consistent coordinated tampering still fails semantic reconstruction.
+
+Physical MLX inert-custody replay is a separate closed-set path. It verifies exact frame bytes and
+directions, nonces, package/spec/protocol/worker identities, the sealed worker-source digest,
+physical output-root record, authorization expiry and exclusive consumption evidence, refusal-only
+result, action/non-action ledger, and parent wait status. It reconstructs blocker splits and keeps
+observed generation ineligible. Replay itself performs no socket or process action.
 
 MLX refusal-fixture replay is also closed-set. It rebuilds sealed synthetic runtime and model
 manifests, the pinned study specification, and the execution-ineligible package. It requires exact

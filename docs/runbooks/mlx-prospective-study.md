@@ -7,6 +7,7 @@ model, import MLX/MLX-LM, query Metal, load a tokenizer/model, run inference, or
 
 ```bash
 localinferencelab mlx capability-report
+localinferencelab mlx custody-capability-report
 localinferencelab mlx prospective-spec > mlx-study-spec.json
 ```
 
@@ -103,7 +104,8 @@ ineligible because applicable dependency semantics, Python standard-library/nati
 production private IPC/protocol/result validation, worker start, process/import/backend
 synchronization attestation, strict model parameter key/shape load evidence, exact memory limits,
 output-root instance, and one-shot authorization are absent. No command exists to authorize or
-execute it.
+execute model actions from that package; the separate custody self-test below can authorize only
+an inert refusal.
 
 ## 5. Repository-only deterministic validation
 
@@ -121,20 +123,46 @@ reconstructs the exact ineligible package from sealed values and rejects extra/m
 noncanonical JSON, manifest/package identity drift, positive eligibility, or coordinated
 record/index/receipt tampering.
 
-## 6. Future positive milestone
+## 6. Explicit physical inert-custody validation
+
+This is the only processful command in this runbook. It starts one inert local child and one
+private socketpair, consumes a synthetic one-shot authorization/output root, and returns only a
+canonical refusal:
+
+```bash
+mkdir -m 700 .artifacts/mlx-inert
+localinferencelab mlx custody-self-test .artifacts/mlx-inert
+localinferencelab mlx custody-replay \
+  .artifacts/mlx-inert/localinferencelab-mlx-inert-custody-v1-*
+localinferencelab mlx custody-inspect \
+  .artifacts/mlx-inert/localinferencelab-mlx-inert-custody-v1-*
+```
+
+The parent copies the selected interpreter into a private mode-0500 output-root snapshot, reopens it
+read-only, and copies the verified repository worker into an unlinked mode-0400 snapshot. It launches
+the exact interpreter copy, supplies the worker snapshot on stdin, verifies the interpreter object
+through transient FD 4, and removes the named interpreter copy after child wait. Replacing the
+repository worker pathname after verification cannot change the launched bytes.
+
+Do not treat this as model execution. It performs zero MLX/MLX-LM imports, Metal/device actions,
+tokenizer/model loads, inference, snapshot resolution/download, model-cache mutation, network,
+cloud, or spend actions. Replay and inspection start no process and open no socket.
+
+## 7. Future positive milestone
 
 Do not add a launch by calling a generic subprocess helper. A separately reviewed versioned schema
 must implement, test, and authorize all of the following together:
 
 1. Applicable dependency resolution plus exact Python standard-library, native-runtime,
    dynamic-loader, interpreter, package-root, and model descriptor closure/revalidation.
-2. Parent-created private inherited IPC with unrelated descriptors closed, implemented frame/state
-   validation, bounded result validation, timeout, termination, and terminal-error behavior.
+2. Extend the proven inert private IPC/refusal validator with a generated-result producer and
+   generated-result validation without weakening framing, deadlines, termination, or custody.
 3. Worker process-birth, executable, worker-byte, import-module, environment, device/backend, cache,
    limit, and stream identity bound before authorization.
 4. Pinned normal MLX-LM model construction and `model.load_weights(..., strict=True)` key/shape
    validation bound to that same worker and package.
-5. One-shot committed nonce custody and reserve-before-side-effect action ledger.
+5. A separate model-action one-shot authorization; the inert refusal authorization cannot be
+   widened or reused.
 6. One request per worker, concurrency 1, no retries/warmups/selective reruns.
 7. Exact prompt/template/token/sampler/cache controls and terminal raw-artifact custody.
 8. Final synchronization and correctly scoped native metrics.

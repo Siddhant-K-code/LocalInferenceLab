@@ -18,19 +18,23 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > no-socket fixtures: they do not contact Ollama, inspect a live process, execute a model, or make
 > a benchmark claim.
 >
-> The direct MLX milestone avoids that listener gap by specifying a parent-owned private-descriptor
-> worker. Strict additive schema-1.0 records bind a complete explicitly supplied package-root byte
+> The direct MLX milestones avoid that listener gap with a parent-owned private-descriptor worker.
+> Strict additive schema-1.0 records bind a complete explicitly supplied package-root byte
 > closure, raw dependency metadata, supplied model-root bytes and present weight projection, worker
 > bytes, a closed environment, finite protocol design, exact controls, result semantics, and future
-> custody. They do not prove
+> custody. A separate inert-custody schema now exercises the real POSIX process, exact FD 3 private
+> socket, canonical finite exchange, one-shot refusal authorization, physical output-root binding,
+> terminal wait, closed publication, and process-free replay. The sealed worker can only return
+> `mlx_execution_unimplemented_and_unauthorized`; no generated-result producer exists. These
+> records do not prove
 > applicable dependency semantics, Python standard-library/native-loader closure, or a production
-> private-IPC/protocol/result-validation implementation. The model manifest binds supplied bytes
+> generated-result implementation. The model manifest binds supplied bytes
 > and exact present canonical shard projections, not semantic parameter key/shape completeness;
 > future pinned strict-load evidence is also an explicit blocker.
-> Production launch is absent. Repository code does not import installed MLX/MLX-LM modules,
-> initialize/query Metal, load a tokenizer/model, run inference, resolve/download a snapshot,
-> start a process, or open a socket. Its deterministic fixture is an ineligible refusal package,
-> not fake execution or hardware evidence.
+> The deliberately explicit `mlx custody-self-test` command starts exactly one inert child and one
+> private socketpair. All other MLX commands remain process-free. No command imports installed
+> MLX/MLX-LM modules, initializes/queries Metal, loads a tokenizer/model, runs inference,
+> resolves/downloads a snapshot, mutates a model cache, or makes network/cloud/spend actions.
 
 ## Trust boundary
 
@@ -40,9 +44,9 @@ flowchart LR
     I --> A{Content-addressed declaration}
     A -->|Forbidden or mismatch| X[No model action]
     A -->|Ollama| G[Separate one-shot authorization gates]
-    A -->|Future direct MLX| W[Parent-owned private descriptor worker]
+    A -->|Direct MLX custody| W[Parent-owned private descriptor worker]
     G --> R[Raw run records and native counters]
-    W -->|Not implemented| X
+    W -->|Sealed refusal only| X
     F[Synthetic fixtures] --> C[Atomic closed bundle]
     R --> C
     C --> O[Strict offline replay]
@@ -62,16 +66,23 @@ because the canonical attestation verdict is `insufficient`. Loopback proves loc
 authentication. Metadata identity and `/api/ps` load state do not prove which process accepted the
 connection or which internal runner and Metal backend serviced the exact request.
 
-The MLX `W` node is contract-only. It freezes an inherited private `AF_UNIX` socketpair descriptor,
-bounded canonical-message order, one worker/request/attempt, concurrency 1, no retry/warmup/rerun,
-and exact same-process closure/backend/synchronization requirements. No socketpair or child process
-is created, and no production IPC/protocol/result validator is implemented. The static runtime
-manifest covers only its supplied package-root bytes: dependency markers/extras, applicable
-dependency distributions, Python standard-library bytes, `lib-dynload`, `libpython`, native shared
-libraries/frameworks, and the dynamic loader are not proven. Official MLX APIs cannot prove
-individual Metal kernels executed. The model-root manifest rejects obvious malformed/incomplete
-canonical shards but cannot prove tensor key/shape completeness without future pinned
-`model.load_weights(..., strict=True)` evidence. Both claims remain unavailable.
+The MLX `W` node has a real refusal-only custody path. The parent copies the selected interpreter
+bytes into a private mode-0500 output-root snapshot, reopens it read-only, and copies verified
+standalone-worker bytes into an unlinked mode-0400 snapshot, then launches those exact objects with
+`os.posix_spawn`. The worker
+source arrives on stdin; a transient FD 4 binds the interpreter snapshot and is closed before the
+worker reports only descriptors `[0,1,2,3]`. The private interpreter copy remains named only until
+the child is waited, as required by macOS, and is then removed. The parent installs the private
+socket endpoint at child FD 3, closes enumerated unrelated descriptors, supplies a closed
+environment, enforces one bounded canonical exchange under one absolute deadline, atomically
+consumes one authorization, and waits for its child. The repository worker path cannot be
+substituted after verification because the child never reopens it. The worker has no accepted or
+invalid generated-result branch. The static
+runtime manifest still covers only its supplied package-root bytes: dependency markers/extras,
+applicable dependency distributions, Python standard-library bytes, `lib-dynload`, `libpython`,
+native shared libraries/frameworks, and the dynamic loader are not proven. Official MLX APIs cannot
+prove individual Metal kernels executed. The model-root manifest cannot prove tensor key/shape
+completeness without future pinned `model.load_weights(..., strict=True)` evidence.
 
 ## Benchmark matrix
 
@@ -81,7 +92,7 @@ canonical shards but cannot prove tensor key/shape completeness without future p
 | Model identity schema | Snapshot file manifest, config, tokenizer | GGUF bytes and metadata | Manifest and layer digests |
 | Cache cohort contract | Prompt and KV cache state | Process, model, prompt/KV, context shift | Outer API state plus active runner and cache state |
 | Native metrics | Preserved when exposed | Preserved when exposed | Durations and token counts in native nanosecond units |
-| Live execution in v1 | Direct worker specified; production launch absent and ineligible | Forbidden | Read-only preflight only; generation is implemented for fake contract evidence but production-refused pending listener/runner attestation |
+| Live execution in v1 | One inert refusal-only custody child; generation remains absent and ineligible | Forbidden | Read-only preflight only; generation is implemented for fake contract evidence but production-refused pending listener/runner attestation |
 | Synthetic fixture | Direct-worker refusal package plus foundation exact-repeat group | Text and token divergence group | Accepted, invalid, and identity-refused sealed-script bundles |
 
 MLX snapshots, GGUF files, and Ollama manifests are separate representations. A shared marketing
@@ -200,6 +211,7 @@ localinferencelab host probe
 localinferencelab backend plan {mlx-lm,llama.cpp,ollama}
 localinferencelab backend probe BACKEND ARTIFACT --version VERSION [--commit COMMIT]
 localinferencelab mlx capability-report
+localinferencelab mlx custody-capability-report
 localinferencelab mlx prospective-spec > MLX-STUDY-SPEC.json
 localinferencelab mlx runtime-manifest-create RUNTIME-SCAN-SPEC.json \
   RUNTIME_ROOT PYTHON_EXECUTABLE WORKER_PROGRAM RUNTIME-MANIFEST.json
@@ -210,6 +222,9 @@ localinferencelab mlx prospective-verify PACKAGE.json
 localinferencelab mlx eligibility-inspect PACKAGE.json
 localinferencelab mlx fixture-compile OUTPUT_ROOT
 localinferencelab mlx fixture-replay CLOSED-BUNDLE
+localinferencelab mlx custody-self-test MODE_0700_OUTPUT_ROOT
+localinferencelab mlx custody-replay CLOSED-CUSTODY-BUNDLE
+localinferencelab mlx custody-inspect CLOSED-CUSTODY-BUNDLE
 localinferencelab ollama output-root-init OUTPUT_ROOT --nonce NONCE
 localinferencelab ollama authorization-nonce-init NONCE_FILE
 localinferencelab ollama prospective-create SPEC OUTPUT --runtime-artifact FILE \
@@ -245,7 +260,8 @@ Static probes remain explicitly incomplete until backend-specific observed capab
 exists. Literal absence markers such as `unobserved`, `unknown`, and `unavailable` never satisfy an
 observed identity requirement.
 
-The `mlx` commands are static/offline only. Runtime compilation scans an explicitly supplied
+The MLX manifest, prospective, fixture, replay, and inspection commands are process-free and
+offline. Runtime compilation scans an explicitly supplied
 regular-file interpreter, package root, worker bytes, distribution metadata, selected modules, and
 closed environment without importing or executing them. Model compilation scans one explicit,
 already-identified materialized directory; it never searches caches or resolves/downloads a
@@ -253,10 +269,17 @@ snapshot. Symlinks, special files, hard-link aliases, path/import injection, rem
 Safetensors outside the pinned loader scope, mixed or malformed/incomplete canonical shards, and
 inconsistent indexes fail closed. Supplying both manifests still cannot make execution eligible:
 applicable dependencies, Python
-standard-library/native-loader bytes, production IPC/protocol/result validation, strict model
-parameter key/shape load evidence, exact limits, output-root/nonce custody, worker
-birth/import/backend/cache evidence, and final synchronization remain missing, and no
-authorize/execute command exists.
+standard-library/native-loader bytes, generated-result production/validation, strict model
+parameter key/shape load evidence, exact limits, model-action authorization, active
+import/backend/cache evidence, cross-platform parent-observed running executable identity, and
+final synchronization remain missing.
+
+`mlx custody-self-test` is the sole processful MLX command. It requires an explicit preexisting
+current-owner mode-0700 directory, starts one inert local child and one private `AF_UNIX`
+socketpair, consumes one synthetic one-shot authorization for `action=inert_refusal_only`, and
+publishes a bounded receipt-closed transcript. It performs zero MLX/MLX-LM imports, Metal/device
+actions, tokenizer/model loads, inference, snapshot resolution/download, cache mutation, network,
+cloud, or spend actions. `custody-replay` and `custody-inspect` are process- and socket-free.
 
 `declaration-spec`, `declaration-create`, `declaration-verify`, and `declaration-inspect` are
 declaration-only operations. They do not probe the host, read an Ollama endpoint, create
@@ -322,8 +345,17 @@ and semantic checks use the same single-read byte snapshot.
 Direct MLX replay requires exactly the sealed fixture source, pinned study specification,
 synthetic runtime/model manifests, prospective package, index, and receipt. It reconstructs every
 identity and the ineligible decision and rejects extra/missing files, noncanonical JSON,
-closure/control/eligibility drift, or coordinated receipt-consistent tampering. The scanner and
-replay modules contain no MLX, socket, or subprocess imports.
+closure/control/eligibility drift, or coordinated receipt-consistent tampering.
+
+Inert custody replay additionally binds the fixed protocol and worker-code IDs, sealed worker
+source digest, exact parent/worker frames, package and output-root IDs, authorization and exclusive
+consumption evidence, completed-action/non-action ledgers, refusal-only terminal state, and child
+wait status. Failure markers count an action only after it completes and distinguish a child that
+was never spawned from a spawned child whose exact parent-owned wait evidence proves it was reaped.
+It mechanically splits the four broad prospective blockers exercised by this milestone,
+then retains the model-action authorization, generated-result, runtime/model/backend, memory,
+synchronization, and cross-platform executable-observation blockers. Replay opens no socket and
+starts no process.
 
 See [Architecture](docs/architecture.md), [Protocol](docs/protocol.md), and
 [Current source research](docs/research/current-sources.md). The exact Ollama boundary is specified
