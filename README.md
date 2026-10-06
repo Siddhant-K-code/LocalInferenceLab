@@ -349,8 +349,10 @@ closure/control/eligibility drift, or coordinated receipt-consistent tampering.
 
 Inert custody replay additionally binds the fixed protocol and worker-code IDs, sealed worker
 source digest, exact parent/worker frames, package and output-root IDs, authorization and exclusive
-consumption evidence, action/non-action ledgers, refusal-only terminal state, and child wait
-status. It mechanically splits the four broad prospective blockers exercised by this milestone,
+consumption evidence, completed-action/non-action ledgers, refusal-only terminal state, and child
+wait status. Failure markers count an action only after it completes and distinguish a child that
+was never spawned from a spawned child whose exact parent-owned wait evidence proves it was reaped.
+It mechanically splits the four broad prospective blockers exercised by this milestone,
 then retains the model-action authorization, generated-result, runtime/model/backend, memory,
 synchronization, and cross-platform executable-observation blockers. Replay opens no socket and
 starts no process.

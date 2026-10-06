@@ -187,7 +187,10 @@ same worker, package, and result.
 The additive inert-custody schema 1.0 implements framing, exact order/direction, absolute deadlines,
 termination/wait, authorization consumption, refusal validation, and output custody. It does not
 implement or authorize MLX import, model load, device action, or generation. The legacy
-prospective schema and deterministic static fixture remain unchanged.
+prospective schema and deterministic static fixture remain unchanged. Its terminal action ledger
+counts only completed actions. Failure custody separately records whether a child was spawned and,
+when it was, the exact parent-owned wait evidence that proves reaping; pre-spawn failures carry no
+child-reaped claim.
 
 The pinned sampler is greedy temperature-zero argmax. The seed is still recorded and must be set on
 the generation thread because MLX random state is thread-local, but greedy sampling consumes no

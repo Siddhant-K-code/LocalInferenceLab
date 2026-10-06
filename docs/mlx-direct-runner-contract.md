@@ -173,6 +173,10 @@ exists. The legacy production-IPC blocker is therefore split, not silently remov
 IPC/refusal validation is proven, while generated-result production/validation remains missing.
 The public synthetic surface accepts only an output root and internally sealed immutable values;
 it cannot receive custom dispatch, scripts, probes, transports, subclasses, or production objects.
+Its action ledger records only completed physical actions and completed frame sends/validated
+events, never reservations. A failure marker explicitly distinguishes `child_spawned=false` with
+no wait claim from `child_spawned=true` with an exact successful parent-owned wait; terminal
+failure publication requires either proven reaping or proof that no child was spawned.
 
 ## Determinism controls
 

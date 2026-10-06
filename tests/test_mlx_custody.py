@@ -77,6 +77,50 @@ def _private_directory(path: Path) -> Path:
     return path.resolve(strict=True)
 
 
+def _terminal_failure(output_root: Path) -> dict[str, JsonValue]:
+    markers = list(output_root.glob(".localinferencelab-mlx-terminal-*.json"))
+    assert len(markers) == 1
+    return _dict(load_json_bytes(markers[0].read_bytes()))
+
+
+def _failure_ledger(**completed: int) -> dict[str, JsonValue]:
+    ledger: dict[str, JsonValue] = {
+        "attempts": 1,
+        "retries": 0,
+        "warmups": 0,
+        "worker_process_starts": 0,
+        "socketpair_creations": 0,
+        "authorizations_consumed": 0,
+        "parent_frames": 0,
+        "worker_frames": 0,
+        "generate_once_commands": 0,
+        "terminal_refusals": 0,
+        "shutdowns": 0,
+    }
+    ledger.update(completed)
+    return ledger
+
+
+def _assert_failure_child_custody(
+    failure: dict[str, JsonValue],
+    *,
+    child_spawned: bool,
+) -> None:
+    assert failure["child_spawned"] is child_spawned
+    assert failure["child_reaped_or_never_spawned"] is True
+    if not child_spawned:
+        assert failure["child_reaped"] is None
+        assert failure["child_wait"] is None
+        return
+    assert failure["child_reaped"] is True
+    child_wait = _dict(failure["child_wait"])
+    assert child_wait["wait_owned"] is True
+    child_pid = child_wait["pid"]
+    assert isinstance(child_pid, int) and not isinstance(child_pid, bool)
+    with pytest.raises(ChildProcessError):
+        os.waitpid(child_pid, os.WNOHANG)
+
+
 @pytest.fixture
 def custody_bundle(tmp_path: Path) -> tuple[Path, dict[str, JsonValue]]:
     output_root = _private_directory(tmp_path / "custody")
@@ -993,9 +1037,144 @@ def test_worker_early_exit_and_hang_are_waited_without_zombies() -> None:
         with pytest.raises(ContractError, match="deadline"):
             _wait_child(hanging, time.monotonic_ns() + 10_000_000)
     finally:
-        _terminate_and_wait(hanging)
+        terminal_wait = _terminate_and_wait(hanging)
+        assert terminal_wait["wait_owned"] is True
     with pytest.raises(ChildProcessError):
         os.waitpid(hanging, os.WNOHANG)
+
+
+def test_terminate_and_wait_rejects_unproven_terminal_custody(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def missing_process(_pid: int, _signal: int) -> None:
+        raise ProcessLookupError
+
+    def missing_child(_pid: int, _options: int) -> tuple[int, int]:
+        raise ChildProcessError
+
+    monkeypatch.setattr(mlx_custody_module.os, "kill", missing_process)
+    monkeypatch.setattr(mlx_custody_module.os, "waitpid", missing_child)
+    with pytest.raises(ContractError, match="could not establish terminal custody"):
+        _terminate_and_wait(424242)
+
+
+@pytest.mark.parametrize(
+    ("failure_point", "expected_phase", "expected_ledger", "child_state"),
+    [
+        ("socketpair", "socketpair_creation", _failure_ledger(), "never_spawned"),
+        (
+            "spawn",
+            "worker_process_start",
+            _failure_ledger(socketpair_creations=1),
+            "never_spawned",
+        ),
+        (
+            "authorization_consumption",
+            "authorization_consumption",
+            _failure_ledger(
+                socketpair_creations=1,
+                worker_process_starts=1,
+                parent_frames=1,
+                worker_frames=1,
+            ),
+            "reaped",
+        ),
+        (
+            "generate_send",
+            "generate_once",
+            _failure_ledger(
+                socketpair_creations=1,
+                worker_process_starts=1,
+                authorizations_consumed=1,
+                parent_frames=2,
+                worker_frames=2,
+            ),
+            "reaped",
+        ),
+        (
+            "shutdown_send",
+            "shutdown",
+            _failure_ledger(
+                socketpair_creations=1,
+                worker_process_starts=1,
+                authorizations_consumed=1,
+                parent_frames=3,
+                worker_frames=3,
+                generate_once_commands=1,
+                terminal_refusals=1,
+            ),
+            "reaped",
+        ),
+    ],
+)
+def test_injected_failures_record_only_completed_actions_and_terminal_child_custody(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_point: str,
+    expected_phase: str,
+    expected_ledger: dict[str, JsonValue],
+    child_state: str,
+) -> None:
+    root = _private_directory(tmp_path / failure_point)
+    if failure_point == "socketpair":
+
+        def fail_socketpair(
+            *_args: object,
+            **_kwargs: object,
+        ) -> tuple[socket.socket, socket.socket]:
+            raise OSError("injected socketpair failure")
+
+        monkeypatch.setattr(mlx_custody_module.socket, "socketpair", fail_socketpair)
+    elif failure_point == "spawn":
+
+        def fail_spawn(
+            _sealed_interpreter: Path,
+            _interpreter_argv0: Path,
+            _interpreter_identity_descriptor: int,
+            _worker_source_descriptor: int,
+            _child_endpoint: socket.socket,
+        ) -> int:
+            raise OSError("injected spawn failure")
+
+        monkeypatch.setattr(mlx_custody_module, "_spawn_worker", fail_spawn)
+    elif failure_point == "authorization_consumption":
+
+        def fail_consumption(
+            _output_root_descriptor: int,
+            _output_root: dict[str, JsonValue],
+            _authorization: dict[str, JsonValue],
+        ) -> dict[str, JsonValue]:
+            raise ContractError("injected authorization consumption failure")
+
+        monkeypatch.setattr(
+            mlx_custody_module,
+            "_consume_authorization_at",
+            fail_consumption,
+        )
+    else:
+        original_send = _FrameChannel.send
+        rejected_message = "generate_once" if failure_point == "generate_send" else "shutdown"
+
+        def fail_selected_send(
+            self: _FrameChannel,
+            value: dict[str, JsonValue],
+        ) -> None:
+            if value["message_type"] == rejected_message:
+                raise ContractError(f"injected {rejected_message} send failure")
+            original_send(self, value)
+
+        monkeypatch.setattr(_FrameChannel, "send", fail_selected_send)
+
+    with pytest.raises((ContractError, OSError), match="injected"):
+        run_inert_custody_self_test(root)
+    failure = _terminal_failure(root)
+    assert failure["terminal_state"] == "failed_closed"
+    assert failure["phase"] == expected_phase
+    assert _dict(failure["action_ledger"]) == expected_ledger
+    _assert_failure_child_custody(failure, child_spawned=child_state == "reaped")
+    assert all(value == 0 for value in _dict(failure["non_actions"]).values())
+    consumption_markers = list(root.glob(".localinferencelab-mlx-consumed-*.json"))
+    assert len(consumption_markers) == (1 if expected_ledger["authorizations_consumed"] == 1 else 0)
 
 
 def test_post_spawn_failure_is_reaped_and_terminally_custodied(
@@ -1010,18 +1189,16 @@ def test_post_spawn_failure_is_reaped_and_terminally_custodied(
     monkeypatch.setattr(mlx_custody_module, "_verify_worker_identity", reject_identity)
     with pytest.raises(ContractError, match="identity rejection"):
         run_inert_custody_self_test(root)
-    markers = list(root.glob(".localinferencelab-mlx-terminal-*.json"))
-    assert len(markers) == 1
-    failure = _dict(load_json_bytes(markers[0].read_bytes()))
+    failure = _terminal_failure(root)
     assert failure["terminal_state"] == "failed_closed"
     assert failure["phase"] == "worker_identity"
-    assert failure["child_reaped"] is True
+    _assert_failure_child_custody(failure, child_spawned=True)
     ledger = _dict(failure["action_ledger"])
     assert ledger["socketpair_creations"] == 1
     assert ledger["worker_process_starts"] == 1
     assert ledger["authorizations_consumed"] == 0
     assert all(value == 0 for value in _dict(failure["non_actions"]).values())
-    encoded = markers[0].read_text(encoding="utf-8")
+    encoded = canonical_json(failure).decode("utf-8")
     assert str(root) not in encoded
 
 

@@ -284,6 +284,13 @@ def inert_custody_spec() -> dict[str, JsonValue]:
             "reason": REFUSAL_REASON,
             "generated_result_producer": False,
         },
+        "failure_custody": {
+            "action_ledger": "completed_actions_only",
+            "child_spawned": "true_only_after_posix_spawn_returns_child_pid",
+            "child_reaped": "null_before_spawn_true_only_after_parent_wait",
+            "child_wait": "null_before_spawn_else_exact_parent_owned_wait_status",
+            "terminal_condition": "child_reaped_or_never_spawned",
+        },
         "deadline_ns": DEFAULT_DEADLINE_NS,
     }
 
@@ -1264,50 +1271,67 @@ def _parent_process_evidence(
     }
 
 
+def _child_wait_evidence(child_pid: int, status: int) -> dict[str, JsonValue]:
+    if os.WIFEXITED(status):
+        return {
+            "pid": child_pid,
+            "wait_owned": True,
+            "exited": True,
+            "exit_code": os.WEXITSTATUS(status),
+            "signal": None,
+        }
+    if os.WIFSIGNALED(status):
+        return {
+            "pid": child_pid,
+            "wait_owned": True,
+            "exited": False,
+            "exit_code": None,
+            "signal": os.WTERMSIG(status),
+        }
+    raise ContractError("child wait returned an unsupported status")
+
+
 def _wait_child(child_pid: int, deadline_ns: int) -> dict[str, JsonValue]:
     while True:
         waited_pid, status = os.waitpid(child_pid, os.WNOHANG)
         if waited_pid == child_pid:
-            if os.WIFEXITED(status):
-                return {
-                    "pid": child_pid,
-                    "wait_owned": True,
-                    "exited": True,
-                    "exit_code": os.WEXITSTATUS(status),
-                    "signal": None,
-                }
-            if os.WIFSIGNALED(status):
-                return {
-                    "pid": child_pid,
-                    "wait_owned": True,
-                    "exited": False,
-                    "exit_code": None,
-                    "signal": os.WTERMSIG(status),
-                }
-            raise ContractError("child wait returned an unsupported status")
+            return _child_wait_evidence(child_pid, status)
         if time.monotonic_ns() >= deadline_ns:
             raise ContractError("child did not exit before the absolute custody deadline")
         time.sleep(0.005)
 
 
-def _terminate_and_wait(child_pid: int) -> None:
+def _terminate_and_wait(child_pid: int) -> dict[str, JsonValue]:
     with contextlib.suppress(ProcessLookupError):
         os.kill(child_pid, signal.SIGTERM)
     deadline = time.monotonic_ns() + 500_000_000
     while True:
         try:
-            waited_pid, _status = os.waitpid(child_pid, os.WNOHANG)
-        except ChildProcessError:
-            return
+            waited_pid, status = os.waitpid(child_pid, os.WNOHANG)
+        except ChildProcessError as error:
+            raise ContractError(
+                "parent could not establish terminal custody of the spawned child"
+            ) from error
         if waited_pid == child_pid:
-            return
+            return _child_wait_evidence(child_pid, status)
         if time.monotonic_ns() >= deadline:
             break
         time.sleep(0.005)
     with contextlib.suppress(ProcessLookupError):
         os.kill(child_pid, signal.SIGKILL)
-    with contextlib.suppress(ChildProcessError):
-        os.waitpid(child_pid, 0)
+    deadline = time.monotonic_ns() + 500_000_000
+    while True:
+        try:
+            waited_pid, status = os.waitpid(child_pid, os.WNOHANG)
+        except ChildProcessError as error:
+            raise ContractError(
+                "parent could not establish terminal custody of the spawned child"
+            ) from error
+        if waited_pid == child_pid:
+            return _child_wait_evidence(child_pid, status)
+        if time.monotonic_ns() >= deadline:
+            raise ContractError("parent could not reap the spawned child after termination")
+        time.sleep(0.005)
 
 
 def _transcript(entries: list[JsonValue]) -> dict[str, JsonValue]:
@@ -1422,6 +1446,42 @@ def _custody_record(
     return record
 
 
+def _verify_completed_action_ledger(actions: dict[str, JsonValue]) -> None:
+    _keys(actions, set(_ACTION_LEDGER), "failure action_ledger")
+    for name, maximum in _ACTION_LEDGER.items():
+        _integer(
+            actions[name],
+            f"failure action_ledger.{name}",
+            maximum=maximum,
+        )
+    if actions["attempts"] != 1:
+        raise ContractError("failure action_ledger must describe one commenced attempt")
+
+
+def _verify_reaped_child_wait(child_wait: dict[str, JsonValue]) -> None:
+    _keys(
+        child_wait,
+        {"pid", "wait_owned", "exited", "exit_code", "signal"},
+        "failure child_wait",
+    )
+    _integer(child_wait["pid"], "failure child_wait.pid", minimum=1)
+    if _boolean(child_wait["wait_owned"], "failure child_wait.wait_owned") is not True:
+        raise ContractError("failure child_wait must be parent-owned")
+    exited = _boolean(child_wait["exited"], "failure child_wait.exited")
+    if exited:
+        _integer(
+            child_wait["exit_code"],
+            "failure child_wait.exit_code",
+            maximum=255,
+        )
+        if child_wait["signal"] is not None:
+            raise ContractError("exited failure child_wait cannot carry a signal")
+    else:
+        if child_wait["exit_code"] is not None:
+            raise ContractError("signaled failure child_wait cannot carry an exit code")
+        _integer(child_wait["signal"], "failure child_wait.signal", minimum=1)
+
+
 def _write_terminal_failure_at(
     output_root_descriptor: int,
     *,
@@ -1430,7 +1490,20 @@ def _write_terminal_failure_at(
     package_id: JsonValue,
     actions: dict[str, JsonValue],
     authorization_id: JsonValue,
+    child_spawned: bool,
+    child_wait: dict[str, JsonValue] | None,
 ) -> dict[str, JsonValue]:
+    _verify_completed_action_ledger(actions)
+    process_starts = actions["worker_process_starts"]
+    if child_spawned:
+        if process_starts != 1 or child_wait is None:
+            raise ContractError("spawned-child failure custody is incomplete")
+        _verify_reaped_child_wait(child_wait)
+        child_reaped: JsonValue = True
+    else:
+        if process_starts != 0 or child_wait is not None:
+            raise ContractError("pre-spawn failure custody contains child evidence")
+        child_reaped = None
     failure: dict[str, JsonValue] = {
         "record_type": "mlx_inert_terminal_failure",
         "schema_version": SCHEMA_VERSION,
@@ -1442,7 +1515,10 @@ def _write_terminal_failure_at(
         "output_root_id": output_root_id,
         "package_id": package_id,
         "authorization_id": authorization_id,
-        "child_reaped": True,
+        "child_spawned": child_spawned,
+        "child_reaped": child_reaped,
+        "child_reaped_or_never_spawned": True,
+        "child_wait": child_wait,
         "action_ledger": actions,
         "non_actions": dict(_NON_ACTIONS),
         "failure_nonce_sha256": digest_bytes(os.urandom(32)),
@@ -1465,7 +1541,7 @@ def _require_successful_terminal_state(
     if child_wait["exit_code"] != 0:
         raise ContractError("sealed inert worker did not exit successfully")
     if actions != _ACTION_LEDGER:
-        raise ContractError("inert custody action reservation ledger drift")
+        raise ContractError("inert custody completed-action ledger drift")
 
 
 def _require_bounded_content(content_files: dict[str, bytes]) -> None:
@@ -1487,6 +1563,8 @@ def run_inert_custody_self_test(
     root_binding: dict[str, JsonValue] | None = None
     package: dict[str, JsonValue] | None = None
     authorization: dict[str, JsonValue] | None = None
+    child_spawned = False
+    child_wait: dict[str, JsonValue] | None = None
     phase = "initialization"
     actions: dict[str, JsonValue] = {
         "attempts": 1,
@@ -1555,13 +1633,12 @@ def run_inert_custody_self_test(
             "deadline_monotonic_ns": deadline_ns,
         }
         phase = "socketpair_creation"
-        actions["socketpair_creations"] = 1
         parent_endpoint, child_endpoint = socket.socketpair(
             socket.AF_UNIX,
             socket.SOCK_STREAM,
         )
+        actions["socketpair_creations"] = 1
         phase = "worker_process_start"
-        actions["worker_process_starts"] = 1
         _revalidate_output_root_launch_path(resolved_output_root, root_descriptor)
         child_pid = _spawn_worker(
             sealed_interpreter_path,
@@ -1570,6 +1647,8 @@ def run_inert_custody_self_test(
             worker_source_descriptor,
             child_endpoint,
         )
+        child_spawned = True
+        actions["worker_process_starts"] = 1
         os.close(interpreter_snapshot_descriptor)
         interpreter_snapshot_descriptor = None
         os.close(worker_source_descriptor)
@@ -1596,12 +1675,12 @@ def run_inert_custody_self_test(
         authorization = _build_authorization(hello, worker_nonce, time.time_ns())
         _verify_authorization(authorization, check_current_expiry=True)
         phase = "authorization_consumption"
-        actions["authorizations_consumed"] = 1
         consumption = _consume_authorization_at(
             root_descriptor,
             root_binding,
             authorization,
         )
+        actions["authorizations_consumed"] = 1
         phase = "authorize_once"
         channel.send(
             {
@@ -1616,7 +1695,6 @@ def run_inert_custody_self_test(
         actions["worker_frames"] = 2
         request_nonce = encode_bytes(os.urandom(32))
         phase = "generate_once"
-        actions["generate_once_commands"] = 1
         channel.send(
             {
                 "message_type": "generate_once",
@@ -1630,6 +1708,7 @@ def run_inert_custody_self_test(
                 "request_nonce": request_nonce,
             }
         )
+        actions["generate_once_commands"] = 1
         actions["parent_frames"] = 3
         phase = "terminal_refusal"
         _verify_refusal(
@@ -1640,7 +1719,6 @@ def run_inert_custody_self_test(
         actions["worker_frames"] = 3
         actions["terminal_refusals"] = 1
         phase = "shutdown"
-        actions["shutdowns"] = 1
         channel.send(
             {
                 "message_type": "shutdown",
@@ -1650,6 +1728,7 @@ def run_inert_custody_self_test(
                 "request_nonce": request_nonce,
             }
         )
+        actions["shutdowns"] = 1
         actions["parent_frames"] = 4
         parent_endpoint.shutdown(socket.SHUT_WR)
         phase = "shutdown_ack"
@@ -1703,7 +1782,7 @@ def run_inert_custody_self_test(
         return destination, replay_inert_custody_bundle(destination)
     except (ContractError, OSError):
         if child_pid is not None:
-            _terminate_and_wait(child_pid)
+            child_wait = _terminate_and_wait(child_pid)
             child_pid = None
         _write_terminal_failure_at(
             root_descriptor,
@@ -1712,6 +1791,8 @@ def run_inert_custody_self_test(
             package_id=None if package is None else package["package_id"],
             authorization_id=(None if authorization is None else authorization["authorization_id"]),
             actions=actions,
+            child_spawned=child_spawned,
+            child_wait=child_wait,
         )
         raise
     finally:
