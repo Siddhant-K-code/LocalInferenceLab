@@ -65,7 +65,7 @@ MLX_LM_REVISION = "5cfec4cb39deba54210b3ff4d86f2337c7bc10b5"
 DEFAULT_DEADLINE_NS = AUTHORIZATION_LIFETIME_NS
 MAX_BUNDLE_FILE_BYTES = 2 * 1024 * 1024
 EXPECTED_RUNTIME_WORKER_PROGRAM_SHA256 = (
-    "sha256:472932ab2db8ed336af8ce60ee76be04b1f6c14eb5d77bade39169ca91367c71"
+    "sha256:fd0e77635159573d5c0f8128ffa61b5d560dd2e7d3550e853b866bc9ac791e81"
 )
 EXPECTED_OBSERVED_LOCK_ID = (
     "sha256:fd3dba6568f2efa9ac4f7f0b82998e97fda08013e1829b1c3a4bb62c6578e1ad"
@@ -1492,8 +1492,16 @@ def _verify_module_record(
         maximum=64,
     )
     if origin_kind != "file":
-        if origin_kind not in {"built_in", "frozen", "namespace", "sealed_stdin_worker"}:
+        if origin_kind not in {
+            "built_in",
+            "frozen",
+            "namespace",
+            "sealed_stdin_worker",
+            "stdlib_alias",
+        }:
             raise ContractError("imported module has an unsupported origin kind")
+        if origin_kind == "stdlib_alias" and name not in {"typing.io", "typing.re"}:
+            raise ContractError("imported stdlib alias is not an exact supported alias")
         for field in (
             "root_kind",
             "relative_path",

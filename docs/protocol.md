@@ -205,7 +205,9 @@ The authorization permits only exact distribution-version checks, imports of bou
 are absent before acknowledgment. The worker reports import timing and possible initialization,
 strict backend/device/stream representations, synchronization completion, completed action and
 non-action ledgers, and its actual imported-module closure. The parent requires all non-stdlib
-module files to belong to the retained supplied-root manifest. Terminal import/probe errors remain
+module files to belong to the retained supplied-root manifest. Fileless stdlib aliases are limited
+to Python 3.12's exact `typing.io` and `typing.re` compatibility entries; arbitrary fileless
+origins remain invalid. Terminal import/probe errors remain
 closed and replayable; protocol/process failures retain parent-owned wait custody. Replay imports
 nothing and starts no process or socket.
 

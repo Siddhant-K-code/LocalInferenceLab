@@ -537,6 +537,29 @@ def test_runtime_preflight_result_rejects_extra_bool_and_duplicate_module_fields
             runtime_manifest=manifest,
         )
 
+    forged_alias = _copy(result)
+    alias = _dict(_list(forged_alias["imported_modules"])[0])
+    alias.update(
+        {
+            "name": "mlx.core",
+            "origin_kind": "stdlib_alias",
+            "root_kind": None,
+            "relative_path": None,
+            "device": None,
+            "inode": None,
+            "mode": None,
+            "size_bytes": None,
+            "sha256": None,
+        }
+    )
+    with pytest.raises(ContractError, match="exact supported alias"):
+        preflight_module._verify_preflight_result(  # noqa: SLF001
+            forged_alias,
+            authorization=authorization,
+            request_nonce=request_nonce,
+            runtime_manifest=manifest,
+        )
+
 
 def test_runtime_preflight_forbidden_attempt_failure_custody_is_truthful_and_replayable(
     tmp_path: Path,

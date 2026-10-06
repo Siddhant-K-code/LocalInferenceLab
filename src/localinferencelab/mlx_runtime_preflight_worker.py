@@ -847,6 +847,20 @@ def _imported_module_closure(runtime_import_path: str) -> list[object]:
                     "sha256": None,
                 }
             )
+        elif origin is None and name in {"typing.io", "typing.re"}:
+            records.append(
+                {
+                    "name": name,
+                    "origin_kind": "stdlib_alias",
+                    "root_kind": None,
+                    "relative_path": None,
+                    "device": None,
+                    "inode": None,
+                    "mode": None,
+                    "size_bytes": None,
+                    "sha256": None,
+                }
+            )
         elif name == "__main__" and path == "<stdin>":
             records.append(
                 {
