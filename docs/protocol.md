@@ -192,8 +192,13 @@ counts only completed actions. Failure custody separately records whether a chil
 when it was, the exact parent-owned wait evidence that proves reaping; pre-spawn failures carry no
 child-reaped claim.
 
-The additive runtime-preflight schema uses a distinct action, protocol, and worker. Its fixed order
-is:
+The additive runtime-preflight schema uses a distinct action, protocol, and worker. Public
+schema-1.0 execution is unreachable because the reviewed MLX-LM `0.30.6` requirement
+`mlx>=0.30.4` conflicts with the reviewed MLX `0.29.3` pin. The public command validates and
+rejects that receipt before output-root access, socket/process creation, authorization, import, or
+probe. No public flag unlocks it; a compatible source/version pair requires a separately reviewed
+schema and new authorization. Exact internal synthetic fixtures continue to exercise this fixed
+order:
 
 ```text
 parent_hello -> worker_identity -> authorize_once -> authorization_ack ->
@@ -204,12 +209,18 @@ The authorization permits only exact distribution-version checks, imports of bou
 `mlx_lm`, `default_device`, `metal.is_available`, `default_stream`, and `synchronize`. MLX imports
 are absent before acknowledgment. The worker reports import timing and possible initialization,
 strict backend/device/stream representations, synchronization completion, completed action and
-non-action ledgers, and its actual imported-module closure. The parent requires all non-stdlib
-module files to belong to the retained supplied-root manifest. Fileless stdlib aliases are limited
-to Python 3.12's exact `typing.io` and `typing.re` compatibility entries; arbitrary fileless
-origins remain invalid. Terminal import/probe errors remain
-closed and replayable; protocol/process failures retain parent-owned wait custody. Replay imports
-nothing and starts no process or socket.
+its actual imported-module closure. Its ledgers are intentionally disjoint:
+`completed_runtime_actions` records ordinary completed imports/probes,
+`model_non_actions` records zero model/tokenizer/inference/cache/etc. actions,
+`guarded_action_attempts` records Python-audited network/process-or-command/filesystem-mutation
+attempts, and `completed_forbidden_actions` records worker-reported completion of those forbidden
+categories and must be all zero. The audit hook is not an OS sandbox. A rejected worker frame is
+untrusted, so its completed ledger is not accepted as parent proof. The parent requires all
+non-stdlib module files to belong to the retained supplied-root manifest. Fileless stdlib aliases
+are limited to Python 3.12's exact `typing.io` and `typing.re` compatibility entries; arbitrary
+fileless origins remain invalid. Terminal import/probe errors remain closed and replayable;
+protocol/process failures retain parent-owned wait custody. Replay imports nothing and starts no
+process or socket.
 
 The pinned sampler is greedy temperature-zero argmax. The seed is still recorded and must be set on
 the generation thread because MLX random state is thread-local, but greedy sampling consumes no

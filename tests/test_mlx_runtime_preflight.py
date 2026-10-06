@@ -13,6 +13,7 @@ from typing import cast
 
 import pytest
 
+import localinferencelab.cli as cli_module
 import localinferencelab.mlx_runtime_preflight as preflight_module
 from localinferencelab.canonical import (
     ContractError,
@@ -320,7 +321,10 @@ def test_runtime_preflight_spec_and_capability_are_additive_and_pure() -> None:
     report = runtime_preflight_capability_report()
     assert spec["action"] == "mlx_runtime_preflight_only"
     assert spec["allowed_probes"] == sorted(_list(spec["allowed_probes"]))
-    assert report["explicit_processful_command"] == "mlx runtime-preflight"
+    assert report["execution_command"] == "mlx runtime-preflight"
+    assert report["execution_reachable"] is False
+    assert report["starts_one_local_child"] is False
+    assert spec["public_execution_reachable"] is False
     assert report["model_load"] is False
     assert report["generation"] is False
     assert report["download"] is False
@@ -525,6 +529,66 @@ def test_runtime_preflight_result_rejects_extra_bool_and_duplicate_module_fields
             runtime_manifest=manifest,
         )
 
+    ambiguous_attempt = _copy(result)
+    _dict(ambiguous_attempt["guarded_action_attempts"])["network"] = True
+    with pytest.raises(ContractError, match="must be an integer"):
+        preflight_module._verify_preflight_result(  # noqa: SLF001
+            ambiguous_attempt,
+            authorization=authorization,
+            request_nonce=request_nonce,
+            runtime_manifest=manifest,
+        )
+
+    ambiguous_model_non_action = _copy(result)
+    _dict(ambiguous_model_non_action["model_non_actions"])["model_loads"] = False
+    with pytest.raises(ContractError, match="must be an integer"):
+        preflight_module._verify_preflight_result(  # noqa: SLF001
+            ambiguous_model_non_action,
+            authorization=authorization,
+            request_nonce=request_nonce,
+            runtime_manifest=manifest,
+        )
+
+    ambiguous_completed_forbidden = _copy(result)
+    _dict(ambiguous_completed_forbidden["completed_forbidden_actions"])["network"] = False
+    with pytest.raises(ContractError, match="must be an integer"):
+        preflight_module._verify_preflight_result(  # noqa: SLF001
+            ambiguous_completed_forbidden,
+            authorization=authorization,
+            request_nonce=request_nonce,
+            runtime_manifest=manifest,
+        )
+
+    extra_attempt_category = _copy(result)
+    _dict(extra_attempt_category["guarded_action_attempts"])["unknown"] = 0
+    with pytest.raises(ContractError, match="unknown keys"):
+        preflight_module._verify_preflight_result(  # noqa: SLF001
+            extra_attempt_category,
+            authorization=authorization,
+            request_nonce=request_nonce,
+            runtime_manifest=manifest,
+        )
+
+    missing_completed_category = _copy(result)
+    del _dict(missing_completed_category["completed_forbidden_actions"])["network"]
+    with pytest.raises(ContractError, match="missing keys"):
+        preflight_module._verify_preflight_result(  # noqa: SLF001
+            missing_completed_category,
+            authorization=authorization,
+            request_nonce=request_nonce,
+            runtime_manifest=manifest,
+        )
+
+    completed_forbidden = _copy(result)
+    _dict(completed_forbidden["completed_forbidden_actions"])["network"] = 1
+    with pytest.raises(ContractError, match="must be <= 0"):
+        preflight_module._verify_preflight_result(  # noqa: SLF001
+            completed_forbidden,
+            authorization=authorization,
+            request_nonce=request_nonce,
+            runtime_manifest=manifest,
+        )
+
     duplicate = _copy(result)
     modules = _list(duplicate["imported_modules"])
     modules.append(_copy(modules[0]))
@@ -575,7 +639,7 @@ def test_runtime_preflight_forbidden_attempt_failure_custody_is_truthful_and_rep
     runtime_lock = _synthetic_lock(manifest)
     receipt = _synthetic_receipt(manifest, runtime_lock)
     output = _private_directory(tmp_path / "output")
-    with pytest.raises(ContractError, match="performed or attempted a forbidden action"):
+    with pytest.raises(ContractError, match="Python-audited forbidden action attempt"):
         run_runtime_preflight(
             manifest,
             runtime_lock,
@@ -604,9 +668,14 @@ def test_runtime_preflight_forbidden_attempt_failure_custody_is_truthful_and_rep
     assert projection["worker_error_phase"] == "import_mlx_lm"
     assert _dict(projection["worker_action_ledger"])["mlx_imports"] == 1
     assert _dict(projection["worker_action_ledger"])["mlx_lm_imports"] == 0
-    assert _dict(projection["worker_non_action_ledger"])["filesystem_mutations"] == 1
-    assert projection["forbidden_action_attempt_count"] == 1
-    assert projection["forbidden_actions_completed"] == 0
+    assert _dict(projection["worker_guarded_action_attempt_ledger"])["filesystem_mutation"] == 1
+    assert projection["guarded_action_attempt_count_untrusted"] == 1
+    assert _dict(projection["worker_reported_completed_forbidden_action_ledger"]) == {
+        "filesystem_mutation": 0,
+        "network": 0,
+        "process_or_command": 0,
+    }
+    assert projection["completed_forbidden_actions_accepted"] is False
     assert projection["backend_facts_accepted"] is False
     assert projection["synchronization_accepted"] is False
     assert _dict(failure["child_wait"])["signal"] == 15
@@ -625,17 +694,108 @@ def test_runtime_preflight_forbidden_attempt_failure_custody_is_truthful_and_rep
             expected_consumption_id=original_consumption,
         )
 
-    completed = _copy(failure)
-    _dict(completed["rejected_result_projection"])["forbidden_actions_completed"] = 1
-    completed_content = dict(completed)
-    del completed_content["failure_id"]
-    completed["failure_id"] = canonical_identity(completed_content)
-    with pytest.raises(ContractError, match="forbidden-action accounting"):
+    accepted = _copy(failure)
+    _dict(accepted["rejected_result_projection"])["completed_forbidden_actions_accepted"] = True
+    accepted_content = dict(accepted)
+    del accepted_content["failure_id"]
+    accepted["failure_id"] = canonical_identity(accepted_content)
+    with pytest.raises(ContractError, match="projection drift"):
         preflight_module.verify_runtime_preflight_terminal_failure(
-            completed,
+            accepted,
             expected_authorization_id=original_authorization,
             expected_consumption_id=original_consumption,
         )
+
+
+def test_incompatible_observed_receipt_refuses_before_any_physical_action(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest: dict[str, JsonValue] = {"manifest_id": digest_bytes(b"observed manifest")}
+    runtime_lock: dict[str, JsonValue] = {
+        "evidence_kind": "observed_package_lock",
+        "lock_id": preflight_module.EXPECTED_OBSERVED_LOCK_ID,
+    }
+    receipt: dict[str, JsonValue] = {
+        "evidence_kind": "observed_package_install",
+        "dependency_semantic_closure": {
+            "status": "blocked_incompatible_declared_requirement",
+            "requesting_distribution": "mlx-lm==0.30.6",
+            "declared_requirement": 'mlx>=0.30.4; platform_system == "Darwin"',
+            "selected_distribution": "mlx==0.29.3",
+            "resolver_outcome": "unsatisfiable_without_substitution",
+            "substitution_performed": False,
+        },
+    }
+    monkeypatch.setattr(
+        preflight_module,
+        "verify_runtime_manifest",
+        lambda _value: manifest,
+    )
+    monkeypatch.setattr(
+        preflight_module,
+        "verify_runtime_lock",
+        lambda _value, **_kwargs: runtime_lock,
+    )
+    monkeypatch.setattr(
+        preflight_module,
+        "verify_install_receipt",
+        lambda _value, **_kwargs: receipt,
+    )
+    monkeypatch.setattr(cli_module, "load_runtime_manifest", lambda _path: manifest)
+    monkeypatch.setattr(cli_module, "load_runtime_lock", lambda _path: runtime_lock)
+    monkeypatch.setattr(
+        cli_module,
+        "load_install_receipt",
+        lambda _path, **_kwargs: receipt,
+    )
+
+    touched: list[str] = []
+
+    def fail_if_touched(*_args: object, **_kwargs: object) -> None:
+        touched.append("physical_action")
+        raise AssertionError("incompatible receipt reached a physical action")
+
+    for name in (
+        "_open_private_output_root",
+        "_read_launch_target",
+        "_spawn_runtime_worker",
+        "_build_authorization",
+        "_consume_authorization_at",
+        "_write_terminal_failure_at",
+    ):
+        monkeypatch.setattr(preflight_module, name, fail_if_touched)
+    monkeypatch.setattr(preflight_module.socket, "socketpair", fail_if_touched)
+
+    with pytest.raises(
+        ContractError, match=r"schema 1[.]0 runtime-preflight execution is disabled"
+    ):
+        build_runtime_preflight_package(manifest, runtime_lock, receipt)
+    with pytest.raises(
+        ContractError, match=r"schema 1[.]0 runtime-preflight execution is disabled"
+    ):
+        run(
+            [
+                "mlx",
+                "runtime-preflight",
+                str(tmp_path / "manifest.json"),
+                str(tmp_path / "lock.json"),
+                str(tmp_path / "receipt.json"),
+            ]
+        )
+    with pytest.raises(
+        ContractError, match=r"schema 1[.]0 runtime-preflight execution is disabled"
+    ):
+        run_runtime_preflight(
+            manifest,
+            runtime_lock,
+            receipt,
+            tmp_path / "missing-runtime",
+            tmp_path / "missing-interpreter",
+            tmp_path / "missing-output-root",
+        )
+    assert touched == []
+    assert not (tmp_path / "missing-output-root").exists()
 
 
 def test_runtime_lock_receipt_and_package_reject_drift(tmp_path: Path) -> None:
@@ -680,6 +840,8 @@ def test_runtime_preflight_cli_pure_surfaces_and_help(capfd: pytest.CaptureFixtu
     assert run(["mlx", "runtime-preflight-capability-report"]) == 0
     report = _dict(load_json_bytes(capfd.readouterr().out.encode("utf-8").strip()))
     assert report["model_load"] is False
+    assert report["execution_reachable"] is False
+    assert report["starts_one_local_child"] is False
     assert run(["mlx", "runtime-preflight-spec"]) == 0
     spec = _dict(load_json_bytes(capfd.readouterr().out.encode("utf-8")))
     assert spec["action"] == "mlx_runtime_preflight_only"
@@ -688,8 +850,10 @@ def test_runtime_preflight_cli_pure_surfaces_and_help(capfd: pytest.CaptureFixtu
     assert exit_info.value.code == 0
     help_text = capfd.readouterr().out
     normalized_help = " ".join(help_text.split())
-    assert "import MLX/MLX-LM" in normalized_help
-    assert "no model/tokenizer discovery, download, or load" in normalized_help
+    assert "Schema 1.0 execution is disabled" in normalized_help
+    assert "without an output root, child, socket, authorization, MLX import, or probe" in (
+        normalized_help
+    )
 
 
 def test_observed_negative_projection_replays_pure_and_rejects_binding_tamper(

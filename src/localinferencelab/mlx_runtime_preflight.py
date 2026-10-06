@@ -65,7 +65,7 @@ MLX_LM_REVISION = "5cfec4cb39deba54210b3ff4d86f2337c7bc10b5"
 DEFAULT_DEADLINE_NS = AUTHORIZATION_LIFETIME_NS
 MAX_BUNDLE_FILE_BYTES = 2 * 1024 * 1024
 EXPECTED_RUNTIME_WORKER_PROGRAM_SHA256 = (
-    "sha256:fd0e77635159573d5c0f8128ffa61b5d560dd2e7d3550e853b866bc9ac791e81"
+    "sha256:78dadf2ac01cdaa29eaf2207f273726c0a22bbee0703849df812c65bda4bd927"
 )
 EXPECTED_OBSERVED_LOCK_ID = (
     "sha256:fd3dba6568f2efa9ac4f7f0b82998e97fda08013e1829b1c3a4bb62c6578e1ad"
@@ -76,7 +76,7 @@ OBSERVED_AUTHORIZATION_ID = (
     "sha256:65dd8b73f5e879b76ab8d5501aedf56e6941a083f39d4add9bd04bde071456cc"
 )
 EXPECTED_OBSERVED_NEGATIVE_PROJECTION_ID = (
-    "sha256:e76ee27cd15db2283e9536c41d4cbe414f78785aab278583714369020d54f2a0"
+    "sha256:be758bfa5a4a3481cd04b87071498c233e36048368e81391825f4663796da99c"
 )
 _PRIVATE_DIRECTORY_MODE = 0o700
 _DIGEST_LENGTH = 71
@@ -100,6 +100,11 @@ _PREFLIGHT_LAUNCH_ENVIRONMENT = {
 _PACKAGE_NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _SAFE_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,254}$")
 _SAFE_ERROR_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_]{1,64}$")
+_SCHEMA_EXECUTION_BLOCKER = (
+    "schema 1.0 runtime-preflight execution is disabled: mlx-lm==0.30.6 declares "
+    "mlx>=0.30.4 on Darwin, but the reviewed selected runtime pins mlx==0.29.3; "
+    "a compatible pair requires a separately reviewed schema and authorization"
+)
 _FORBIDDEN_ACTIONS = (
     "arbitrary_code_or_commands",
     "benchmarking",
@@ -141,7 +146,7 @@ _SUCCESS_WORKER_ACTIONS = {
     "default_stream_queries": 1,
     "synchronizations": 1,
 }
-_ZERO_NON_ACTIONS = {
+_ZERO_MODEL_NON_ACTIONS = {
     "model_discoveries": 0,
     "model_loads": 0,
     "tokenizer_discoveries": 0,
@@ -152,15 +157,18 @@ _ZERO_NON_ACTIONS = {
     "generation_requests": 0,
     "benchmark_actions": 0,
     "meaningful_tensor_allocations": 0,
-    "physical_network_requests": 0,
     "package_index_requests": 0,
     "model_repository_requests": 0,
-    "shell_actions": 0,
-    "arbitrary_command_actions": 0,
-    "filesystem_mutations": 0,
     "cloud_actions": 0,
     "spend_actions": 0,
 }
+_ZERO_GUARDED_ACTION_ATTEMPTS = {
+    "network": 0,
+    "process_or_command": 0,
+    "filesystem_mutation": 0,
+}
+_GUARDED_ACTION_ATTEMPT_MAXIMA = dict.fromkeys(_ZERO_GUARDED_ACTION_ATTEMPTS, 1)
+_ZERO_COMPLETED_FORBIDDEN_ACTIONS = dict(_ZERO_GUARDED_ACTION_ATTEMPTS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,7 +188,9 @@ class RuntimePreflightReplayResult:
     default_device_representation: str | None
     synchronization_completed: bool
     authorization_consumptions: int
-    preflight_network_actions: int
+    python_audited_guarded_action_attempts: int
+    worker_reported_completed_forbidden_actions: int
+    completed_forbidden_actions_proven_by_parent: bool
     model_actions: int
     remaining_requirements: int
 
@@ -199,7 +209,13 @@ class RuntimePreflightReplayResult:
             "default_device_representation": self.default_device_representation,
             "synchronization_completed": self.synchronization_completed,
             "authorization_consumptions": self.authorization_consumptions,
-            "preflight_network_actions": self.preflight_network_actions,
+            "python_audited_guarded_action_attempts": (self.python_audited_guarded_action_attempts),
+            "worker_reported_completed_forbidden_actions": (
+                self.worker_reported_completed_forbidden_actions
+            ),
+            "completed_forbidden_actions_proven_by_parent": (
+                self.completed_forbidden_actions_proven_by_parent
+            ),
             "model_actions": self.model_actions,
             "remaining_requirements": self.remaining_requirements,
         }
@@ -341,10 +357,13 @@ def runtime_preflight_spec() -> dict[str, JsonValue]:
         "runtime_import_root": "retained_inherited_directory_descriptor_only",
         "imports_after_authorization_only": True,
         "result_validation": "strict_parent_schema_and_bound_root_module_closure",
-        "claim_scope": (
-            "observed_model_free_runtime_preflight_not_model_execution_or_per_kernel_gpu_proof"
-        ),
+        "execution_eligibility": "blocked_known_incompatible_dependency_pair",
+        "public_execution_reachable": False,
+        "compatible_pair_requires_new_schema_and_authorization": True,
+        "python_audit_guard_scope": "python_audited_attempts_not_os_sandbox",
+        "claim_scope": ("synthetic_protocol_contract_only_no_schema_1_0_observed_execution"),
         "explicit_blockers": [
+            "known_incompatible_mlx_lm_declared_requirement",
             "applicable_dependency_distribution_semantic_closure",
             "complete_python_standard_library_closure",
             "complete_native_runtime_and_dynamic_loader_closure",
@@ -362,7 +381,10 @@ def runtime_preflight_capability_report() -> dict[str, JsonValue]:
         "record_type": "mlx_runtime_preflight_capability_report",
         "schema_version": SCHEMA_VERSION,
         "action": "mlx_runtime_preflight_only",
-        "explicit_processful_command": "mlx runtime-preflight",
+        "execution_command": "mlx runtime-preflight",
+        "execution_reachable": False,
+        "execution_blocker": _SCHEMA_EXECUTION_BLOCKER,
+        "compatible_pair_requires_new_schema_and_authorization": True,
         "pure_commands": [
             "mlx runtime-preflight-capability-report",
             "mlx runtime-preflight-failure-replay",
@@ -371,10 +393,11 @@ def runtime_preflight_capability_report() -> dict[str, JsonValue]:
             "mlx runtime-preflight-replay",
             "mlx runtime-preflight-spec",
         ],
-        "starts_one_local_child": True,
-        "imports_exact_mlx_and_mlx_lm": True,
-        "may_initialize_or_query_apple_runtime_or_metal": True,
-        "synchronizes_mlx_default_streams": True,
+        "starts_one_local_child": False,
+        "imports_exact_mlx_and_mlx_lm": False,
+        "may_initialize_or_query_apple_runtime_or_metal": False,
+        "synchronizes_mlx_default_streams": False,
+        "synthetic_protocol_implementation_retained": True,
         "model_load": False,
         "tokenizer_load": False,
         "inference": False,
@@ -813,6 +836,25 @@ def load_install_receipt(
     )
 
 
+def _require_runtime_preflight_execution_eligible(
+    receipt: dict[str, JsonValue],
+    *,
+    allow_synthetic: bool,
+) -> None:
+    dependency = _mapping(
+        receipt["dependency_semantic_closure"],
+        "runtime_install_receipt.dependency_semantic_closure",
+    )
+    if allow_synthetic:
+        if (
+            receipt["evidence_kind"] != "synthetic_fixture"
+            or dependency["status"] != "satisfied_exact_fixture"
+        ):
+            raise ContractError("synthetic runtime-preflight path accepts only exact test fixtures")
+        return
+    raise ContractError(_SCHEMA_EXECUTION_BLOCKER)
+
+
 def build_runtime_preflight_package(
     runtime_manifest_value: JsonValue,
     runtime_lock_value: JsonValue,
@@ -827,6 +869,10 @@ def build_runtime_preflight_package(
         install_receipt_value,
         runtime_lock=runtime_lock,
         runtime_manifest=manifest,
+        allow_synthetic=allow_synthetic,
+    )
+    _require_runtime_preflight_execution_eligible(
+        receipt,
         allow_synthetic=allow_synthetic,
     )
     distributions = {
@@ -1613,11 +1659,58 @@ def _verify_worker_actions(value: JsonValue, *, completed: bool) -> dict[str, Js
     return cast("dict[str, JsonValue]", parsed)
 
 
-def _verify_non_actions(value: JsonValue) -> dict[str, JsonValue]:
-    non_actions = _mapping(value, "preflight_result.non_actions")
-    if non_actions != _ZERO_NON_ACTIONS:
-        raise ContractError("runtime preflight performed or attempted a forbidden action")
-    return dict(non_actions)
+def _verify_model_non_actions(value: JsonValue) -> dict[str, JsonValue]:
+    non_actions = _mapping(value, "preflight_result.model_non_actions")
+    _keys(non_actions, set(_ZERO_MODEL_NON_ACTIONS), "preflight_result.model_non_actions")
+    parsed = {
+        name: _integer(
+            non_actions[name],
+            f"preflight_result.model_non_actions.{name}",
+            maximum=0,
+        )
+        for name in _ZERO_MODEL_NON_ACTIONS
+    }
+    return cast("dict[str, JsonValue]", parsed)
+
+
+def _verify_guarded_action_attempts(value: JsonValue) -> dict[str, JsonValue]:
+    attempts = _mapping(value, "preflight_result.guarded_action_attempts")
+    _keys(
+        attempts,
+        set(_ZERO_GUARDED_ACTION_ATTEMPTS),
+        "preflight_result.guarded_action_attempts",
+    )
+    parsed = {
+        name: _integer(
+            attempts[name],
+            f"preflight_result.guarded_action_attempts.{name}",
+            maximum=1,
+        )
+        for name in _ZERO_GUARDED_ACTION_ATTEMPTS
+    }
+    if sum(parsed.values()) > 1:
+        raise ContractError("runtime preflight reported multiple guarded action attempts")
+    if parsed != _ZERO_GUARDED_ACTION_ATTEMPTS:
+        raise ContractError("runtime preflight reported a Python-audited forbidden action attempt")
+    return cast("dict[str, JsonValue]", parsed)
+
+
+def _verify_completed_forbidden_actions(value: JsonValue) -> dict[str, JsonValue]:
+    completed = _mapping(value, "preflight_result.completed_forbidden_actions")
+    _keys(
+        completed,
+        set(_ZERO_COMPLETED_FORBIDDEN_ACTIONS),
+        "preflight_result.completed_forbidden_actions",
+    )
+    parsed = {
+        name: _integer(
+            completed[name],
+            f"preflight_result.completed_forbidden_actions.{name}",
+            maximum=0,
+        )
+        for name in _ZERO_COMPLETED_FORBIDDEN_ACTIONS
+    }
+    return cast("dict[str, JsonValue]", parsed)
 
 
 def _verify_preflight_result(
@@ -1643,7 +1736,9 @@ def _verify_preflight_result(
         "backend_facts",
         "synchronization",
         "action_ledger",
-        "non_actions",
+        "model_non_actions",
+        "guarded_action_attempts",
+        "completed_forbidden_actions",
         "runtime_root_import_path",
         "stdlib_closure_complete",
         "native_loader_closure_complete",
@@ -1676,7 +1771,9 @@ def _verify_preflight_result(
     )
     value["imported_modules"] = modules
     _verify_worker_actions(value["action_ledger"], completed=completed)
-    _verify_non_actions(value["non_actions"])
+    _verify_model_non_actions(value["model_non_actions"])
+    _verify_completed_forbidden_actions(value["completed_forbidden_actions"])
+    _verify_guarded_action_attempts(value["guarded_action_attempts"])
     if completed:
         if value["error"] is not None:
             raise ContractError("completed runtime preflight cannot contain an error")
@@ -2173,7 +2270,9 @@ def _preflight_record(
         "child_wait": child_wait,
         "preflight_action_ledger": dict(_PREFLIGHT_ACTION_LEDGER),
         "worker_action_ledger": result["action_ledger"],
-        "non_actions": result["non_actions"],
+        "model_non_actions": result["model_non_actions"],
+        "guarded_action_attempts": result["guarded_action_attempts"],
+        "completed_forbidden_actions": result["completed_forbidden_actions"],
         "package_network_actions": install_receipt["package_network_actions"],
         "backend_facts": result["backend_facts"],
         "synchronization": result["synchronization"],
@@ -2260,7 +2359,9 @@ def _verify_preflight_record(
         "child_wait",
         "preflight_action_ledger",
         "worker_action_ledger",
-        "non_actions",
+        "model_non_actions",
+        "guarded_action_attempts",
+        "completed_forbidden_actions",
         "package_network_actions",
         "backend_facts",
         "synchronization",
@@ -2327,7 +2428,9 @@ def _verify_preflight_record(
         or record["imported_module_count"] != len(modules)
         or record["bound_runtime_module_count"] != bound_count
         or record["worker_action_ledger"] != result["action_ledger"]
-        or record["non_actions"] != result["non_actions"]
+        or record["model_non_actions"] != result["model_non_actions"]
+        or record["guarded_action_attempts"] != result["guarded_action_attempts"]
+        or record["completed_forbidden_actions"] != result["completed_forbidden_actions"]
         or record["package_network_actions"] != install_receipt["package_network_actions"]
         or record["backend_facts"] != result["backend_facts"]
         or record["synchronization"] != result["synchronization"]
@@ -2490,7 +2593,21 @@ def _replay_runtime_preflight_snapshot(
             False if synchronization is None else cast("bool", synchronization["completed"])
         ),
         authorization_consumptions=1,
-        preflight_network_actions=0,
+        python_audited_guarded_action_attempts=sum(
+            cast("int", count)
+            for count in _mapping(
+                result["guarded_action_attempts"],
+                "preflight_result.guarded_action_attempts",
+            ).values()
+        ),
+        worker_reported_completed_forbidden_actions=sum(
+            cast("int", count)
+            for count in _mapping(
+                result["completed_forbidden_actions"],
+                "preflight_result.completed_forbidden_actions",
+            ).values()
+        ),
+        completed_forbidden_actions_proven_by_parent=False,
         model_actions=0,
         remaining_requirements=len(remaining),
     )
@@ -2560,20 +2677,23 @@ def _rejected_result_projection(value: dict[str, JsonValue] | None) -> dict[str,
         value.get("action_ledger"),
         _SUCCESS_WORKER_ACTIONS,
     )
-    worker_non_actions = _project_integer_ledger(
-        value.get("non_actions"),
-        dict.fromkeys(_ZERO_NON_ACTIONS, 1),
+    worker_model_non_actions = _project_integer_ledger(
+        value.get("model_non_actions"),
+        dict.fromkeys(_ZERO_MODEL_NON_ACTIONS, 1),
     )
-    forbidden_attempts: JsonValue = None
-    if worker_non_actions is not None:
-        forbidden_attempts = sum(
-            cast("int", worker_non_actions[name])
-            for name in (
-                "physical_network_requests",
-                "arbitrary_command_actions",
-                "filesystem_mutations",
-            )
-        )
+    worker_guarded_attempts = _project_integer_ledger(
+        value.get("guarded_action_attempts"),
+        _GUARDED_ACTION_ATTEMPT_MAXIMA,
+    )
+    worker_reported_completed = _project_integer_ledger(
+        value.get("completed_forbidden_actions"),
+        dict.fromkeys(_ZERO_COMPLETED_FORBIDDEN_ACTIONS, 1),
+    )
+    attempt_count: JsonValue = (
+        None
+        if worker_guarded_attempts is None
+        else sum(cast("int", count) for count in worker_guarded_attempts.values())
+    )
     modules = value.get("imported_modules")
     imported_module_count: JsonValue = (
         len(modules)
@@ -2587,9 +2707,11 @@ def _rejected_result_projection(value: dict[str, JsonValue] | None) -> dict[str,
         "worker_error_category": error_category,
         "worker_error_message_sha256": error_message_sha256,
         "worker_action_ledger": worker_actions,
-        "worker_non_action_ledger": worker_non_actions,
-        "forbidden_action_attempt_count": forbidden_attempts,
-        "forbidden_actions_completed": 0 if isinstance(forbidden_attempts, int) else None,
+        "worker_model_non_action_ledger": worker_model_non_actions,
+        "worker_guarded_action_attempt_ledger": worker_guarded_attempts,
+        "worker_reported_completed_forbidden_action_ledger": worker_reported_completed,
+        "guarded_action_attempt_count_untrusted": attempt_count,
+        "completed_forbidden_actions_accepted": False,
         "imported_module_count_untrusted": imported_module_count,
         "backend_facts_accepted": False,
         "synchronization_accepted": False,
@@ -2844,9 +2966,11 @@ def verify_runtime_preflight_terminal_failure(
                 "worker_error_category",
                 "worker_error_message_sha256",
                 "worker_action_ledger",
-                "worker_non_action_ledger",
-                "forbidden_action_attempt_count",
-                "forbidden_actions_completed",
+                "worker_model_non_action_ledger",
+                "worker_guarded_action_attempt_ledger",
+                "worker_reported_completed_forbidden_action_ledger",
+                "guarded_action_attempt_count_untrusted",
+                "completed_forbidden_actions_accepted",
                 "imported_module_count_untrusted",
                 "backend_facts_accepted",
                 "synchronization_accepted",
@@ -2857,6 +2981,7 @@ def verify_runtime_preflight_terminal_failure(
             result["observed_preflight_accepted"] is not False
             or result["backend_facts_accepted"] is not False
             or result["synchronization_accepted"] is not False
+            or result["completed_forbidden_actions_accepted"] is not False
             or result["worker_status"] not in {None, "completed", "terminal_error"}
         ):
             raise ContractError("terminal failure rejected-result projection drift")
@@ -2875,30 +3000,40 @@ def verify_runtime_preflight_terminal_failure(
             result["worker_action_ledger"],
             _SUCCESS_WORKER_ACTIONS,
         )
-        worker_non_actions = _project_integer_ledger(
-            result["worker_non_action_ledger"],
-            dict.fromkeys(_ZERO_NON_ACTIONS, 1),
+        worker_model_non_actions = _project_integer_ledger(
+            result["worker_model_non_action_ledger"],
+            dict.fromkeys(_ZERO_MODEL_NON_ACTIONS, 1),
         )
-        if (result["worker_action_ledger"] is not None and worker_actions is None) or (
-            result["worker_non_action_ledger"] is not None and worker_non_actions is None
+        worker_guarded_attempts = _project_integer_ledger(
+            result["worker_guarded_action_attempt_ledger"],
+            _GUARDED_ACTION_ATTEMPT_MAXIMA,
+        )
+        worker_reported_completed = _project_integer_ledger(
+            result["worker_reported_completed_forbidden_action_ledger"],
+            dict.fromkeys(_ZERO_COMPLETED_FORBIDDEN_ACTIONS, 1),
+        )
+        if (
+            (result["worker_action_ledger"] is not None and worker_actions is None)
+            or (
+                result["worker_model_non_action_ledger"] is not None
+                and worker_model_non_actions is None
+            )
+            or (
+                result["worker_guarded_action_attempt_ledger"] is not None
+                and worker_guarded_attempts is None
+            )
+            or (
+                result["worker_reported_completed_forbidden_action_ledger"] is not None
+                and worker_reported_completed is None
+            )
         ):
             raise ContractError("terminal failure contains malformed worker ledgers")
-        forbidden_attempts = result["forbidden_action_attempt_count"]
-        forbidden_completed = result["forbidden_actions_completed"]
-        if worker_non_actions is None:
-            if forbidden_attempts is not None or forbidden_completed is not None:
-                raise ContractError("terminal failure inferred unavailable forbidden-action counts")
-        else:
-            expected_attempts = sum(
-                cast("int", worker_non_actions[name])
-                for name in (
-                    "physical_network_requests",
-                    "arbitrary_command_actions",
-                    "filesystem_mutations",
-                )
-            )
-            if forbidden_attempts != expected_attempts or forbidden_completed != 0:
-                raise ContractError("terminal failure forbidden-action accounting drift")
+        attempt_count = result["guarded_action_attempt_count_untrusted"]
+        if worker_guarded_attempts is None:
+            if attempt_count is not None:
+                raise ContractError("terminal failure inferred an unavailable attempt count")
+        elif attempt_count != sum(cast("int", count) for count in worker_guarded_attempts.values()):
+            raise ContractError("terminal failure guarded-attempt accounting drift")
         imported_count = result["imported_module_count_untrusted"]
         if imported_count is not None:
             _integer(
@@ -2939,6 +3074,15 @@ def _observed_negative_projection_content() -> dict[str, JsonValue]:
         "preflight_package_id": (
             "sha256:26589aa951a4f2499a4fcc2714c5f2dbc6efca7bb67a813cdddc2fc398b58c0c"
         ),
+        "historical_protocol_id": (
+            "sha256:c3df6f0eb9a67a00e1f1f180b0e34fd9b5ac5dd662b430f86ec29c87dd30727a"
+        ),
+        "historical_worker_code_id": (
+            "sha256:bfd840635879dfae9a57fb11cae0e6ddef4f3f5f3b9b81f39e8e1cec51539fe3"
+        ),
+        "historical_worker_program_sha256": (
+            "sha256:472932ab2db8ed336af8ce60ee76be04b1f6c14eb5d77bade39169ca91367c71"
+        ),
         "raw_bindings": {
             "terminal_failure_id": OBSERVED_FAILURE_ID,
             "consumption_id": OBSERVED_CONSUMPTION_ID,
@@ -2957,14 +3101,19 @@ def _observed_negative_projection_content() -> dict[str, JsonValue]:
             "worker_result_frame_retained": False,
             "worker_internal_phase": None,
             "worker_action_ledger_retained": False,
-            "worker_non_action_ledger_retained": False,
+            "worker_model_non_action_ledger_retained": False,
+            "worker_guarded_action_attempt_ledger_retained": False,
+            "worker_completed_forbidden_action_ledger_retained": False,
             "stable_category": "worker_reported_forbidden_action_attempt",
             "exact_forbidden_event": None,
+            "exact_attempt_category": None,
             "exact_event_unavailable_reason": (
                 "rejected_worker_frame_omitted_by_original_failure_custody"
             ),
             "attempted": True,
-            "completed": False,
+            "completed": None,
+            "completed_status": "not_accepted_or_proven",
+            "guard_scope": "python_audit_events_not_os_sandbox",
             "validation_error_category": "ContractError",
             "validation_error_message_sha256": (
                 "sha256:f861a1f6b47815a1497f9ae1004f183d54f25f1c28d048f72c36cb5d095e7104"
@@ -3003,8 +3152,6 @@ def _observed_negative_projection_content() -> dict[str, JsonValue]:
             "benchmark_actions": 0,
             "cloud_actions": 0,
             "spend_actions": 0,
-            "completed_package_network_requests_during_preflight": 0,
-            "completed_model_repository_requests": 0,
         },
         "eligibility": {
             "decision": "runtime_preflight_failed_closed_model_actions_ineligible",
@@ -3023,6 +3170,8 @@ def _observed_negative_projection_content() -> dict[str, JsonValue]:
                 "no_accepted_runtime_import_evidence",
                 "no_accepted_backend_or_device_facts",
                 "no_accepted_synchronization_evidence",
+                "no_accepted_completed_forbidden_action_ledger",
+                "python_audit_guard_is_not_an_os_sandbox",
                 "no_model_or_tokenizer_action",
                 "no_per_kernel_metal_execution_proof",
             ],

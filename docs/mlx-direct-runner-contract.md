@@ -7,11 +7,14 @@ an exact supplied model-root byte closure and present weight projection, a priva
 protocol design, determinism controls, result semantics, and future authorization/custody
 requirements.
 The additive inert-custody schema remains a frozen refusal-only worker launch, not a production MLX
-worker. A separate additive runtime-preflight schema authorizes one model-free import/device/backend
-synchronization observation. Only `custody-self-test` and `runtime-preflight` start a child and
-private socket; all capability/spec/inspect/replay commands remain process-free. Runtime preflight
-does not discover, download, or load a model/tokenizer; process prompts; construct or mutate caches;
-infer, generate, benchmark; or make network/cloud/spend actions.
+worker. A separate additive runtime-preflight protocol defines one model-free
+import/device/backend/synchronization observation and remains exercised by exact internal synthetic
+fixtures. The reviewed MLX-LM `0.30.6` / MLX `0.29.3` pair is dependency-incompatible, so public
+schema-1.0 execution is unreachable: `runtime-preflight` validates and rejects the receipt before
+output-root access, socket/process creation, authorization, import, or probe. No public flag unlocks
+it; a compatible source/version pair requires a separately reviewed schema and new authorization.
+Only `custody-self-test` can currently start a public child/private socket; all
+capability/spec/inspect/replay commands remain process-free.
 
 The built-in package is deliberately incomplete. No exact preexisting local MLX model was supplied
 or discovered, and discovery would violate the explicit-path boundary. Wired/cache limits, active
@@ -282,45 +285,47 @@ runtime preflight. It consumed one authorization, started one child/socketpair, 
 `preflight_once`, received a result frame, rejected that frame because it reported a forbidden
 action attempt, and reaped the child. Retry count is zero.
 
-The processful command requires explicit canonical runtime manifest, artifact lock, install
-receipt, supplied package root, interpreter, and private mode-0700 output root:
+The public command accepts only the canonical runtime manifest, artifact lock, and install receipt
+and always refuses this repository-pinned pair before physical action:
 
 ```bash
 localinferencelab mlx runtime-preflight \
-  runtime-manifest.json runtime-lock.json install-receipt.json \
-  package-root python-interpreter output-root
-localinferencelab mlx runtime-preflight-replay \
-  output-root/localinferencelab-mlx-runtime-preflight-v1-*
-localinferencelab mlx runtime-preflight-inspect \
-  output-root/localinferencelab-mlx-runtime-preflight-v1-*
+  runtime-manifest.json runtime-lock.json install-receipt.json
+localinferencelab mlx runtime-preflight-negative-replay \
+  evidence/mlx-runtime-preflight-negative-v1.json
 ```
 
-The child starts as `python -I -S -E -s -B -`, receives the sealed worker on stdin, control at FD 3,
-transient interpreter identity at FD 4, and the retained package root at FD 5. Before
-authorization, it imports no MLX module. After exact one-shot consumption, it imports `mlx.core`
-and `mlx_lm`, records import timing and possible initialization, verifies installed versions,
-queries `default_device`, `metal.is_available`, and `default_stream`, then calls `synchronize`
-without allocating a tensor or claiming kernel execution.
+The synthetic harness starts its child as `python -I -S -E -s -B -`, supplies the sealed worker on
+stdin, control at FD 3, transient interpreter identity at FD 4, and the retained synthetic package
+root at FD 5. Before authorization, it imports no MLX module. After exact synthetic one-shot
+consumption, it imports bound fake `mlx.core` and `mlx_lm` modules and exercises the same result
+validation without allocating a tensor or claiming kernel execution.
 
 The exact observed package selection retains MLX `0.29.3` and MLX-LM `0.30.6`. MLX-LM declares
 `mlx>=0.30.4` on Darwin, so a normal resolver correctly refuses the pair. Preparation therefore
 uses hash-locked no-substitution artifacts and records the conflict as
 `applicable_dependency_distribution_semantic_closure`; it never presents that semantic closure as
-satisfied. Imported Python modules are checked against the retained supplied-root byte/physical
-closure. Complete stdlib, native runtime, dynamic loader, and shared-library closure remain
-explicit blockers.
+satisfied. The receipt is execution-ineligible for schema 1.0. The retained protocol would check
+imported Python modules against the retained supplied-root byte/physical closure. Complete stdlib,
+native runtime, dynamic loader, and shared-library closure remain explicit blockers.
 
 The original terminal path retained the terminal failure and authorization-consumption records but
 not the rejected worker frame. Consequently, offline evidence proves only the stable category
 `worker_reported_forbidden_action_attempt`; it cannot safely distinguish the exact audited event or
-the worker's internal import/probe phase. The attempted operation was blocked synchronously by the
-worker audit guard before completion. The repository-pinned negative projection in
+the worker's internal import/probe phase. It also cannot prove whether a forbidden action completed:
+the missing worker ledgers cannot be reconstructed. The worker audit guard records Python-level
+attempts only and is not an OS sandbox. The repository-pinned negative projection in
 `evidence/mlx-runtime-preflight-negative-v1.json` binds the raw record digests/identities, sets
 `observed_preflight_accepted=false` and `retry_count=0`, and closes no observed import,
-module-closure, backend/device, or synchronization requirement.
+module-closure, backend/device, synchronization, exact-attempt-category, or
+completed-forbidden-action requirement. Exact unchanged raw terminal and consumption bytes are
+durably retained in private owner-only session storage; their private path is intentionally not
+published.
 
 Revised terminal custody stores a bounded rejected-frame digest and a privacy-safe projection of
-numeric action/non-action ledgers, validation category/digest, exact completed frame counts,
+numeric `completed_runtime_actions`, `model_non_actions`, Python-audited
+`guarded_action_attempts`, and separately unaccepted worker-reported
+`completed_forbidden_actions`, plus validation category/digest, exact completed frame counts,
 authorization/consumption bindings, and parent-owned wait status. It never publishes rejected
-backend or synchronization bytes as accepted evidence. Both terminal records and the committed
-negative projection have pure replay commands.
+backend, synchronization, or completion bytes as accepted evidence. Both terminal records and the
+committed negative projection have pure replay commands.

@@ -80,13 +80,20 @@ PROTOCOL_DESCRIPTOR = {
     "retries": 0,
     "warmups": 0,
     "concurrency": 1,
+    "result_ledgers": {
+        "completed_runtime_actions": "action_ledger",
+        "ordinary_model_non_actions": "model_non_actions",
+        "python_audited_attempts": "guarded_action_attempts",
+        "worker_reported_completed_forbidden_actions": "completed_forbidden_actions",
+        "python_audit_guard_is_os_sandbox": False,
+    },
 }
 WORKER_DESCRIPTOR = {
     "record_type": "mlx_runtime_preflight_worker_code",
     "schema_version": SCHEMA_VERSION,
     "protocol_id": "",
     "action": "mlx_runtime_preflight_only",
-    "imports": ["mlx", "mlx_lm"],
+    "imports": ["mlx.core", "mlx_lm"],
     "allowed_probes": list(ALLOWED_PROBES),
     "model_load_surface": False,
     "tokenizer_load_surface": False,
@@ -95,6 +102,7 @@ WORKER_DESCRIPTOR = {
     "cache_mutation_surface": False,
     "benchmark_surface": False,
     "arbitrary_command_surface": False,
+    "python_audit_guard_is_os_sandbox": False,
 }
 _DIGEST_LENGTH = 71
 _CONTROL_LIMIT = 32
@@ -892,7 +900,7 @@ def _empty_actions() -> dict[str, object]:
     }
 
 
-def _non_actions(guard: _RuntimeGuard) -> dict[str, object]:
+def _model_non_actions() -> dict[str, object]:
     return {
         "model_discoveries": 0,
         "model_loads": 0,
@@ -904,14 +912,26 @@ def _non_actions(guard: _RuntimeGuard) -> dict[str, object]:
         "generation_requests": 0,
         "benchmark_actions": 0,
         "meaningful_tensor_allocations": 0,
-        "physical_network_requests": guard.network_attempts,
         "package_index_requests": 0,
         "model_repository_requests": 0,
-        "shell_actions": 0,
-        "arbitrary_command_actions": guard.process_attempts,
-        "filesystem_mutations": guard.write_attempts,
         "cloud_actions": 0,
         "spend_actions": 0,
+    }
+
+
+def _guarded_action_attempts(guard: _RuntimeGuard) -> dict[str, object]:
+    return {
+        "network": guard.network_attempts,
+        "process_or_command": guard.process_attempts,
+        "filesystem_mutation": guard.write_attempts,
+    }
+
+
+def _completed_forbidden_actions() -> dict[str, object]:
+    return {
+        "network": 0,
+        "process_or_command": 0,
+        "filesystem_mutation": 0,
     }
 
 
@@ -1036,7 +1056,9 @@ def _run_preflight(
         "backend_facts": backend_facts,
         "synchronization": synchronization,
         "action_ledger": actions,
-        "non_actions": _non_actions(guard),
+        "model_non_actions": _model_non_actions(),
+        "guarded_action_attempts": _guarded_action_attempts(guard),
+        "completed_forbidden_actions": _completed_forbidden_actions(),
         "runtime_root_import_path": "inherited_descriptor_only",
         "stdlib_closure_complete": False,
         "native_loader_closure_complete": False,

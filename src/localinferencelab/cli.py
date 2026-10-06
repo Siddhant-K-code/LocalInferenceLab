@@ -38,13 +38,13 @@ from localinferencelab.mlx_runner import (
     write_mlx_prospective_package,
 )
 from localinferencelab.mlx_runtime_preflight import (
+    build_runtime_preflight_package,
     inspect_runtime_preflight_bundle,
     load_install_receipt,
     load_runtime_lock,
     replay_observed_negative_projection,
     replay_runtime_preflight_bundle,
     replay_runtime_preflight_terminal_failure,
-    run_runtime_preflight,
     runtime_preflight_capability_report,
     runtime_preflight_spec,
 )
@@ -217,22 +217,20 @@ def _parser() -> argparse.ArgumentParser:
     )
     mlx_custody_inspect.add_argument("bundle", type=Path)
     runtime_preflight_disclosure = (
-        "Start one local child, import MLX/MLX-LM, query Apple runtime/Metal and the "
-        "default device/stream, and synchronize. This consumes one one-shot authorization "
-        "and one mode-0700 output root, but performs no model/tokenizer discovery, download, "
-        "or load; no prompt, cache, inference, generation, benchmark, cloud, or spend action."
+        "Schema 1.0 execution is disabled because MLX-LM 0.30.6 declares mlx>=0.30.4 "
+        "on Darwin while the reviewed runtime pins MLX 0.29.3. This command validates and "
+        "rejects that receipt without an output root, child, socket, authorization, MLX "
+        "import, or probe. A compatible pair requires a separately reviewed schema and "
+        "authorization; only pure replay and the negative projection are currently supported."
     )
     runtime_preflight = mlx_commands.add_parser(
         "runtime-preflight",
-        help="execute the explicitly authorized runtime-only import and metadata preflight",
+        help="reject the schema-1.0 dependency-incompatible runtime before physical action",
         description=runtime_preflight_disclosure,
     )
     runtime_preflight.add_argument("runtime_manifest", type=Path)
     runtime_preflight.add_argument("runtime_lock", type=Path)
     runtime_preflight.add_argument("install_receipt", type=Path)
-    runtime_preflight.add_argument("runtime_root", type=Path)
-    runtime_preflight.add_argument("interpreter", type=Path)
-    runtime_preflight.add_argument("output_root", type=Path)
     runtime_preflight_replay = mlx_commands.add_parser(
         "runtime-preflight-replay",
         help="replay one closed runtime preflight without imports, processes, or sockets",
@@ -557,24 +555,12 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
                 runtime_lock=runtime_lock,
                 runtime_manifest=runtime_manifest,
             )
-            path, preflight_replay = run_runtime_preflight(
+            build_runtime_preflight_package(
                 runtime_manifest,
                 runtime_lock,
                 install_receipt,
-                args.runtime_root,
-                args.interpreter,
-                args.output_root,
             )
-            output = preflight_replay.to_dict()
-            output["status"] = (
-                "completed"
-                if preflight_replay.terminal_state == "completed_and_closed"
-                else "terminal_error"
-            )
-            output["path"] = path.name
-            output["action"] = "mlx_runtime_preflight_only"
-            _emit(output)
-            return 0 if preflight_replay.terminal_state == "completed_and_closed" else 2
+            raise ContractError("unreachable runtime-preflight execution gate")
         if args.mlx_command == "runtime-preflight-replay":
             preflight_replay = replay_runtime_preflight_bundle(args.bundle)
             output = preflight_replay.to_dict()

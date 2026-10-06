@@ -32,18 +32,22 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > and exact present canonical shard projections, not semantic parameter key/shape completeness;
 > future pinned strict-load evidence is also an explicit blocker.
 > The deliberately explicit `mlx custody-self-test` command remains refusal-only. The separate
-> `mlx runtime-preflight` command starts one sealed child, imports only the exact bound MLX/MLX-LM
-> runtime after one-shot authorization, queries model-free default-device/Metal/default-stream
-> facts, and synchronizes without creating tensors or kernels. It cannot discover, download, or
-> load a model/tokenizer; process prompts; construct or mutate caches; infer, generate, benchmark;
-> or make network/cloud/spend actions. Capability/spec/inspect/replay commands remain process-free.
+> runtime-preflight protocol implementation remains covered by sealed synthetic tests, but public
+> schema-1.0 execution is unreachable: MLX-LM `0.30.6` declares `mlx>=0.30.4` on Darwin while the
+> reviewed runtime pins MLX `0.29.3`. `mlx runtime-preflight` therefore validates and rejects the
+> receipt before any output-root access, socket, child, authorization, MLX import, or probe. A
+> compatible source/version pair requires a separately reviewed schema and new authorization.
+> Capability/spec and negative/failure replay remain process-free.
 > The first authorized Apple Silicon runtime preflight **failed closed** after authorization
 > consumption because the worker reported a forbidden-action attempt. It was not retried. The
 > rejected worker frame was not retained by the original failure path, so no runtime import,
-> backend/device, imported-module-closure, or synchronization fact is accepted from that attempt.
+> backend/device, imported-module-closure, synchronization fact, exact attempted-action category,
+> or completed-forbidden-action ledger is accepted from that attempt. The Python audit guard is not
+> an OS sandbox.
 > A pinned privacy-safe negative projection records the exact retained raw bindings and this
 > evidence limitation; revised failure custody preserves future rejected-frame digests and numeric
-> action/non-action projections.
+> completed-runtime actions, model non-actions, Python-audited attempts, and separately unaccepted
+> worker-reported completed-forbidden-action projections.
 
 ## Trust boundary
 
