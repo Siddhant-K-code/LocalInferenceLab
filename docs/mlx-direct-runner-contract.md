@@ -158,10 +158,13 @@ or interrupted outcomes through receipt-last atomic publication.
 The inert custody surface implements the finite exchange with `os.posix_spawn`, exact interpreter
 flags, child FD 3, enumerated descriptor close actions, a closed environment, strict canonical
 framing, one absolute deadline, parent-owned termination/wait, one-shot authorization, and
-descriptor-relative publication. Every interpreter and source path component is root/current-owner
-and not group/world writable. The verified worker bytes are copied into an unlinked mode-0400
-regular-file snapshot under the retained private output-root descriptor and supplied on stdin, so
-the child never reopens a mutable repository pathname. Its result validator accepts only the stable refusal
+descriptor-relative publication. The no-follow worker-source and private output-root launch paths
+reject untrusted writable components (while permitting protected sticky shared ancestors). The
+selected interpreter bytes are stably read and copied into a private mode-0500 output-root snapshot;
+verified worker bytes are copied into an unlinked mode-0400 snapshot and supplied on stdin. The
+worker verifies the interpreter snapshot through transient FD 4 and closes it before reporting the
+exact final descriptor set. The interpreter copy is removed only after wait because macOS kills a
+running copied interpreter if its final name is unlinked. Its result validator accepts only the stable refusal
 `mlx_execution_unimplemented_and_unauthorized`; no accepted or invalid generated-result producer
 exists. The legacy production-IPC blocker is therefore split, not silently removed: inert
 IPC/refusal validation is proven, while generated-result production/validation remains missing.

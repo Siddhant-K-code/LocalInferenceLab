@@ -30,6 +30,7 @@ from localinferencelab.custody import publish_bundle_at, read_closed_bundle
 from localinferencelab.mlx_inert_worker import (
     AUTHORIZATION_LIFETIME_NS,
     ENVIRONMENT_ID,
+    INTERPRETER_IDENTITY_FD,
     MAX_FRAME_BYTES,
     PROTOCOL_DESCRIPTOR,
     PROTOCOL_ID,
@@ -48,7 +49,7 @@ SCHEMA_VERSION = "1.0"
 DEFAULT_DEADLINE_NS = AUTHORIZATION_LIFETIME_NS
 MAX_BUNDLE_FILE_BYTES = 1024 * 1024
 EXPECTED_WORKER_PROGRAM_SHA256 = (
-    "sha256:4b91716305c4d7acddfc911d9ff882c29dfc933b505503d7dff12cce0c042748"
+    "sha256:b9e17499536f47efb28c3c33dd2ee0842fee5a40f0766354da566765edd8b417"
 )
 _DIGEST_LENGTH = 71
 _CONTROL_LIMIT = 32
@@ -236,11 +237,14 @@ def inert_custody_spec() -> dict[str, JsonValue]:
         "worker_code_id": WORKER_CODE_ID,
         "worker_program_sha256": EXPECTED_WORKER_PROGRAM_SHA256,
         "launch": {
-            "mechanism": "os_posix_spawn_trusted_interpreter_with_sealed_anonymous_stdin",
+            "mechanism": "os_posix_spawn_parent_sealed_interpreter_and_worker_snapshots",
             "interpreter_flags": ["-I", "-S", "-E", "-s", "-"],
             "worker_arguments": [],
+            "interpreter_snapshot": ("private_mode_0500_output_root_copy_removed_after_child_wait"),
+            "interpreter_argv0": "resolved_source_path_used_only_for_python_runtime_prefix",
             "worker_source": "parent_sealed_unlinked_output_root_snapshot_on_stdin",
             "child_ipc_fd": WORKER_FD,
+            "transient_interpreter_identity_fd": INTERPRETER_IDENTITY_FD,
             "stdio": "sealed_worker_source_then_devnull_stdin_and_devnull_stdout_stderr",
             "unrelated_file_descriptors": "enumerated_parent_descriptors_closed_by_spawn_actions",
             "environment": [
@@ -318,7 +322,12 @@ def _directory_flags() -> int:
 
 
 def _require_trusted_launch_metadata(metadata: os.stat_result, label: str) -> None:
-    if metadata.st_uid not in {0, os.geteuid()} or stat.S_IMODE(metadata.st_mode) & 0o022:
+    mode = stat.S_IMODE(metadata.st_mode)
+    writable_by_untrusted = bool(mode & 0o022)
+    protected_shared_directory = stat.S_ISDIR(metadata.st_mode) and bool(mode & stat.S_ISVTX)
+    if metadata.st_uid not in {0, os.geteuid()} or (
+        writable_by_untrusted and not protected_shared_directory
+    ):
         raise ContractError(f"{label} must be root/current-owner and not group/world writable")
 
 
@@ -433,6 +442,21 @@ def _revalidate_output_root_path(path: Path, retained_descriptor: int) -> None:
         os.close(current)
 
 
+def _revalidate_output_root_launch_path(path: Path, retained_descriptor: int) -> None:
+    current = _open_directory_no_follow(
+        path,
+        "output root launch path",
+        trusted_launch_path=True,
+    )
+    try:
+        retained = os.fstat(retained_descriptor)
+        observed = os.fstat(current)
+        if (retained.st_dev, retained.st_ino) != (observed.st_dev, observed.st_ino):
+            raise ContractError("output-root launch path was replaced after physical binding")
+    finally:
+        os.close(current)
+
+
 def _file_flags() -> int:
     flags = os.O_RDONLY
     if hasattr(os, "O_CLOEXEC"):
@@ -449,12 +473,13 @@ def _read_launch_target(
     label: str,
     *,
     executable: bool,
+    trusted_ancestors: bool = True,
 ) -> tuple[dict[str, JsonValue], bytes]:
     resolved = path.resolve(strict=True)
     parent = _open_directory_no_follow(
         resolved.parent,
         label,
-        trusted_launch_path=True,
+        trusted_launch_path=trusted_ancestors,
     )
     try:
         descriptor = os.open(resolved.name, _file_flags(), dir_fd=parent)
@@ -507,12 +532,17 @@ def _read_launch_target(
         os.close(descriptor)
 
 
-def _create_worker_snapshot_at(
+def _create_launch_snapshot_at(
     output_root_descriptor: int,
-    worker_bytes: bytes,
+    source_bytes: bytes,
     basename: str,
-) -> tuple[int, dict[str, JsonValue]]:
-    name = f".localinferencelab-mlx-worker-{os.urandom(32).hex()}"
+    *,
+    label: str,
+    name_prefix: str,
+    mode: int,
+    anonymous: bool,
+) -> tuple[int, dict[str, JsonValue], str]:
+    name = f".localinferencelab-mlx-{name_prefix}-{os.urandom(32).hex()}"
     flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_CLOEXEC"):
         flags |= os.O_CLOEXEC
@@ -522,37 +552,71 @@ def _create_worker_snapshot_at(
     unlinked = False
     complete = False
     try:
-        os.unlink(name, dir_fd=output_root_descriptor)
-        unlinked = True
-        os.fsync(output_root_descriptor)
-        view = memoryview(worker_bytes)
+        if anonymous:
+            os.unlink(name, dir_fd=output_root_descriptor)
+            unlinked = True
+            os.fsync(output_root_descriptor)
+        view = memoryview(source_bytes)
         written = 0
         while written < len(view):
             count = os.write(descriptor, view[written:])
             if count <= 0:
-                raise ContractError("worker snapshot write made no progress")
+                raise ContractError(f"{label} snapshot write made no progress")
             written += count
         os.fsync(descriptor)
-        os.fchmod(descriptor, 0o400)
+        os.fchmod(descriptor, mode)
         metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size != len(worker_bytes):
-            raise ContractError("worker snapshot identity mismatch")
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size != len(source_bytes):
+            raise ContractError(f"{label} snapshot identity mismatch")
         identity: dict[str, JsonValue] = {
             "basename": basename,
             "device": metadata.st_dev,
             "inode": metadata.st_ino,
             "mode": stat.S_IMODE(metadata.st_mode),
             "size_bytes": metadata.st_size,
-            "sha256": digest_bytes(worker_bytes),
+            "sha256": digest_bytes(source_bytes),
         }
         os.lseek(descriptor, 0, os.SEEK_SET)
         complete = True
-        return descriptor, identity
+        return descriptor, identity, name
     finally:
         if not complete:
             os.close(descriptor)
             if not unlinked:
                 os.unlink(name, dir_fd=output_root_descriptor)
+
+
+def _create_worker_snapshot_at(
+    output_root_descriptor: int,
+    worker_bytes: bytes,
+    basename: str,
+) -> tuple[int, dict[str, JsonValue]]:
+    descriptor, identity, _name = _create_launch_snapshot_at(
+        output_root_descriptor,
+        worker_bytes,
+        basename,
+        label="worker",
+        name_prefix="worker",
+        mode=0o400,
+        anonymous=True,
+    )
+    return descriptor, identity
+
+
+def _create_interpreter_snapshot_at(
+    output_root_descriptor: int,
+    interpreter_bytes: bytes,
+    basename: str,
+) -> tuple[int, dict[str, JsonValue], str]:
+    return _create_launch_snapshot_at(
+        output_root_descriptor,
+        interpreter_bytes,
+        basename,
+        label="interpreter",
+        name_prefix="interpreter",
+        mode=0o500,
+        anonymous=False,
+    )
 
 
 def _verify_file_identity(value: JsonValue, label: str) -> dict[str, JsonValue]:
@@ -585,23 +649,32 @@ def _open_descriptors() -> set[int]:
 
 
 def _spawn_worker(
-    interpreter: Path,
+    sealed_interpreter: Path,
+    interpreter_argv0: Path,
+    interpreter_identity_descriptor: int,
     worker_source_descriptor: int,
     child_endpoint: socket.socket,
 ) -> int:
     descriptors = _open_descriptors()
-    minimum = max(descriptors | {WORKER_FD}) + 1
+    minimum = max(descriptors | {WORKER_FD, INTERPRETER_IDENTITY_FD}) + 1
     duplicate_command = getattr(fcntl, "F_DUPFD_CLOEXEC", fcntl.F_DUPFD)
     sealed_source = fcntl.fcntl(worker_source_descriptor, duplicate_command, minimum)
+    sealed_interpreter_identity: int | None = None
     sealed_socket: int | None = None
     try:
-        sealed_socket = fcntl.fcntl(
-            child_endpoint.fileno(),
+        sealed_interpreter_identity = fcntl.fcntl(
+            interpreter_identity_descriptor,
             duplicate_command,
             sealed_source + 1,
         )
+        sealed_socket = fcntl.fcntl(
+            child_endpoint.fileno(),
+            duplicate_command,
+            sealed_interpreter_identity + 1,
+        )
         if duplicate_command == fcntl.F_DUPFD:
             os.set_inheritable(sealed_source, False)
+            os.set_inheritable(sealed_interpreter_identity, False)
             os.set_inheritable(sealed_socket, False)
         descriptors = _open_descriptors()
         file_actions: list[tuple[int, ...] | tuple[int, int, str, int, int]] = [
@@ -609,16 +682,21 @@ def _spawn_worker(
             (os.POSIX_SPAWN_OPEN, 1, os.devnull, os.O_WRONLY, 0),
             (os.POSIX_SPAWN_OPEN, 2, os.devnull, os.O_WRONLY, 0),
             (os.POSIX_SPAWN_DUP2, sealed_socket, WORKER_FD),
+            (
+                os.POSIX_SPAWN_DUP2,
+                sealed_interpreter_identity,
+                INTERPRETER_IDENTITY_FD,
+            ),
         ]
         file_actions.extend(
             (os.POSIX_SPAWN_CLOSE, descriptor)
             for descriptor in sorted(descriptors)
-            if descriptor >= WORKER_FD and descriptor != WORKER_FD
+            if descriptor >= WORKER_FD and descriptor not in {WORKER_FD, INTERPRETER_IDENTITY_FD}
         )
-        argv = (str(interpreter), "-I", "-S", "-E", "-s", "-")
+        argv = (str(interpreter_argv0), "-I", "-S", "-E", "-s", "-")
         try:
             return os.posix_spawn(
-                str(interpreter),
+                str(sealed_interpreter),
                 argv,
                 _WORKER_ENVIRONMENT,
                 file_actions=file_actions,
@@ -628,6 +706,8 @@ def _spawn_worker(
     finally:
         if sealed_socket is not None:
             os.close(sealed_socket)
+        if sealed_interpreter_identity is not None:
+            os.close(sealed_interpreter_identity)
         os.close(sealed_source)
 
 
@@ -1128,7 +1208,7 @@ def _parent_process_evidence(
     parent_pid: int,
     interpreter: dict[str, JsonValue],
 ) -> dict[str, JsonValue]:
-    if sys.platform.startswith("linux"):
+    if os.uname().sysname == "Linux":
         try:
             metadata = Path(f"/proc/{child_pid}/exe").stat()
         except OSError as error:
@@ -1348,14 +1428,6 @@ def _require_sealed_worker_program(worker_program: dict[str, JsonValue]) -> None
         raise ContractError("inert worker program differs from its sealed digest")
 
 
-def _require_unchanged_launch_target(
-    before: dict[str, JsonValue],
-    after: dict[str, JsonValue],
-) -> None:
-    if after != before:
-        raise ContractError("Python interpreter changed before worker launch")
-
-
 def _require_successful_terminal_state(
     child_wait: dict[str, JsonValue],
     actions: dict[str, JsonValue],
@@ -1379,6 +1451,8 @@ def run_inert_custody_self_test(
     parent_endpoint: socket.socket | None = None
     child_endpoint: socket.socket | None = None
     child_pid: int | None = None
+    interpreter_snapshot_descriptor: int | None = None
+    interpreter_snapshot_name: str | None = None
     worker_source_descriptor: int | None = None
     root_binding: dict[str, JsonValue] | None = None
     package: dict[str, JsonValue] | None = None
@@ -1398,16 +1472,18 @@ def run_inert_custody_self_test(
         "shutdowns": 0,
     }
     try:
+        resolved_output_root = output_root.resolve(strict=True)
         root_nonce = os.urandom(32)
         root_binding = _output_root_binding(root_descriptor, root_nonce)
         package = build_mlx_prospective_package(mlx_study_spec())
         package_digest = digest_bytes(canonical_json(package))
         interpreter_path = Path(sys.executable).resolve(strict=True)
         worker_program_path = Path(__file__).with_name("mlx_inert_worker.py").resolve(strict=True)
-        interpreter, _interpreter_bytes = _read_launch_target(
+        _source_interpreter, interpreter_bytes = _read_launch_target(
             interpreter_path,
             "Python interpreter",
             executable=True,
+            trusted_ancestors=False,
         )
         source_worker_program, worker_bytes = _read_launch_target(
             worker_program_path,
@@ -1421,6 +1497,16 @@ def run_inert_custody_self_test(
             worker_program_path.name,
         )
         _require_sealed_worker_program(worker_program)
+        (
+            interpreter_snapshot_descriptor,
+            interpreter,
+            interpreter_snapshot_name,
+        ) = _create_interpreter_snapshot_at(
+            root_descriptor,
+            interpreter_bytes,
+            interpreter_path.name,
+        )
+        sealed_interpreter_path = resolved_output_root / interpreter_snapshot_name
         parent_pid = os.getpid()
         parent_nonce = encode_bytes(os.urandom(32))
         deadline_ns = time.monotonic_ns() + DEFAULT_DEADLINE_NS
@@ -1446,17 +1532,16 @@ def run_inert_custody_self_test(
         )
         phase = "worker_process_start"
         actions["worker_process_starts"] = 1
-        current_interpreter, _current_interpreter_bytes = _read_launch_target(
-            interpreter_path,
-            "Python interpreter",
-            executable=True,
-        )
-        _require_unchanged_launch_target(interpreter, current_interpreter)
+        _revalidate_output_root_launch_path(resolved_output_root, root_descriptor)
         child_pid = _spawn_worker(
+            sealed_interpreter_path,
             interpreter_path,
+            interpreter_snapshot_descriptor,
             worker_source_descriptor,
             child_endpoint,
         )
+        os.close(interpreter_snapshot_descriptor)
+        interpreter_snapshot_descriptor = None
         os.close(worker_source_descriptor)
         worker_source_descriptor = None
         child_endpoint.close()
@@ -1549,6 +1634,9 @@ def run_inert_custody_self_test(
         phase = "child_wait"
         child_wait = _wait_child(child_pid, deadline_ns)
         child_pid = None
+        os.unlink(interpreter_snapshot_name, dir_fd=root_descriptor)
+        interpreter_snapshot_name = None
+        os.fsync(root_descriptor)
         _require_successful_terminal_state(child_wait, actions)
         transcript = _transcript(entries)
         record = _custody_record(
@@ -1605,6 +1693,11 @@ def run_inert_custody_self_test(
             _terminate_and_wait(child_pid)
         if worker_source_descriptor is not None:
             os.close(worker_source_descriptor)
+        if interpreter_snapshot_descriptor is not None:
+            os.close(interpreter_snapshot_descriptor)
+        if interpreter_snapshot_name is not None:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(interpreter_snapshot_name, dir_fd=root_descriptor)
         os.close(root_descriptor)
 
 

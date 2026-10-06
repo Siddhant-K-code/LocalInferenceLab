@@ -167,8 +167,10 @@ The inert parent owns process birth and binds PID/PPID, exact launch-target byte
 the exact FD set, closed environment, package/protocol/spec IDs, nonces, physical output root,
 authorization, terminal refusal, and wait status. Verified worker bytes are executed from a
 parent-created unlinked private regular-file snapshot on stdin, not reopened from the repository
-path. Replay cross-binds the authorization nonces/deadline and worker PID to the hello, identity,
-parent process evidence, and wait result. A future generation-capable parent must also bind
+path. The selected interpreter bytes are executed from a private mode-0500 output-root snapshot;
+transient FD 4 binds those exact bytes and is closed before the worker reports only `[0,1,2,3]`.
+Replay cross-binds the authorization nonces/deadline and worker PID to the hello, identity, parent
+process evidence, and wait result. A future generation-capable parent must also bind
 applicable dependency distributions, Python standard-library/native-runtime/dynamic-loader bytes,
 the supplied package/model-root byte closures, actual selected module files, closed environment,
 cache class/state, default device, compiled Metal availability, generation-stream device, and

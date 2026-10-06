@@ -526,6 +526,8 @@ def test_physical_self_test_exercises_exact_process_socket_and_refusal(
         "shutdowns": 1,
     }
     assert all(value == 0 for value in _dict(record["non_actions"]).values())
+    assert _dict(record["interpreter"])["mode"] == 0o500
+    assert _dict(record["worker_program"])["mode"] == 0o400
     assert _dict(record["worker_program"])["sha256"] == EXPECTED_WORKER_PROGRAM_SHA256
     child = _dict(record["child_wait"])
     assert child["wait_owned"] is True
@@ -543,6 +545,10 @@ def test_physical_self_test_exercises_exact_process_socket_and_refusal(
     )
     assert identity_payload["open_file_descriptors"] == [0, 1, 2, 3]
     assert identity_payload["environment_id"] == inert_custody_spec()["launch"]["environment_id"]  # type: ignore[index]
+    evidence = _dict(record["parent_process_evidence"])
+    assert evidence["child_pid"] == child["pid"] == identity_payload["pid"]
+    assert evidence["parent_pid"] == identity_payload["ppid"]
+    assert not list(bundle.parent.glob(".localinferencelab-mlx-interpreter-*"))
 
 
 def test_worker_executes_anonymous_snapshot_after_source_path_replacement(
@@ -557,12 +563,20 @@ def test_worker_executes_anonymous_snapshot_after_source_path_replacement(
     original_spawn = mlx_custody_module._spawn_worker  # noqa: SLF001
 
     def replace_source_then_spawn(
-        interpreter: Path,
+        sealed_interpreter: Path,
+        interpreter_argv0: Path,
+        interpreter_identity_descriptor: int,
         worker_source_descriptor: int,
         child_endpoint: socket.socket,
     ) -> int:
         worker_path.write_text("raise SystemExit(7)\n", encoding="utf-8")
-        return original_spawn(interpreter, worker_source_descriptor, child_endpoint)
+        return original_spawn(
+            sealed_interpreter,
+            interpreter_argv0,
+            interpreter_identity_descriptor,
+            worker_source_descriptor,
+            child_endpoint,
+        )
 
     monkeypatch.setattr(mlx_custody_module, "__file__", str(fake_custody))
     monkeypatch.setattr(mlx_custody_module, "_spawn_worker", replace_source_then_spawn)
@@ -570,6 +584,7 @@ def test_worker_executes_anonymous_snapshot_after_source_path_replacement(
     _bundle, result = run_inert_custody_self_test(output_root)
     assert result.terminal_state == "refused_and_closed"
     assert not list(output_root.glob(".localinferencelab-mlx-worker-*"))
+    assert not list(output_root.glob(".localinferencelab-mlx-interpreter-*"))
 
 
 def test_launch_target_rejects_group_or_world_writable_ancestor(tmp_path: Path) -> None:

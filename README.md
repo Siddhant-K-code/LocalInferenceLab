@@ -66,14 +66,17 @@ because the canonical attestation verdict is `insufficient`. Loopback proves loc
 authentication. Metadata identity and `/api/ps` load state do not prove which process accepted the
 connection or which internal runner and Metal backend serviced the exact request.
 
-The MLX `W` node has a real refusal-only custody path. The parent validates a trusted exact
-interpreter, copies verified standalone-worker bytes into an unlinked mode-0400 snapshot under the
-retained private output-root descriptor, and launches that snapshot on stdin with `os.posix_spawn`.
-It installs the private socket endpoint at child FD 3, closes enumerated unrelated descriptors,
-supplies a closed environment, enforces one bounded canonical exchange under one absolute deadline,
-atomically consumes one authorization, and waits for its child. The repository worker path cannot
-be substituted after verification because the child never reopens it. The worker has no accepted
-or invalid generated-result branch. The static
+The MLX `W` node has a real refusal-only custody path. The parent copies the selected interpreter
+bytes into a private mode-0500 output-root snapshot and verified standalone-worker bytes into an
+unlinked mode-0400 snapshot, then launches those exact objects with `os.posix_spawn`. The worker
+source arrives on stdin; a transient FD 4 binds the interpreter snapshot and is closed before the
+worker reports only descriptors `[0,1,2,3]`. The private interpreter copy remains named only until
+the child is waited, as required by macOS, and is then removed. The parent installs the private
+socket endpoint at child FD 3, closes enumerated unrelated descriptors, supplies a closed
+environment, enforces one bounded canonical exchange under one absolute deadline, atomically
+consumes one authorization, and waits for its child. The repository worker path cannot be
+substituted after verification because the child never reopens it. The worker has no accepted or
+invalid generated-result branch. The static
 runtime manifest still covers only its supplied package-root bytes: dependency markers/extras,
 applicable dependency distributions, Python standard-library bytes, `lib-dynload`, `libpython`,
 native shared libraries/frameworks, and the dynamic loader are not proven. Official MLX APIs cannot

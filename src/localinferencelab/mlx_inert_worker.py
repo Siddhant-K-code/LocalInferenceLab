@@ -17,6 +17,7 @@ from typing import NoReturn
 
 SCHEMA_VERSION = "1.0"
 WORKER_FD = 3
+INTERPRETER_IDENTITY_FD = 4
 MAX_FRAME_BYTES = 1024 * 1024
 AUTHORIZATION_LIFETIME_NS = 5_000_000_000
 REFUSAL_REASON = "mlx_execution_unimplemented_and_unauthorized"
@@ -45,6 +46,7 @@ PROTOCOL_DESCRIPTOR = {
     "schema_version": SCHEMA_VERSION,
     "transport": "parent_created_inherited_af_unix_socketpair",
     "worker_fd": WORKER_FD,
+    "transient_interpreter_identity_fd": INTERPRETER_IDENTITY_FD,
     "framing": "uint32_be_length_then_canonical_json",
     "max_frame_bytes": MAX_FRAME_BYTES,
     "sequence": [
@@ -553,6 +555,12 @@ def _worker_main() -> None:
         "mlx_inert_worker.py",
         executable=False,
     )
+    interpreter = _file_identity_from_descriptor(
+        INTERPRETER_IDENTITY_FD,
+        Path(sys.executable).name,
+        executable=True,
+    )
+    os.close(INTERPRETER_IDENTITY_FD)
     devnull = os.open(os.devnull, os.O_RDONLY)
     try:
         os.dup2(devnull, 0)
@@ -589,7 +597,7 @@ def _worker_main() -> None:
             "worker_fd": WORKER_FD,
             "open_file_descriptors": open_descriptors,
             "environment_id": ENVIRONMENT_ID,
-            "interpreter": _file_identity(sys.executable, executable=True),
+            "interpreter": interpreter,
             "worker_program": worker_program,
         }
         channel.send(identity)
