@@ -23,6 +23,7 @@ Every trust transition is represented by immutable canonical data.
 | `mlx_runtime_preflight_worker.py` | Standalone sealed FD-3 runtime-only synthetic worker | After synthetic authorization only, imports bound fake `mlx.core` and `mlx_lm`, queries model-free backend/device/stream facts, and synchronizes; no model action or network/command surface |
 | `mlx_qualification.py` | Canonical static candidate package, dependency/marker/wheel/API-evidence assessment, sole deterministic decision, and two-outcome closed fixture replay | Explicit record/fixture writes only; no install, network, process, socket, authorization, runtime import, backend, model, or spend action |
 | `mlx_preflight_contract.py` | Prospective schema-1.1 model-free protocol/spec, prerequisite/refusal record, bounded inspection, and deterministic closed-fixture replay | Explicit record/fixture writes only; no authorization creation/consumption, install, import, worker, process, socket, backend/device/Metal, synchronization, model, or spend action |
+| `mlx_determinism_canary.py` | Prospective operation matrix, exact embedded byte vectors, IEEE comparison metrics, strict synthetic result schema, synthetic atlas, and closed replay | Explicit fixture-bundle writes only; no MLX import, process, authorization, backend/device/Metal query, hardware synchronization, MLX tensor/model action, timing, network, cloud, or spend |
 | `ollama.py` | Prospective package, direct numeric-loopback transport, one-shot authorization, bounded execution, terminal custody/replay | Explicit output-root writes; loopback calls only after authorization |
 | `ollama_declaration.py` | Canonical multi-run study intent, exact package closure binding, eligibility, and offline declaration fixture replay | Explicit declaration/fixture writes only; no host probe, socket, marker, authorization, or model |
 | `ollama_attestation.py` | Pinned listener/runner feasibility requirements, candidate evidence, derived negative verdict, and offline fixture replay | Explicit assessment/fixture writes only; no live process probe, socket, subprocess, Ollama call, authorization, output-root consumption, or model |
@@ -58,6 +59,15 @@ METADATA bytes (or canonical synthetic/projection bytes), bounded `Requires-Dist
 closure, and immutable source-byte evidence for the future preflight API set. It derives one of
 two decisions and cannot construct authorization. Importing the module does not import MLX or
 MLX-LM.
+
+The determinism canary is a separate pure comparison layer. It decodes only bounded supplied IEEE
+payload bytes with Python's standard library. It has no runtime adapter, worker, execution command,
+authorization constructor/consumer, model surface, timing field, or hardware-discovery path. Its
+pinned operation matrix marks every dtype/evaluation combination `unverified_future_support`.
+Synthetic results copy exact embedded expected bytes and are always labeled
+`synthetic_fixture`; their null runtime, device, process, and authorization identities are
+enforced. A later authorized protocol may create external observation records, but this module can
+only validate and compare those records. It cannot acquire them.
 
 ## Direct MLX prospective layer
 
@@ -215,6 +225,30 @@ Pinned MLX APIs can report default device, compiled Metal availability, and sync
 completion. They cannot programmatically prove per-kernel Metal dispatch. The eligibility and
 result schemas therefore scope any future positive cohort to direct MLX runtime execution with
 same-process backend facts, never proven per-kernel GPU execution.
+
+## Runtime-independent MLX determinism canary
+
+The additive `mlx_determinism_canary_spec`, `mlx_determinism_fixture_set`,
+`mlx_determinism_result`, `mlx_determinism_comparison`, `mlx_determinism_result_set`, and
+`mlx_determinism_atlas` records remain schema 1.0 and do not modify any qualification,
+runtime-preflight, worker, authorization, or failure identity. The pinned matrix is the Cartesian
+product of eight operation forms, three dtypes, and explicit/deferred evaluation. No cell is
+claimed supported.
+
+Tensor records bind dtype, shape, byte order, exact lowercase hexadecimal payload, payload SHA-256,
+and a canonical descriptor digest under fixed rank/element/byte limits. Comparison refuses
+metadata or length drift rather than truncating with `zip` or coercing booleans to integers.
+Finite values produce exact binary64-encoded maximum absolute/relative errors and native-format
+ULP distance. NaNs require equal sign/payload for numerical equality, infinities require equal
+sign, and signed zeros compare numerically equal while their bit difference remains explicit.
+
+The closed bundle contains the pinned spec, eight embedded operation/edge fixtures, eight copied
+synthetic results, recomputed comparisons, and an atlas. Replay reconstructs every nested identity
+and rejects coordinated content/index/receipt rehashing that changes pinned semantics. All
+positive entries are synthetic contract examples. The future atlas path is acquisition-agnostic:
+authorized observation records must carry separate authorization, runtime, device, and process
+identities plus device class, process cohort, synchronization mode, observation index, one attempt,
+zero retries, and no replacement, but the canary does not define or invoke that authorization.
 
 ## Identity graph
 

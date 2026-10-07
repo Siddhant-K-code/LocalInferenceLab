@@ -71,5 +71,12 @@ fixture:
 	preflight_contract_b=$$(find .artifacts/preflight-contract-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-runtime-preflight-contract-synthetic-v1-1-*' -print -quit); \
 	diff -r "$$preflight_contract_a" "$$preflight_contract_b" && \
 	uv run localinferencelab mlx runtime-preflight-1-1-fixture-replay "$$preflight_contract_a"
+	mkdir .artifacts/determinism-canary-a .artifacts/determinism-canary-b
+	uv run localinferencelab mlx determinism-canary-fixture-compile .artifacts/determinism-canary-a
+	uv run localinferencelab mlx determinism-canary-fixture-compile .artifacts/determinism-canary-b
+	canary_a=$$(find .artifacts/determinism-canary-a -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-determinism-canary-synthetic-v1-*' -print -quit); \
+	canary_b=$$(find .artifacts/determinism-canary-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-determinism-canary-synthetic-v1-*' -print -quit); \
+	diff -r "$$canary_a" "$$canary_b" && \
+	uv run localinferencelab mlx determinism-canary-replay "$$canary_a"
 
 validate: lint type test build-smoke fixture
