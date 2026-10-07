@@ -89,17 +89,42 @@ def _set_metadata_requirements(
     distribution = _distribution(package, distribution_name)
     name = cast("str", distribution["name"])
     version = cast("str", distribution["version"])
-    data = (
-        "\n".join(
-            [
-                "Metadata-Version: 2.3",
-                f"Name: {name}",
-                f"Version: {version}",
-                *(f"Requires-Dist: {requirement}" for requirement in requirements),
-            ]
-        )
-        + "\n\n"
-    ).encode("ascii")
+    metadata = _dict(distribution["metadata"])
+    previous = qualification_module.decode_bytes(cast("str", metadata["bytes_base64"]))
+    requires_python = next(
+        (
+            line[17:]
+            for line in previous.decode("ascii").splitlines()
+            if line.startswith("Requires-Python: ")
+        ),
+        None,
+    )
+    data = qualification_module._metadata_bytes(  # noqa: SLF001
+        name,
+        version,
+        requirements,
+        requires_python=requires_python,
+    )
+    _set_metadata_and_wheel_bytes(
+        package,
+        distribution_name,
+        data=data,
+        requirements=requirements,
+        requires_python=requires_python,
+    )
+
+
+def _set_metadata_and_wheel_bytes(
+    package: dict[str, JsonValue],
+    distribution_name: str,
+    *,
+    data: bytes,
+    requirements: list[str],
+    requires_python: str | None,
+) -> None:
+    distribution = _distribution(package, distribution_name)
+    name = cast("str", distribution["name"])
+    version = cast("str", distribution["version"])
     metadata = _dict(distribution["metadata"])
     metadata["bytes_base64"] = encode_bytes(data)
     metadata["sha256"] = digest_bytes(data)
@@ -110,11 +135,56 @@ def _set_metadata_requirements(
         version=version,
         tag=tag,
         requirements=requirements,
+        requires_python=requires_python,
+        metadata_bytes=data,
     )
     wheel["bytes_base64"] = encode_bytes(wheel_bytes)
     wheel["size_bytes"] = len(wheel_bytes)
     wheel["sha256"] = digest_bytes(wheel_bytes)
     _rehash_package(package)
+
+
+def _as_reviewed_candidate(package: dict[str, JsonValue]) -> None:
+    package["candidate_kind"] = "reviewed_candidate"
+    for item in _list(package["distributions"]):
+        distribution = _dict(item)
+        name = cast("str", distribution["name"])
+        source = _dict(distribution["source"])
+        source["provenance"] = "reviewed_git_revision_and_tag"
+        source["repository_url"] = f"https://github.com/example/{name}"
+        wheel = _dict(distribution["wheel"])
+        wheel["provenance"] = "reviewed_pypi_artifact"
+        wheel["url"] = f"https://files.pythonhosted.org/packages/reviewed/{wheel['filename']}"
+        _dict(distribution["metadata"])["evidence_scope"] = "complete_wheel_metadata"
+    _rehash_package(package)
+
+
+def _set_requires_python(
+    package: dict[str, JsonValue],
+    distribution_name: str,
+    requires_python: str | None,
+) -> None:
+    distribution = _distribution(package, distribution_name)
+    metadata = _dict(distribution["metadata"])
+    metadata_bytes = qualification_module.decode_bytes(cast("str", metadata["bytes_base64"]))
+    requirements = [
+        line[15:]
+        for line in metadata_bytes.decode("ascii").splitlines()
+        if line.startswith("Requires-Dist: ")
+    ]
+    data = qualification_module._metadata_bytes(  # noqa: SLF001
+        cast("str", distribution["name"]),
+        cast("str", distribution["version"]),
+        requirements,
+        requires_python=requires_python,
+    )
+    _set_metadata_and_wheel_bytes(
+        package,
+        distribution_name,
+        data=data,
+        requirements=requirements,
+        requires_python=requires_python,
+    )
 
 
 def _retag_synthetic_wheel(
@@ -134,6 +204,14 @@ def _retag_synthetic_wheel(
         for line in metadata_bytes.decode("ascii").splitlines()
         if line.startswith("Requires-Dist: ")
     ]
+    requires_python = next(
+        (
+            line[17:]
+            for line in metadata_bytes.decode("ascii").splitlines()
+            if line.startswith("Requires-Python: ")
+        ),
+        None,
+    )
     name = cast("str", distribution["name"])
     version = cast("str", distribution["version"])
     filename = f"{name.replace('-', '_')}-{version}-{python_tag}-{abi_tag}-{platform_tag}.whl"
@@ -142,6 +220,8 @@ def _retag_synthetic_wheel(
         version=version,
         tag=f"{python_tag}-{abi_tag}-{platform_tag}",
         requirements=requirements,
+        requires_python=requires_python,
+        metadata_bytes=metadata_bytes,
     )
     wheel.update(
         {
@@ -364,7 +444,7 @@ def test_duplicate_metadata_and_extras_ambiguity_fail_closed() -> None:
     duplicate = _copy(synthetic_eligible_qualification_package())
     requirement = "mlx-metal==1.0.0"
     _set_metadata_requirements(duplicate, "mlx", [requirement, requirement])
-    with pytest.raises(ContractError, match="unique and sorted"):
+    with pytest.raises(ContractError, match="must be unique"):
         verify_qualification_package(duplicate)
 
     ambiguous_extras = _copy(synthetic_eligible_qualification_package())
@@ -387,6 +467,255 @@ def test_duplicate_metadata_and_extras_ambiguity_fail_closed() -> None:
     assert any(
         cast("str", blocker).startswith("dependency_extras_forbidden:mlx:")
         for blocker in _list(record["blockers"])
+    )
+
+
+def test_reviewed_metadata_accepts_realistic_headers_body_and_unsorted_requirements() -> None:
+    package = _copy(synthetic_eligible_qualification_package())
+    _as_reviewed_candidate(package)
+    data = (
+        b"Metadata-Version: 2.3\r\n"
+        b"Name: mlx\r\n"
+        b"Version: 1.0.0\r\n"
+        b"Summary: Realistic static wheel metadata\r\n"
+        b"Requires-Python: >=3.11\r\n"
+        b"Project-URL: Source, https://github.com/example/mlx\r\n"
+        b"Requires-Dist: typing-extensions>=4.0\r\n"
+        b"Requires-Dist: mlx-metal==1.0.0\r\n"
+        b"Description-Content-Type: text/markdown\r\n"
+        b"\r\n"
+        b"# MLX\r\n\r\nA realistic description body remains byte-bound.\r\n"
+    )
+    _set_metadata_and_wheel_bytes(
+        package,
+        "mlx",
+        data=data,
+        requirements=["typing-extensions>=4.0", "mlx-metal==1.0.0"],
+        requires_python=">=3.11",
+    )
+    verified = verify_qualification_package(package)
+    assert verified["package_id"] == package["package_id"]
+    record = build_qualification_record(package)
+    assert record["decision"] == INELIGIBLE
+    assessment = _dict(record["assessment"])
+    mlx_requirements = [
+        cast("str", _dict(item)["requirement"])
+        for item in _list(assessment["dependency_assessments"])
+        if _dict(item)["requesting_distribution"] == "mlx"
+    ]
+    assert mlx_requirements == ["mlx-metal==1.0.0", "typing-extensions>=4.0"]
+    assert (
+        next(
+            _dict(item)
+            for item in _list(assessment["requires_python_assessments"])
+            if _dict(item)["distribution"] == "mlx"
+        )["satisfied"]
+        is True
+    )
+
+
+@pytest.mark.parametrize(
+    ("header", "value"),
+    [
+        ("Metadata-Version", "2.3"),
+        ("Name", "mlx"),
+        ("Version", "1.0.0"),
+    ],
+)
+def test_reviewed_metadata_rejects_duplicate_identity_headers(
+    header: str,
+    value: str,
+) -> None:
+    package = _copy(synthetic_eligible_qualification_package())
+    _as_reviewed_candidate(package)
+    data = (
+        "Metadata-Version: 2.3\n"
+        "Name: mlx\n"
+        "Version: 1.0.0\n"
+        f"{header}: {value}\n"
+        "Requires-Python: >=3.11\n"
+        "Requires-Dist: mlx-metal==1.0.0\n\n"
+    ).encode("ascii")
+    _set_metadata_and_wheel_bytes(
+        package,
+        "mlx",
+        data=data,
+        requirements=["mlx-metal==1.0.0"],
+        requires_python=">=3.11",
+    )
+    with pytest.raises(ContractError, match=f"exactly one {header}"):
+        verify_qualification_package(package)
+
+
+def test_reviewed_metadata_rejects_folded_dependency_and_exact_byte_drift() -> None:
+    folded = _copy(synthetic_eligible_qualification_package())
+    _as_reviewed_candidate(folded)
+    folded_data = (
+        b"Metadata-Version: 2.3\nName: mlx\nVersion: 1.0.0\n"
+        b"Requires-Python: >=3.11\n"
+        b'Requires-Dist: mlx-metal==1.0.0;\n platform_system == "Darwin"\n\n'
+    )
+    _set_metadata_and_wheel_bytes(
+        folded,
+        "mlx",
+        data=folded_data,
+        requirements=[],
+        requires_python=">=3.11",
+    )
+    with pytest.raises(ContractError, match="may not fold Requires-Dist"):
+        verify_qualification_package(folded)
+
+    drift = _copy(synthetic_eligible_qualification_package())
+    _as_reviewed_candidate(drift)
+    distribution = _distribution(drift, "mlx")
+    metadata = _dict(distribution["metadata"])
+    changed = qualification_module.decode_bytes(cast("str", metadata["bytes_base64"])) + b"\n"
+    metadata["bytes_base64"] = encode_bytes(changed)
+    metadata["sha256"] = digest_bytes(changed)
+    _rehash_package(drift)
+    with pytest.raises(ContractError, match="wheel METADATA bytes differ"):
+        verify_qualification_package(drift)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        (
+            b"Metadata-Version: 2.3\nName: mlx\nVersion: 1.0.0\n"
+            b"Summary: invalid-\x80\nRequires-Python: >=3.11\n"
+            b"Requires-Dist: mlx-metal==1.0.0\n\n"
+        ),
+        (
+            b"Metadata-Version: 2.3\nName: mlx\nVersion: 1.0.0\n"
+            b"Requires-Python: >=3.11\nRequires-Dist: mlx-metal==1.0.0\n\n"
+            b"description with invalid-\x80\n"
+        ),
+    ],
+)
+def test_reviewed_metadata_rejects_invalid_utf8(data: bytes) -> None:
+    package = _copy(synthetic_eligible_qualification_package())
+    _as_reviewed_candidate(package)
+    _set_metadata_and_wheel_bytes(
+        package,
+        "mlx",
+        data=data,
+        requirements=["mlx-metal==1.0.0"],
+        requires_python=">=3.11",
+    )
+    with pytest.raises(ContractError, match="not parseable Core Metadata"):
+        verify_qualification_package(package)
+
+
+@pytest.mark.parametrize(
+    "requirements",
+    [
+        ["mlx-metal>=1.0,<2.0", "MLX-METAL<2.0.0,>=1.0.0"],
+        [
+            'mlx-metal==1.0.0; platform_system == "Darwin" and platform_machine == "arm64"',
+            'mlx-metal==1.0.0; platform_machine == "arm64" and platform_system == "Darwin"',
+        ],
+    ],
+)
+def test_semantically_duplicate_requirements_are_rejected(requirements: list[str]) -> None:
+    package = _copy(synthetic_eligible_qualification_package())
+    _set_metadata_requirements(package, "mlx", requirements)
+    with pytest.raises(ContractError, match="Requires-Dist entries must be unique"):
+        verify_qualification_package(package)
+
+
+def test_requires_python_is_assessed_and_fails_closed() -> None:
+    satisfied = build_qualification_record(synthetic_eligible_qualification_package())
+    assert all(
+        _dict(item)["satisfied"] is True
+        for item in _list(_dict(satisfied["assessment"])["requires_python_assessments"])
+    )
+
+    unsatisfied = _copy(synthetic_eligible_qualification_package())
+    _set_requires_python(unsatisfied, "mlx-lm", ">=3.13")
+    unsatisfied_record = build_qualification_record(unsatisfied)
+    assert unsatisfied_record["decision"] == INELIGIBLE
+    assert "requires_python_unsatisfied:mlx-lm:>=3.13:selected=3.12.0" in _list(
+        unsatisfied_record["blockers"]
+    )
+
+    missing = _copy(synthetic_eligible_qualification_package())
+    _set_requires_python(missing, "mlx", None)
+    _as_reviewed_candidate(missing)
+    with pytest.raises(ContractError, match="complete metadata requires Requires-Python"):
+        verify_qualification_package(missing)
+
+    duplicate = _copy(synthetic_eligible_qualification_package())
+    _as_reviewed_candidate(duplicate)
+    duplicate_data = (
+        b"Metadata-Version: 2.3\nName: mlx\nVersion: 1.0.0\n"
+        b"Requires-Python: >=3.11\nRequires-Python: <4.0\n"
+        b"Requires-Dist: mlx-metal==1.0.0\n\n"
+    )
+    _set_metadata_and_wheel_bytes(
+        duplicate,
+        "mlx",
+        data=duplicate_data,
+        requirements=["mlx-metal==1.0.0"],
+        requires_python=">=3.11",
+    )
+    with pytest.raises(ContractError, match="at most one Requires-Python"):
+        verify_qualification_package(duplicate)
+
+    unsupported = _copy(synthetic_eligible_qualification_package())
+    _set_requires_python(unsupported, "mlx", ">=3.11, <4.0")
+    with pytest.raises(ContractError, match="unsupported version specifier grammar"):
+        verify_qualification_package(unsupported)
+
+
+@pytest.mark.parametrize(
+    "requirement",
+    [
+        "mlx",
+        "mlx>=0.0",
+        "mlx==1.0.0,>=1.0.0",
+        "mlx==2.0.0",
+        "mlx===1.0.0",
+    ],
+)
+def test_top_level_requirements_must_be_exact_canonical_pins(requirement: str) -> None:
+    package = _copy(synthetic_eligible_qualification_package())
+    package["top_level_requirements"] = [requirement, "mlx-lm==1.0.0"]
+    _rehash_package(package)
+    record = build_qualification_record(package)
+    assert record["decision"] == INELIGIBLE
+    assert any(
+        cast("str", blocker).startswith(f"top_level_requirement_not_exact_pin:{requirement}:")
+        for blocker in _list(record["blockers"])
+    )
+
+
+def test_top_level_requirements_reject_duplicate_missing_and_unexpected_roots() -> None:
+    duplicate = _copy(synthetic_eligible_qualification_package())
+    duplicate["top_level_requirements"] = [
+        "mlx==1.0.0",
+        "mlx==1.0.0",
+        "mlx-lm==1.0.0",
+    ]
+    _rehash_package(duplicate)
+    with pytest.raises(ContractError, match="names must be unique and sorted"):
+        verify_qualification_package(duplicate)
+
+    missing = _copy(synthetic_eligible_qualification_package())
+    missing["top_level_requirements"] = ["mlx-lm==1.0.0"]
+    _rehash_package(missing)
+    assert "missing_top_level_requirement:mlx" in _list(
+        build_qualification_record(missing)["blockers"]
+    )
+
+    unexpected = _copy(synthetic_eligible_qualification_package())
+    unexpected["top_level_requirements"] = [
+        "mlx==1.0.0",
+        "mlx-extra==1.0.0",
+        "mlx-lm==1.0.0",
+    ]
+    _rehash_package(unexpected)
+    assert "unexpected_top_level_requirement:mlx-extra" in _list(
+        build_qualification_record(unexpected)["blockers"]
     )
 
 
@@ -502,18 +831,7 @@ def test_arbitrary_equality_is_exact_while_standard_equality_is_normalized() -> 
 
 def test_reviewed_and_historical_candidates_cannot_self_attest_eligibility() -> None:
     reviewed = _copy(synthetic_eligible_qualification_package())
-    reviewed["candidate_kind"] = "reviewed_candidate"
-    for item in _list(reviewed["distributions"]):
-        distribution = _dict(item)
-        name = cast("str", distribution["name"])
-        source = _dict(distribution["source"])
-        source["provenance"] = "reviewed_git_revision_and_tag"
-        source["repository_url"] = f"https://github.com/example/{name}"
-        wheel = _dict(distribution["wheel"])
-        wheel["provenance"] = "reviewed_pypi_artifact"
-        wheel["url"] = f"https://files.pythonhosted.org/packages/reviewed/{wheel['filename']}"
-        _dict(distribution["metadata"])["evidence_scope"] = "complete_wheel_metadata"
-    _rehash_package(reviewed)
+    _as_reviewed_candidate(reviewed)
     reviewed_record = build_qualification_record(reviewed)
     assert reviewed_record["decision"] == INELIGIBLE
     assert any(
@@ -572,7 +890,8 @@ def test_source_wheel_metadata_and_identity_hash_drift_are_rejected() -> None:
     distribution = _distribution(coordinated_metadata, "mlx")
     metadata = _dict(distribution["metadata"])
     replacement = (
-        b"Metadata-Version: 2.3\nName: mlx\nVersion: 1.0.0\nRequires-Dist: mlx-metal>=2.0.0\n\n"
+        b"Metadata-Version: 2.3\nName: mlx\nVersion: 1.0.0\n"
+        b"Requires-Python: >=3.11\nRequires-Dist: mlx-metal>=2.0.0\n\n"
     )
     metadata["bytes_base64"] = encode_bytes(replacement)
     metadata["sha256"] = digest_bytes(replacement)

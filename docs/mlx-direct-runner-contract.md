@@ -342,15 +342,17 @@ committed negative projection have pure replay commands.
 The process-free qualification package binds exact MLX/MLX-LM versions and immutable source
 revision/tag provenance; exact wheel filenames, SHA-256 digests, sizes, URLs and tags; target
 CPython ABI and macOS version/arm64 architecture; exact wheel bytes bound to embedded WHEEL tags
-and METADATA; canonical METADATA bytes/digests and normalized
-names/versions; every supplied `Requires-Dist` entry and marker; a forbid-all-extras policy; the
-supplied top-level/transitive distribution graph; and immutable source-byte evidence for
+and METADATA; exact raw METADATA bytes/digests and normalized names/versions; every supplied
+`Requires-Dist` entry and marker; one exact `Requires-Python` constraint evaluated against the
+target interpreter; a forbid-all-extras policy; exact `==` pins for top-level `mlx` and `mlx-lm`;
+the supplied top-level/transitive distribution graph; and immutable source-byte evidence for
 `import_mlx`, `import_mlx_lm`, `distribution_versions`, `default_device`,
 `metal_is_available`, `default_stream`, and `synchronize`.
 
-The derived record includes marker applicability, selected dependency versions, exact satisfaction
-or failure explanations, wheel compatibility, graph reachability, API-evidence presence, and sorted
-blockers. It claims closure only over supplied canonical distribution metadata. Complete Python
+The derived record includes marker applicability, `Requires-Python` compatibility, selected
+dependency versions, exact satisfaction or failure explanations, wheel compatibility, graph
+reachability, API-evidence presence, and sorted blockers. It claims closure only over supplied
+distribution metadata. Complete Python
 standard-library, native-runtime, dynamic-loader, shared-library, backend, device, Metal,
 synchronization, and model semantics remain outside the gate.
 

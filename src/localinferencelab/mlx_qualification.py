@@ -7,6 +7,9 @@ import os
 import re
 import zipfile
 from dataclasses import dataclass
+from email import policy
+from email.message import Message
+from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple, cast
 from urllib.parse import urlsplit
@@ -36,8 +39,8 @@ ELIGIBLE = "eligible_for_new_observed_authorization"
 INELIGIBLE = "ineligible"
 _DIGEST_LENGTH = 71
 _CONTROL_LIMIT = 32
+_MAX_METADATA_HEADERS = 4096
 _MIN_RELEASE_COMPONENTS = 2
-_METADATA_HEADER_COUNT = 3
 _MAX_METADATA_BYTES = 256 * 1024
 _MAX_SOURCE_BYTES = 256 * 1024
 _MAX_WHEEL_BYTES = 64 * 1024 * 1024
@@ -65,6 +68,12 @@ _MARKER_CLAUSE_PATTERN = re.compile(
 _SPECIFIER_PATTERN = re.compile(
     r"(?P<operator>===|==|!=|~=|<=|>=|<|>)(?P<version>"
     r"(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){1,3})"
+)
+_SUPPORTED_METADATA_VERSIONS = {"2.1", "2.2", "2.3", "2.4"}
+_METADATA_POLICY = policy.default.clone(
+    utf8=True,
+    refold_source="none",
+    raise_on_defect=False,
 )
 _REQUIREMENT_HEAD_PATTERN = re.compile(
     r"^(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)"
@@ -128,6 +137,16 @@ class Requirement(NamedTuple):
     extras: tuple[str, ...]
     specifiers: tuple[tuple[str, str], ...]
     marker: str | None
+
+
+class MetadataEvidence(NamedTuple):
+    """Strictly parsed distribution metadata bound to its exact source bytes."""
+
+    scope: str
+    requirements: tuple[Requirement, ...]
+    requires_python: str | None
+    requires_python_specifiers: tuple[tuple[str, str], ...]
+    data: bytes
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,8 +341,14 @@ def qualification_spec() -> dict[str, JsonValue]:
             "canonical_release_versions_with_comma_conjoined_specifiers_and_"
             "and_conjoined_environment_markers"
         ),
+        "requires_python_policy": (
+            "exactly_one_bounded_specifier_set_required_for_complete_metadata"
+        ),
         "required_next_milestone": (
             "distinct_schema_1_1_protocol_spec_worker_review_and_fresh_explicit_authorization"
+        ),
+        "top_level_requirement_policy": (
+            "exact_single_double_equals_pin_matching_each_selected_mlx_and_mlx_lm_version"
         ),
         "static_action_counters": dict(_ZERO_ACTION_COUNTERS),
     }
@@ -349,6 +374,62 @@ def _padded_version(value: str, width: int = 4) -> tuple[int, ...]:
     return parsed + (0,) * (width - len(parsed))
 
 
+def _specifier_identity(
+    specifiers: tuple[tuple[str, str], ...],
+) -> tuple[tuple[str, str], ...]:
+    return tuple(
+        sorted(
+            (
+                operator,
+                version
+                if operator == "==="
+                else ".".join(str(component) for component in _padded_version(version)),
+            )
+            for operator, version in specifiers
+        )
+    )
+
+
+def _marker_identity(marker: str | None) -> tuple[tuple[str, str, str], ...] | None:
+    if marker is None:
+        return None
+    identities: list[tuple[str, str, str]] = []
+    for clause in marker.split(" and "):
+        match = _MARKER_CLAUSE_PATTERN.fullmatch(clause)
+        if match is None:
+            raise ContractError("environment marker uses unsupported or ambiguous grammar")
+        variable = match.group("variable")
+        value = match.group("value")
+        if variable in {"python_version", "python_full_version"}:
+            value = ".".join(str(component) for component in _padded_version(value))
+        identities.append((variable, match.group("operator"), value))
+    if len(identities) != len(set(identities)):
+        raise ContractError("environment marker contains duplicate clauses")
+    return tuple(sorted(identities))
+
+
+def _parse_specifiers(
+    value: str,
+    label: str,
+    *,
+    required: bool = False,
+) -> tuple[tuple[str, str], ...]:
+    if not value:
+        if required:
+            raise ContractError(f"{label} must contain at least one version specifier")
+        return ()
+    specifiers: list[tuple[str, str]] = []
+    for piece in value.split(","):
+        specifier = _SPECIFIER_PATTERN.fullmatch(piece)
+        if specifier is None:
+            raise ContractError(f"{label} uses unsupported version specifier grammar")
+        specifiers.append((specifier.group("operator"), specifier.group("version")))
+    parsed = tuple(specifiers)
+    if len(parsed) != len(set(_specifier_identity(parsed))):
+        raise ContractError(f"{label} contains duplicate version specifiers")
+    return parsed
+
+
 def _parse_requirement(value: JsonValue, label: str) -> Requirement:
     raw = _text(value, label, maximum=512)
     if raw.count(";") > 1:
@@ -369,18 +450,11 @@ def _parse_requirement(value: JsonValue, label: str) -> Requirement:
     extras = () if extras_text is None else tuple(extras_text.split(","))
     if extras != tuple(sorted(set(extras))):
         raise ContractError(f"{label} extras must be unique and sorted")
-    specifier_text = match.group("specifiers")
-    specifiers: list[tuple[str, str]] = []
-    if specifier_text:
-        pieces = specifier_text.split(",")
-        for piece in pieces:
-            specifier = _SPECIFIER_PATTERN.fullmatch(piece)
-            if specifier is None:
-                raise ContractError(f"{label} uses unsupported version specifier grammar")
-            specifiers.append((specifier.group("operator"), specifier.group("version")))
+    specifiers = _parse_specifiers(match.group("specifiers"), f"{label}.specifiers")
     if marker is not None:
         _evaluate_marker(marker, _canonical_marker_test_environment(), validate_only=True)
-    return Requirement(raw, name, extras, tuple(specifiers), marker)
+        _marker_identity(marker)
+    return Requirement(raw, name, extras, specifiers, marker)
 
 
 def _canonical_marker_test_environment() -> dict[str, str]:
@@ -504,10 +578,99 @@ def _satisfies(  # noqa: PLR0911
     return True
 
 
-def _metadata_bytes(name: str, version: str, requirements: list[str]) -> bytes:
+def _metadata_bytes(
+    name: str,
+    version: str,
+    requirements: list[str],
+    *,
+    requires_python: str | None,
+) -> bytes:
     lines = ["Metadata-Version: 2.3", f"Name: {name}", f"Version: {version}"]
+    if requires_python is not None:
+        lines.append(f"Requires-Python: {requires_python}")
     lines.extend(f"Requires-Dist: {requirement}" for requirement in sorted(requirements))
     return ("\n".join(lines) + "\n\n").encode("ascii")
+
+
+def _metadata_header_values(message: Message, name: str) -> list[str]:
+    values = message.get_all(name, [])
+    return [str(value) for value in values]
+
+
+def _single_metadata_header(message: Message, name: str, label: str) -> str:
+    values = _metadata_header_values(message, name)
+    if len(values) != 1:
+        raise ContractError(f"{label} must contain exactly one {name} header")
+    return _text(values[0], f"{label}.{name}", maximum=512)
+
+
+def _parse_core_metadata(
+    data: bytes,
+    *,
+    expected_name: str,
+    expected_version: str,
+    label: str,
+) -> tuple[list[str], str | None]:
+    if b"\x00" in data:
+        raise ContractError(f"{label} contains a NUL byte")
+    try:
+        data.decode("utf-8")
+        message = BytesParser(policy=_METADATA_POLICY).parsebytes(data)
+    except (UnicodeDecodeError, ValueError) as error:
+        raise ContractError(f"{label} is not parseable Core Metadata") from error
+    if message.defects:
+        names = ",".join(sorted(type(defect).__name__ for defect in message.defects))
+        raise ContractError(f"{label} contains Core Metadata defects: {names}")
+    raw_headers = list(message.raw_items())
+    if not raw_headers or len(raw_headers) > _MAX_METADATA_HEADERS:
+        raise ContractError(f"{label} has an invalid header count")
+    critical_headers = {
+        "metadata-version",
+        "name",
+        "version",
+        "requires-dist",
+        "requires-python",
+    }
+    for header_name, raw_value in raw_headers:
+        if header_name.lower() in critical_headers and ("\n" in raw_value or "\r" in raw_value):
+            raise ContractError(f"{label} may not fold {header_name} values")
+    for header_name in message:
+        for header in message.get_all(header_name, []):
+            defects = getattr(header, "defects", ())
+            if defects:
+                names = ",".join(sorted(type(defect).__name__ for defect in defects))
+                raise ContractError(
+                    f"{label}.{header_name} contains Core Metadata defects: {names}"
+                )
+    metadata_version = _single_metadata_header(message, "Metadata-Version", label)
+    if metadata_version not in _SUPPORTED_METADATA_VERSIONS:
+        raise ContractError(f"{label} has unsupported Metadata-Version {metadata_version}")
+    metadata_name = _normalize_name(
+        _single_metadata_header(message, "Name", label), f"{label}.Name"
+    )
+    metadata_version_value = _version(
+        _single_metadata_header(message, "Version", label),
+        f"{label}.Version",
+    )
+    if metadata_name != expected_name or metadata_version_value != expected_version:
+        raise ContractError(f"{label} normalized name or version differs from the distribution")
+    requires_python_values = _metadata_header_values(message, "Requires-Python")
+    if len(requires_python_values) > 1:
+        raise ContractError(f"{label} must contain at most one Requires-Python header")
+    requires_python = (
+        None
+        if not requires_python_values
+        else _text(
+            requires_python_values[0],
+            f"{label}.Requires-Python",
+            maximum=512,
+        )
+    )
+    requirement_lines = [
+        _text(value, f"{label}.Requires-Dist", maximum=512)
+        for value in _metadata_header_values(message, "Requires-Dist")
+    ]
+    return requirement_lines, requires_python
 
 
 def _parse_metadata(
@@ -516,9 +679,16 @@ def _parse_metadata(
     expected_name: str,
     expected_version: str,
     label: str,
-) -> tuple[str, list[Requirement], bytes]:
+) -> MetadataEvidence:
     metadata = _mapping(value, label)
     _keys(metadata, {"bytes_base64", "evidence_scope", "sha256"}, label)
+    scope = _text(metadata["evidence_scope"], f"{label}.evidence_scope", maximum=64)
+    if scope not in {
+        "complete_synthetic_metadata",
+        "complete_wheel_metadata",
+        "historical_requirement_projection",
+    }:
+        raise ContractError(f"{label} evidence scope is unsupported")
     encoded = _text(metadata["bytes_base64"], f"{label}.bytes_base64", maximum=400_000)
     try:
         data = decode_bytes(encoded)
@@ -528,43 +698,57 @@ def _parse_metadata(
         raise ContractError(f"{label} has invalid byte length")
     if digest_bytes(data) != _sha256(metadata["sha256"], f"{label}.sha256"):
         raise ContractError(f"{label} digest mismatch")
-    try:
-        text = data.decode("ascii")
-    except UnicodeDecodeError as error:
-        raise ContractError(f"{label} must be canonical ASCII METADATA") from error
-    if "\r" in text or not text.endswith("\n\n"):
-        raise ContractError(f"{label} must use canonical LF-terminated METADATA bytes")
-    lines = text[:-2].split("\n")
-    if len(lines) < _METADATA_HEADER_COUNT or lines[0] != "Metadata-Version: 2.3":
-        raise ContractError(f"{label} has unsupported Metadata-Version or layout")
-    if not lines[1].startswith("Name: ") or not lines[2].startswith("Version: "):
-        raise ContractError(f"{label} must place Name and Version before Requires-Dist")
-    metadata_name = _normalize_name(lines[1][6:], f"{label}.Name")
-    metadata_version = _version(lines[2][9:], f"{label}.Version")
-    requirement_lines: list[str] = []
-    for line in lines[3:]:
-        if not line.startswith("Requires-Dist: "):
-            raise ContractError(f"{label} contains unsupported or duplicate metadata fields")
-        requirement_lines.append(line[15:])
-    if requirement_lines != sorted(set(requirement_lines)):
-        raise ContractError(f"{label} Requires-Dist entries must be unique and sorted")
-    canonical = _metadata_bytes(metadata_name, metadata_version, requirement_lines)
-    if data != canonical:
-        raise ContractError(f"{label} bytes are not canonical")
-    if metadata_name != expected_name or metadata_version != expected_version:
-        raise ContractError(f"{label} normalized name or version differs from the distribution")
-    scope = _text(metadata["evidence_scope"], f"{label}.evidence_scope", maximum=64)
-    if scope not in {
-        "complete_synthetic_metadata",
-        "complete_wheel_metadata",
-        "historical_requirement_projection",
-    }:
-        raise ContractError(f"{label} evidence scope is unsupported")
-    requirements = [
+    requirement_lines, requires_python = _parse_core_metadata(
+        data,
+        expected_name=expected_name,
+        expected_version=expected_version,
+        label=label,
+    )
+    requirements = tuple(
         _parse_requirement(requirement, f"{label}.Requires-Dist[{index}]")
         for index, requirement in enumerate(requirement_lines)
+    )
+    requirement_identities = [
+        (
+            requirement.name,
+            requirement.extras,
+            _specifier_identity(requirement.specifiers),
+            _marker_identity(requirement.marker),
+        )
+        for requirement in requirements
     ]
-    return scope, requirements, data
+    if len(requirement_identities) != len(set(requirement_identities)):
+        raise ContractError(f"{label} Requires-Dist entries must be unique")
+    requires_python_specifiers = (
+        ()
+        if requires_python is None
+        else _parse_specifiers(
+            requires_python,
+            f"{label}.Requires-Python",
+            required=True,
+        )
+    )
+    if (
+        scope in {"complete_synthetic_metadata", "complete_wheel_metadata"}
+        and requires_python is None
+    ):
+        raise ContractError(f"{label} complete metadata requires Requires-Python")
+    if scope != "complete_wheel_metadata":
+        canonical = _metadata_bytes(
+            expected_name,
+            expected_version,
+            requirement_lines,
+            requires_python=requires_python,
+        )
+        if data != canonical:
+            raise ContractError(f"{label} bytes are not canonical")
+    return MetadataEvidence(
+        scope,
+        requirements,
+        requires_python,
+        requires_python_specifiers,
+        data,
+    )
 
 
 def _parse_wheel_filename(filename: str) -> tuple[str, str, str, str, str]:
@@ -810,6 +994,19 @@ def _verify_distribution(
     role = _text(distribution["role"], f"{label}.role", maximum=32)
     if role not in {"top_level", "transitive"}:
         raise ContractError(f"{label}.role is unsupported")
+    expected_scope = {
+        "historical_negative_projection": "historical_requirement_projection",
+        "reviewed_candidate": "complete_wheel_metadata",
+        "synthetic_fixture": "complete_synthetic_metadata",
+    }[candidate_kind]
+    declared_metadata = _mapping(distribution["metadata"], f"{label}.metadata")
+    declared_scope = _text(
+        declared_metadata.get("evidence_scope"),
+        f"{label}.metadata.evidence_scope",
+        maximum=64,
+    )
+    if declared_scope != expected_scope:
+        raise ContractError(f"{label} metadata scope differs from the candidate kind")
     _verify_source(distribution["source"], candidate_kind=candidate_kind, label=f"{label}.source")
     _wheel_value, embedded_metadata = _verify_wheel(
         distribution["wheel"],
@@ -818,22 +1015,17 @@ def _verify_distribution(
         expected_version=version,
         label=f"{label}.wheel",
     )
-    scope, requirements, metadata_bytes = _parse_metadata(
+    metadata_evidence = _parse_metadata(
         distribution["metadata"],
         expected_name=name,
         expected_version=version,
         label=f"{label}.metadata",
     )
-    if embedded_metadata is not None and embedded_metadata != metadata_bytes:
+    if embedded_metadata is not None and embedded_metadata != metadata_evidence.data:
         raise ContractError(f"{label} wheel METADATA bytes differ from the candidate metadata")
-    expected_scope = {
-        "historical_negative_projection": "historical_requirement_projection",
-        "reviewed_candidate": "complete_wheel_metadata",
-        "synthetic_fixture": "complete_synthetic_metadata",
-    }[candidate_kind]
-    if scope != expected_scope:
+    if metadata_evidence.scope != expected_scope:
         raise ContractError(f"{label} metadata scope differs from the candidate kind")
-    return dict(distribution), scope, requirements
+    return dict(distribution), metadata_evidence.scope, list(metadata_evidence.requirements)
 
 
 def _marker_environment(target: dict[str, JsonValue]) -> dict[str, str]:
@@ -1222,6 +1414,19 @@ def _qualification_assessment(package: dict[str, JsonValue]) -> dict[str, JsonVa
     )
     top_level_assessments: list[JsonValue] = []
     for requirement in top_requirements:
+        selected_distribution = distributions.get(requirement.name)
+        if requirement.name in required_roots and (
+            selected_distribution is None
+            or requirement.specifiers != (("==", cast("str", selected_distribution["version"])),)
+        ):
+            selected_pin = (
+                "missing"
+                if selected_distribution is None
+                else f"{requirement.name}=={selected_distribution['version']}"
+            )
+            blockers.append(
+                f"top_level_requirement_not_exact_pin:{requirement.raw}:selected={selected_pin}"
+            )
         assessment, blocker, _edge = _requirement_assessment(
             "top-level",
             requirement,
@@ -1234,6 +1439,7 @@ def _qualification_assessment(package: dict[str, JsonValue]) -> dict[str, JsonVa
     dependency_assessments: list[JsonValue] = []
     edges: dict[str, list[str]] = {name: [] for name in distributions}
     metadata_scopes: list[JsonValue] = []
+    requires_python_assessments: list[JsonValue] = []
     wheel_assessments: list[JsonValue] = []
     for name, distribution in distributions.items():
         role = cast("str", distribution["role"])
@@ -1241,12 +1447,14 @@ def _qualification_assessment(package: dict[str, JsonValue]) -> dict[str, JsonVa
         if role != expected_role:
             blockers.append(f"distribution_role_mismatch:{name}:expected={expected_role}")
         metadata = _mapping(distribution["metadata"], f"{name} metadata")
-        scope, requirements, _metadata_bytes_value = _parse_metadata(
+        metadata_evidence = _parse_metadata(
             metadata,
             expected_name=name,
             expected_version=cast("str", distribution["version"]),
             label=f"{name}.metadata",
         )
+        scope = metadata_evidence.scope
+        requirements = metadata_evidence.requirements
         complete = scope in {"complete_synthetic_metadata", "complete_wheel_metadata"}
         metadata_scopes.append(
             {
@@ -1257,6 +1465,45 @@ def _qualification_assessment(package: dict[str, JsonValue]) -> dict[str, JsonVa
         )
         if not complete:
             blockers.append(f"incomplete_metadata_evidence:{name}:{scope}")
+        requires_python = metadata_evidence.requires_python
+        if requires_python is None:
+            requires_python_assessments.append(
+                {
+                    "distribution": name,
+                    "explanation": "Requires-Python is absent from incomplete metadata evidence",
+                    "requires_python": None,
+                    "satisfied": not complete,
+                    "selected_python": target["python_full_version"],
+                    "status": "missing" if complete else "not_supplied_in_incomplete_projection",
+                }
+            )
+            if complete:
+                blockers.append(f"requires_python_missing:{name}")
+        else:
+            selected_python = cast("str", target["python_full_version"])
+            python_satisfied = _satisfies(
+                selected_python,
+                metadata_evidence.requires_python_specifiers,
+            )
+            requires_python_assessments.append(
+                {
+                    "distribution": name,
+                    "explanation": (
+                        f"target Python {selected_python} "
+                        f"{'satisfies' if python_satisfied else 'does not satisfy'} "
+                        f"Requires-Python {requires_python}"
+                    ),
+                    "requires_python": requires_python,
+                    "satisfied": python_satisfied,
+                    "selected_python": selected_python,
+                    "status": "satisfied" if python_satisfied else "unsatisfied",
+                }
+            )
+            if not python_satisfied:
+                blockers.append(
+                    f"requires_python_unsatisfied:{name}:{requires_python}:"
+                    f"selected={selected_python}"
+                )
         wheel = _mapping(distribution["wheel"], f"{name} wheel")
         if wheel["bytes_base64"] is None:
             blockers.append(f"wheel_bytes_not_supplied:{name}")
@@ -1361,6 +1608,7 @@ def _qualification_assessment(package: dict[str, JsonValue]) -> dict[str, JsonVa
             "distinct_schema_1_1_protocol_spec_worker_review_and_fresh_explicit_authorization"
         ),
         "review_anchor_id": review_anchor_id,
+        "requires_python_assessments": requires_python_assessments,
         "static_action_counters": dict(_ZERO_ACTION_COUNTERS),
         "top_level_assessments": top_level_assessments,
         "wheel_assessments": wheel_assessments,
@@ -1499,6 +1747,7 @@ def _wheel(
     abi_tag: str,
     platform_tag: str,
     requirements: list[str],
+    requires_python: str,
     url_prefix: str,
 ) -> dict[str, JsonValue]:
     filename = f"{name.replace('-', '_')}-{version}-{python_tag}-{abi_tag}-{platform_tag}.whl"
@@ -1507,6 +1756,7 @@ def _wheel(
         version=version,
         tag=f"{python_tag}-{abi_tag}-{platform_tag}",
         requirements=requirements,
+        requires_python=requires_python,
     )
     return {
         "abi_tag": abi_tag,
@@ -1531,10 +1781,21 @@ def _synthetic_wheel_bytes(
     version: str,
     tag: str,
     requirements: list[str],
+    requires_python: str | None,
+    metadata_bytes: bytes | None = None,
 ) -> bytes:
     output = io.BytesIO()
     dist_info = f"{name.replace('-', '_')}-{version}.dist-info"
-    metadata = _metadata_bytes(name, version, requirements)
+    metadata = (
+        _metadata_bytes(
+            name,
+            version,
+            requirements,
+            requires_python=requires_python,
+        )
+        if metadata_bytes is None
+        else metadata_bytes
+    )
     wheel = (
         "Wheel-Version: 1.0\n"
         "Generator: LocalInferenceLab static synthetic fixture\n"
@@ -1560,8 +1821,14 @@ def _metadata(
     requirements: list[str],
     *,
     evidence_scope: str,
+    requires_python: str | None,
 ) -> dict[str, JsonValue]:
-    data = _metadata_bytes(name, version, requirements)
+    data = _metadata_bytes(
+        name,
+        version,
+        requirements,
+        requires_python=requires_python,
+    )
     return {
         "bytes_base64": encode_bytes(data),
         "evidence_scope": evidence_scope,
@@ -1639,6 +1906,7 @@ def historical_incompatible_qualification_package() -> dict[str, JsonValue]:
                 "0.29.3",
                 [],
                 evidence_scope="historical_requirement_projection",
+                requires_python=None,
             ),
         },
         {
@@ -1668,6 +1936,7 @@ def historical_incompatible_qualification_package() -> dict[str, JsonValue]:
                 "0.30.6",
                 ['mlx>=0.30.4; platform_system == "Darwin"'],
                 evidence_scope="historical_requirement_projection",
+                requires_python=None,
             ),
         },
     ]
@@ -1743,6 +2012,7 @@ def synthetic_eligible_qualification_package() -> dict[str, JsonValue]:
                 abi_tag="cp312",
                 platform_tag="macosx_14_0_arm64",
                 requirements=["mlx-metal==1.0.0"],
+                requires_python=">=3.11",
                 url_prefix=f"{root}/wheels",
             ),
             "metadata": _metadata(
@@ -1750,6 +2020,7 @@ def synthetic_eligible_qualification_package() -> dict[str, JsonValue]:
                 "1.0.0",
                 ["mlx-metal==1.0.0"],
                 evidence_scope="complete_synthetic_metadata",
+                requires_python=">=3.11",
             ),
         },
         {
@@ -1773,6 +2044,7 @@ def synthetic_eligible_qualification_package() -> dict[str, JsonValue]:
                     'mlx>=1.0.0; platform_system == "Darwin" and platform_machine == "arm64"',
                     'typing-extensions>=4.0; python_version < "3.13"',
                 ],
+                requires_python=">=3.11",
                 url_prefix=f"{root}/wheels",
             ),
             "metadata": _metadata(
@@ -1783,6 +2055,7 @@ def synthetic_eligible_qualification_package() -> dict[str, JsonValue]:
                     'typing-extensions>=4.0; python_version < "3.13"',
                 ],
                 evidence_scope="complete_synthetic_metadata",
+                requires_python=">=3.11",
             ),
         },
         {
@@ -1803,6 +2076,7 @@ def synthetic_eligible_qualification_package() -> dict[str, JsonValue]:
                 abi_tag="none",
                 platform_tag="macosx_14_0_arm64",
                 requirements=[],
+                requires_python=">=3.11",
                 url_prefix=f"{root}/wheels",
             ),
             "metadata": _metadata(
@@ -1810,6 +2084,7 @@ def synthetic_eligible_qualification_package() -> dict[str, JsonValue]:
                 "1.0.0",
                 [],
                 evidence_scope="complete_synthetic_metadata",
+                requires_python=">=3.11",
             ),
         },
         {
@@ -1830,6 +2105,7 @@ def synthetic_eligible_qualification_package() -> dict[str, JsonValue]:
                 abi_tag="none",
                 platform_tag="any",
                 requirements=[],
+                requires_python=">=3.9",
                 url_prefix=f"{root}/wheels",
             ),
             "metadata": _metadata(
@@ -1837,6 +2113,7 @@ def synthetic_eligible_qualification_package() -> dict[str, JsonValue]:
                 "4.12.0",
                 [],
                 evidence_scope="complete_synthetic_metadata",
+                requires_python=">=3.9",
             ),
         },
     ]

@@ -51,8 +51,9 @@ module intentionally imports no socket, subprocess, HTTP transport, host probe, 
 The qualification module is also isolated from runtime action. It reads only explicit canonical
 candidate/record bytes and closed fixture bundles. Its schema-1.0 package binds exact source
 revision/tag provenance, wheel artifact metadata and tags, target Python ABI/macOS/architecture,
-exact supplied wheel bytes with embedded METADATA/WHEEL-tag verification, canonical METADATA
-bytes, bounded `Requires-Dist` and marker grammar, the supplied distribution
+exact supplied wheel bytes with embedded METADATA/WHEEL-tag verification, exact raw reviewed
+METADATA bytes (or canonical synthetic/projection bytes), bounded `Requires-Dist`,
+`Requires-Python`, and marker grammar, the supplied distribution
 closure, and immutable source-byte evidence for the future preflight API set. It derives one of
 two decisions and cannot construct authorization. Importing the module does not import MLX or
 MLX-LM.
@@ -117,16 +118,18 @@ projection identity.
 
 The package is self-contained and binds exact normalized distribution names/versions, immutable
 reviewed source revisions and tags, source provenance URLs, wheel filename/size/SHA-256/URL and
-Python/ABI/platform tags, target CPython ABI and macOS version/architecture, canonical METADATA
-bytes and digests, every supplied requirement and marker, a forbid-all-extras policy, top-level
-requirements, transitive distributions, and source bytes/digests for each expected future
+Python/ABI/platform tags, target CPython ABI and macOS version/architecture, exact raw METADATA
+bytes and digests, every supplied requirement and marker, one exact `Requires-Python` constraint
+for complete metadata, a forbid-all-extras policy, exact `==` top-level MLX/MLX-LM pins,
+transitive distributions, and source bytes/digests for each expected future
 preflight probe. Potentially eligible candidates must supply exact readable wheel bytes whose
 size/digest, embedded METADATA, dist-info identity, and WHEEL tag match the declarations. Public
 PyPI and GitHub domains are allowlisted for reviewed candidates; a reserved
 `.invalid` domain is accepted only for explicitly synthetic fixtures.
 
 Assessment mechanically evaluates marker applicability and the supported release-version
-specifiers, records selected dependency versions and exact explanations, computes wheel
+specifiers, evaluates `Requires-Python` against the exact target `python_full_version`, records
+selected dependency versions and exact explanations, computes wheel
 compatibility and graph reachability, and requires complete supplied METADATA plus all API evidence.
 It fixes every physical/runtime/model counter to zero. The only positive decision,
 `eligible_for_new_observed_authorization`, means eligible for human review only. It does not prove

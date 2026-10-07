@@ -245,15 +245,21 @@ dependency/wheel/closure/API assessment -> exactly one qualification record
 
 The package binds one exact target environment; exact MLX/MLX-LM and supplied transitive
 distribution versions; immutable source revisions/tags; wheel filenames, hashes, sizes, provenance
-URLs, tags, and exact supplied wheel bytes; canonical METADATA bytes; all supplied requirements and markers; the forbid-all
-extras policy; and immutable supplied source bytes for the seven future preflight probes. Marker
-evaluation uses only the package's explicit environment. Dependency explanations name the selected
-version or exact absence. Closure is limited to supplied distribution metadata and never claims
+URLs, tags, and exact supplied wheel bytes; exact raw METADATA bytes; all supplied requirements and
+markers; one `Requires-Python` specifier set for complete metadata; exact `==` pins for the
+top-level `mlx` and `mlx-lm` selections; the forbid-all-extras policy; and immutable supplied source
+bytes for the seven future preflight probes. Marker and `Requires-Python` evaluation use only the
+package's explicit environment. Dependency explanations name the selected version or exact absence.
+Closure is limited to supplied distribution metadata and never claims
 stdlib/native-loader completeness.
 
 Eligibility verifies that supplied wheel bytes match the declared size/digest, contain exactly one
 bounded dist-info METADATA and WHEEL control record, and bind the same metadata bytes and filename
-tag. Probe evidence tokens are fixed by the specification rather than caller-selected. A real
+tag. Reviewed METADATA is parsed as bounded Core Metadata without canonicalizing away unrelated
+headers or the description body; the whole payload must be valid UTF-8, identity and
+`Requires-Python` are singleton fields, dependency values may not be folded or semantically
+duplicated, and all raw bytes remain digest-bound. Probe evidence
+tokens are fixed by the specification rather than caller-selected. A real
 reviewed candidate additionally needs an independently committed evidence anchor in the
 qualification specification; that anchor set is empty in this milestone. Historical projections
 are always ineligible.

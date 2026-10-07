@@ -40,7 +40,7 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > Capability/spec and negative/failure replay remain process-free.
 > A new schema-1.0 **static qualification gate** can now decide whether an exact proposed
 > MLX/MLX-LM pair is eligible for human review toward a future schema-1.1 observed preflight.
-> It evaluates only supplied canonical METADATA/source bytes and explicit wheel/source/platform
+> It evaluates only supplied exact METADATA/source bytes and explicit wheel/source/platform
 > metadata. It performs no install, network, process, socket, authorization, MLX import, Metal,
 > synchronization, model, or spend action. `eligible_for_new_observed_authorization` is not an
 > authorization or executability claim: schema 1.0 stays permanently disabled, and schema 1.1
@@ -310,11 +310,13 @@ cloud, or spend actions. `custody-replay` and `custody-inspect` are process- and
 The MLX runtime qualification commands are static and process-free. A candidate package binds exact
 MLX/MLX-LM versions and immutable source revisions/tags; exact wheel names, sizes, hashes, URLs,
 Python/ABI/macOS/architecture tags and, for potentially eligible candidates, exact wheel bytes
-whose embedded METADATA and WHEEL tag are verified; canonical METADATA bytes; every supplied `Requires-Dist`,
-marker and extras policy; the supplied top-level/transitive distribution graph; and source-byte
+whose embedded METADATA and WHEEL tag are verified; exact raw METADATA bytes, including ordinary
+Core Metadata headers and description bodies; every supplied `Requires-Dist`, the exact
+`Requires-Python` constraint, marker and extras policy; exact `==` pins for the `mlx` and `mlx-lm`
+roots; the supplied top-level/transitive distribution graph; and source-byte
 evidence for each future preflight API/probe. The gate derives wheel compatibility, marker
-applicability, selected dependency versions, exact satisfaction explanations, reachability, and
-sorted blockers. It intentionally claims semantic closure only over supplied distribution
+applicability, target-Python compatibility, selected dependency versions, exact satisfaction
+explanations, reachability, and sorted blockers. It intentionally claims semantic closure only over supplied distribution
 metadata, never the Python standard library or native loader. The fixture proves both outcomes:
 the frozen MLX `0.29.3` / MLX-LM `0.30.6` projection remains `ineligible`, while a clearly labeled
 synthetic complete closure yields `eligible_for_new_observed_authorization` without claiming a
@@ -402,8 +404,10 @@ starts no process.
 Qualification replay requires the canonical specification, exact historical-negative and
 synthetic-positive packages, their fully reconstructed records, the closed index, and receipt.
 It rejects missing/extra files, unknown fields, duplicate metadata, bool/int ambiguity, marker or
-extras ambiguity, incompatible wheel/platform/ABI tags, unsatisfied or incomplete dependency
-closure, source/wheel/METADATA/hash drift, unsupported provenance domains, stale decisions after
+extras ambiguity, incompatible wheel/platform/ABI tags, unsatisfied `Requires-Python`, unpinned or
+range-pinned top-level requests, unsatisfied or incomplete dependency
+closure, invalid UTF-8 or ambiguous/folded Core Metadata, source/wheel/METADATA/hash drift,
+unsupported provenance domains, stale decisions after
 coordinated rehashing, and any attempt to make qualification create or consume authorization or
 perform execution.
 
