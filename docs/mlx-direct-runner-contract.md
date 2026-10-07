@@ -362,8 +362,7 @@ IDs without publishing historical raw evidence or its private path. A fully supp
 closure reaches `eligible_for_new_observed_authorization` solely to demonstrate the positive
 contract; it is not evidence that any real pair is coherent. Both fixture records fix every
 package/network/process/socket/authorization/import/backend/model/cloud/spend counter to zero.
-Real reviewed candidates remain ineligible until independent review commits their derived evidence
-anchor into the qualification specification.
+Reviewed candidates without an independently committed derived evidence anchor remain ineligible.
 
 The committed real-candidate evidence package
 `evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json` supplies one such immutable

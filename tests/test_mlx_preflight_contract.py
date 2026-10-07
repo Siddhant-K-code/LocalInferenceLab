@@ -22,6 +22,7 @@ from localinferencelab.canonical import (
     JsonValue,
     canonical_identity,
     canonical_json,
+    load_canonical_json_file,
     load_json_bytes,
 )
 from localinferencelab.cli import run
@@ -47,6 +48,7 @@ from localinferencelab.mlx_qualification import (
     historical_incompatible_qualification_package,
     qualification_spec,
     synthetic_eligible_qualification_package,
+    verify_qualification_package,
 )
 
 
@@ -67,11 +69,19 @@ def _copy(value: JsonValue) -> dict[str, JsonValue]:
 
 
 def _qualification(candidate: str = "synthetic") -> dict[str, JsonValue]:
-    package = (
-        synthetic_eligible_qualification_package()
-        if candidate == "synthetic"
-        else historical_incompatible_qualification_package()
-    )
+    if candidate == "synthetic":
+        package = synthetic_eligible_qualification_package()
+    elif candidate == "historical":
+        package = historical_incompatible_qualification_package()
+    else:
+        candidate_path = (
+            Path(contract_module.__file__).resolve(strict=True).parents[2]
+            / "evidence"
+            / "mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json"
+        )
+        package = verify_qualification_package(
+            load_canonical_json_file(candidate_path, "real MLX candidate evidence")
+        )
     return build_qualification_record(package)
 
 
@@ -266,7 +276,25 @@ def test_synthetic_positive_and_historical_records_cannot_satisfy_prerequisites(
         historical_inspection["blockers"]
     )
     assert "qualification_decision_is_not_eligible" in _list(historical_inspection["blockers"])
-    assert qualification_spec()["reviewed_candidate_anchors"] == []
+    committed_anchor = "sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b"
+    assert qualification_spec()["reviewed_candidate_anchors"] == [committed_anchor]
+
+    reviewed = _qualification("reviewed")
+    reviewed_assessment = _dict(reviewed["assessment"])
+    assert reviewed_assessment["review_anchor_id"] == committed_anchor
+    reviewed_record = build_runtime_preflight_record_1_1(
+        reviewed,
+        _authorization_claim(reviewed),
+    )
+    reviewed_inspection = inspect_runtime_preflight_record_1_1(reviewed_record)
+    reviewed_blockers = set(_list(reviewed_inspection["blockers"]))
+    assert reviewed_inspection["prerequisites_satisfied"] is False
+    assert "qualification_decision_is_not_eligible" in reviewed_blockers
+    assert not any(
+        cast("str", blocker).startswith("qualification_review_anchor_not_committed:")
+        for blocker in reviewed_blockers
+    )
+    assert reviewed_blockers >= _UNRESOLVED_AUTHORIZATION_BLOCKERS
 
 
 def test_missing_authorization_claim_refuses_without_authoritative_custody() -> None:

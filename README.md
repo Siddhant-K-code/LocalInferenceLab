@@ -482,8 +482,9 @@ The project does not claim that:
 
 1. Use the static MLX runtime qualification gate to review an exact proposed runtime pair and its
    supplied metadata/source evidence without installing or importing it.
-2. Commit an independently reviewed real-candidate anchor in the schema-1.0 qualification spec;
-   the synthetic positive fixture and historical records remain categorically insufficient.
+2. Complete the missing transitive-distribution and worker-API evidence for the committed
+   real-candidate anchor until static qualification is eligible; the synthetic positive fixture
+   and historical records remain categorically insufficient.
 3. Review the prospective schema-1.1 protocol/spec and separately design the worker plus
    authoritative acquisition, current-expiry, exclusive-consumption/non-reuse, and independent
    output-root/nonce custody; the present contract machinery cannot unlock physical action.
