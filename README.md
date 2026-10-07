@@ -60,8 +60,7 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > machine-readable atlas. Its compile/verify/inspect/replay commands are process-free and never
 > import MLX, query a backend/device/Metal state, synchronize hardware, load a model, or execute a
 > tensor operation through MLX. Every committed output-bearing canary result is explicitly
-> synthetic and makes no
-> claim about real MLX or Metal behavior.
+> synthetic and makes no claim about real MLX or Metal behavior.
 > The first authorized Apple Silicon runtime preflight **failed closed** after authorization
 > consumption because the worker reported a forbidden-action attempt. It was not retried. The
 > rejected worker frame was not retained by the original failure path, so no runtime import,
@@ -343,11 +342,17 @@ The determinism-canary commands are independent of MLX runtime qualification and
 The pinned 48-cell prospective matrix covers elementwise arithmetic (including IEEE edge
 identity), matmul, reduction, softmax, RMS normalization, fused and unfused multiply-add,
 `float32`, `float16`, `bfloat16`, and explicit/deferred evaluation. Every cell is
-`unverified_future_support`; inclusion does not assert MLX support. Comparison rejects dtype,
-shape, endianness, and byte-length mismatch before metrics. Valid comparisons report bitwise
+`unverified_future_support`; inclusion does not assert MLX support. Exactly eight cells have
+embedded synthetic fixtures and the other 40 are explicitly `prospective_only_no_fixture`.
+Schema 1.0 rejects case-registry, authorized-observation, and physical-result records; self-asserted
+identity hashes cannot create evidence. Every represented case and result binds its matrix cell,
+operation-spec identity, axes, exact scalar bit patterns, precision, reduction/evaluation order,
+and rounding parameters. Comparison rejects dtype, shape, endianness, and byte-length mismatch
+before metrics. Valid comparisons report bitwise
 equality, canonical output digest equality, maximum absolute and relative error encoded as exact
 binary64 bytes, native-dtype ULP distance, NaN/infinity agreement, and signed-zero bit
-differences. The synthetic atlas is useful contract evidence only: it contains no observed
+differences; the ULP ordering collapses both signed-zero encodings before cross-zero distance.
+The synthetic atlas is useful contract evidence only: it contains no observed
 runtime, backend, device, synchronization, model, timing, or performance fact. See
 [`docs/mlx-determinism-canary.md`](docs/mlx-determinism-canary.md).
 

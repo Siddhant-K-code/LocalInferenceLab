@@ -64,10 +64,11 @@ The determinism canary is a separate pure comparison layer. It decodes only boun
 payload bytes with Python's standard library. It has no runtime adapter, worker, execution command,
 authorization constructor/consumer, model surface, timing field, or hardware-discovery path. Its
 pinned operation matrix marks every dtype/evaluation combination `unverified_future_support`.
+Exactly eight cells have embedded synthetic representations; 40 cells are prospective only.
 Synthetic results copy exact embedded expected bytes and are always labeled
-`synthetic_fixture`; their null runtime, device, process, and authorization identities are
-enforced. A later authorized protocol may create external observation records, but this module can
-only validate and compare those records. It cannot acquire them.
+`synthetic_fixture`. Schema 1.0 has no runtime/device/process/authorization identity fields and
+rejects physical, authorized-observation, and case-registry records. A future physical-evidence
+path requires a distinct schema and closed-bundle verifier; self-asserted hashes are never enough.
 
 ## Direct MLX prospective layer
 
@@ -233,7 +234,10 @@ The additive `mlx_determinism_canary_spec`, `mlx_determinism_fixture_set`,
 `mlx_determinism_atlas` records remain schema 1.0 and do not modify any qualification,
 runtime-preflight, worker, authorization, or failure identity. The pinned matrix is the Cartesian
 product of eight operation forms, three dtypes, and explicit/deferred evaluation. No cell is
-claimed supported.
+claimed supported. The matrix separately labels eight
+`embedded_synthetic_fixture_available` cells and 40 `prospective_only_no_fixture` cells. A
+machine-readable future registry contract lists the required unique bindings, but its status is
+`unavailable_and_rejected_in_schema_1_0`.
 
 Tensor records bind dtype, shape, byte order, exact lowercase hexadecimal payload, payload SHA-256,
 and a canonical descriptor digest under fixed rank/element/byte limits. Comparison refuses
@@ -241,14 +245,19 @@ metadata or length drift rather than truncating with `zip` or coercing booleans 
 Finite values produce exact binary64-encoded maximum absolute/relative errors and native-format
 ULP distance. NaNs require equal sign/payload for numerical equality, infinities require equal
 sign, and signed zeros compare numerically equal while their bit difference remains explicit.
+The ordered ULP mapping gives positive and negative zero one shared code, so a minimum subnormal
+is one ULP from either zero and opposite minimum subnormals are two ULPs apart.
 
 The closed bundle contains the pinned spec, eight embedded operation/edge fixtures, eight copied
 synthetic results, recomputed comparisons, and an atlas. Replay reconstructs every nested identity
 and rejects coordinated content/index/receipt rehashing that changes pinned semantics. All
-positive entries are synthetic contract examples. The future atlas path is acquisition-agnostic:
-authorized observation records must carry separate authorization, runtime, device, and process
-identities plus device class, process cohort, synchronization mode, observation index, one attempt,
-zero retries, and no replacement, but the canary does not define or invoke that authorization.
+verified entries are synthetic fixture-integrity examples. Operation specifications bind every
+computation-defining parameter. Cases and results bind the operation-spec identity and concrete
+parameters, including axes, keepdims, exact epsilon/initial-accumulator bits, intermediate and
+accumulation precision, evaluation/reduction order, fusion behavior, and every rounding stage.
+Expected fixture bytes are re-derived with bounded standard-library scalar arithmetic during
+verification. A future atlas path must be a new schema that independently verifies every physical
+identity and acquisition binding.
 
 ## Identity graph
 

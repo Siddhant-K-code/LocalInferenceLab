@@ -231,21 +231,31 @@ classes, memory limits, and final stream synchronization all remain part of the 
 ## Runtime-independent determinism canary protocol
 
 The determinism canary is an offline schema and analyzer, not an execution protocol. Schema 1.0
-contains no canary launch, import, backend/device/Metal query, synchronization, model, tensor, or
+contains no canary launch, import, backend/device/Metal query, synchronization, model, MLX tensor, or
 authorization command. Every committed output-bearing result is an embedded
 `synthetic_fixture`; it is not evidence of real MLX/Metal behavior.
 
-Future `authorized_observation` results must bind non-null authorization, runtime, device, and
-process identities; CPU/GPU class; within-process/cold-process cohort; output-materialization-only
-or explicit synchronization; a predeclared observation index from 1 through 5; attempt index 1;
-retry count 0; and no replacement result. Synthetic records use explicit
-`synthetic_not_applicable` conditions and null physical identities.
+Schema 1.0 accepts only the pinned synthetic cases/results. It rejects
+`authorized_observation`, physical result, and case-registry records even if they contain
+well-formed self-asserted SHA-256 strings. A future physical-evidence milestone needs a distinct
+schema and closed-bundle verifier that loads and independently validates the referenced
+authorization, runtime, device, process, acquisition, and case-registry records.
 
 The prospective matrix includes elementwise add and IEEE-edge identity, matmul, reduction sum,
 softmax, RMS normalization, and paired fused/unfused multiply-add across `float32`, `float16`, and
 `bfloat16`, each under explicit and deferred evaluation. Every one of the 48 cells is
-`unverified_future_support`. A later protocol must independently prove support and bind its own
-authorization evidence before changing a cell status.
+`unverified_future_support`. Eight cells have exact embedded synthetic cases; 40 are explicitly
+prospective-only and cannot produce a schema-1.0 result. A successor protocol must independently
+prove support before changing a cell status.
+
+Each operation has a content identity over its mathematical contract and full parameter schema.
+Each represented case/result binds that identity, its exact matrix cell, and concrete parameters.
+Reduction and normalization bind axes/keepdims, initial accumulator bytes, accumulation order and
+precision, and stage rounding. RMS normalization additionally binds exact epsilon bits, mean
+divisor, epsilon-add precision/rounding, reciprocal-square-root contract/rounding, and output
+multiply precision/rounding. Matmul, softmax, and fused/unfused arithmetic similarly bind every
+intermediate order, precision, fusion, and rounding decision. Verification re-derives all expected
+fixture bytes with bounded standard-library scalar arithmetic.
 
 Output comparison requires identical dtype, shape, endianness, element count, and exact byte
 length. A mismatch rejects the record; it cannot yield a partial metric. For compatible records:
@@ -256,6 +266,7 @@ length. A mismatch rejects the record; it cannot yield a partial metric. For com
 - NaN pairs are numerically equal only when sign and payload bits match;
 - infinity pairs are equal only when signs match;
 - signed zeros have zero numerical/ULP error while their bit difference is counted;
+- the ordered ULP mapping collapses both signed-zero encodings before cross-zero distance;
 - non-finite pairs are excluded from finite error maxima and counted separately.
 
 The future experiment declaration is precommitted: five repeated evaluations within one process,

@@ -76,6 +76,30 @@ def _case(case_id: str) -> dict[str, JsonValue]:
     raise AssertionError(f"missing fixture case {case_id}")
 
 
+def _case_from_fixture(
+    fixtures: dict[str, JsonValue],
+    case_id: str,
+) -> dict[str, JsonValue]:
+    for value in _list(fixtures["cases"]):
+        case = _dict(value)
+        if case["case_id"] == case_id:
+            return case
+    raise AssertionError(f"missing fixture case {case_id}")
+
+
+def _scalar_tensor(dtype: str, data_hex: str) -> dict[str, JsonValue]:
+    template_case = {
+        "float16": "rms_normalization_float16",
+        "bfloat16": "reduction_sum_bfloat16",
+        "float32": "multiply_add_fused_float32",
+    }[dtype]
+    tensor = _copy(_case(template_case)["expected_output"])
+    tensor["shape"] = [1]
+    tensor["data_hex"] = data_hex
+    _rehash_tensor(tensor)
+    return tensor
+
+
 def _output(capfd: pytest.CaptureFixture[str]) -> dict[str, JsonValue]:
     captured = capfd.readouterr()
     assert captured.err == ""
@@ -107,7 +131,29 @@ def test_spec_matrix_is_complete_prospective_and_explicit() -> None:
         "deferred_evaluation",
     }
     assert {_dict(cell)["support_status"] for cell in matrix} == {"unverified_future_support"}
-    assert all(_dict(cell)["support_evidence_id"] is None for cell in matrix)
+    represented = [
+        _dict(cell)
+        for cell in matrix
+        if _dict(cell)["fixture_representation_status"] == "embedded_synthetic_fixture_available"
+    ]
+    prospective_only = [
+        _dict(cell)
+        for cell in matrix
+        if _dict(cell)["fixture_representation_status"] == "prospective_only_no_fixture"
+    ]
+    assert len(represented) == 8
+    assert len(prospective_only) == 40
+    assert all(cell["synthetic_fixture_case_id"] is not None for cell in represented)
+    assert all(cell["synthetic_fixture_case_id"] is None for cell in prospective_only)
+    coverage = _dict(spec["synthetic_fixture_coverage"])
+    assert coverage == {
+        "prospective_matrix_cell_count": 48,
+        "represented_synthetic_cell_count": 8,
+        "prospective_only_cell_count": 40,
+        "coverage_claim": "structural_subset_not_full_matrix_coverage",
+    }
+    registry = _dict(spec["future_case_registry_contract"])
+    assert registry["status"] == "unavailable_and_rejected_in_schema_1_0"
 
     protocol = _dict(spec["future_experiment_protocol"])
     assert protocol["retries_per_observation"] == 0
@@ -144,20 +190,112 @@ def test_embedded_vectors_are_exact_bounded_and_rng_independent() -> None:
     assert results["evidence_status"] == "synthetic_results_only"
     for result in _list(results["results"]):
         assert _dict(result)["evidence_kind"] == "synthetic_fixture"
-        provenance = _dict(_dict(result)["provenance"])
-        assert all(
-            provenance[field] is None
-            for field in (
-                "authorization_evidence_id",
-                "runtime_identity_id",
-                "device_identity_id",
-                "process_instance_id",
-            )
-        )
+        source = _dict(_dict(result)["synthetic_source"])
+        assert source["physical_observation"] is False
+        assert source["authorization_status"] == "not_available_in_schema_1_0"
     atlas = synthetic_determinism_atlas()
     assert atlas["all_positive_records_are_synthetic"] is True
     assert atlas["real_mlx_behavior_claims"] == 0
     assert atlas["real_metal_behavior_claims"] == 0
+
+
+def test_every_fixture_binds_one_represented_cell_and_complete_operation_parameters() -> None:
+    specification = determinism_canary_spec()
+    operations = {
+        cast("str", _dict(item)["operation_id"]): _dict(item)
+        for item in _list(specification["operations"])
+    }
+    matrix = {
+        cast("str", _dict(item)["cell_id"]): _dict(item) for item in _list(specification["matrix"])
+    }
+    for value in _list(determinism_fixture_set()["cases"]):
+        case = _dict(value)
+        operation = operations[cast("str", case["operation_id"])]
+        cell = matrix[cast("str", case["matrix_cell_id"])]
+        parameter_names = {
+            cast("str", _dict(parameter)["name"])
+            for parameter in _list(operation["parameter_schema"])
+        }
+        assert set(_dict(case["operation_parameters"])) == parameter_names
+        assert case["operation_spec_id"] == operation["operation_spec_id"]
+        assert cell["operation_spec_id"] == operation["operation_spec_id"]
+        assert cell["synthetic_fixture_case_id"] == case["case_id"]
+        assert cell["fixture_representation_status"] == "embedded_synthetic_fixture_available"
+
+
+def test_rms_fixture_binds_exact_epsilon_axis_precision_rounding_and_derivation() -> None:
+    case = _case("rms_normalization_float16")
+    parameters = _dict(case["operation_parameters"])
+    assert parameters["axes"] == [0]
+    assert parameters["keepdims"] is True
+    assert parameters["epsilon"] == {
+        "dtype": "float16",
+        "endianness": "little",
+        "data_hex": "0000",
+    }
+    assert parameters["square_precision"] == "float16"
+    assert parameters["accumulation_precision"] == "float16"
+    assert parameters["epsilon_addition_precision"] == "float16"
+    assert parameters["output_multiply_precision"] == "float16"
+    assert parameters["output_rounding"] == "round_to_nearest_ties_to_even"
+    assert case["expected_output_derivation"] == (
+        "execute_the_declared_scalar_steps_and_round_after_each_named_stage"
+    )
+    assert _dict(_list(case["inputs"])[0])["data_hex"] == _dict(case["expected_output"])["data_hex"]
+
+
+_RMS_PARAMETER_NAMES = (
+    "axes",
+    "keepdims",
+    "epsilon",
+    "square_precision",
+    "square_rounding",
+    "accumulation_precision",
+    "initial_accumulator",
+    "reduction_order",
+    "mean_divisor",
+    "mean_rounding",
+    "epsilon_addition_precision",
+    "epsilon_addition_rounding",
+    "reciprocal_sqrt_contract",
+    "reciprocal_sqrt_rounding",
+    "output_multiply_precision",
+    "output_rounding",
+)
+
+
+@pytest.mark.parametrize("parameter_name", _RMS_PARAMETER_NAMES)
+def test_rms_parameter_drift_fails_after_coordinated_rehash(parameter_name: str) -> None:
+    fixtures = _copy(determinism_fixture_set())
+    case = _case_from_fixture(fixtures, "rms_normalization_float16")
+    parameters = _dict(case["operation_parameters"])
+    original = parameters[parameter_name]
+    if isinstance(original, bool):
+        parameters[parameter_name] = not original
+    elif isinstance(original, int):
+        parameters[parameter_name] = original + 1
+    elif isinstance(original, list):
+        parameters[parameter_name] = [1]
+    elif isinstance(original, dict):
+        replacement = _copy(original)
+        replacement["data_hex"] = "0100"
+        parameters[parameter_name] = replacement
+    else:
+        parameters[parameter_name] = f"{original}_drift"
+    _rehash(case, "case_contract_id")
+    _rehash(fixtures, "fixture_set_id")
+    with pytest.raises(ContractError, match="parameter drift"):
+        verify_canary_record(fixtures)
+
+
+def test_rms_evaluation_mode_drift_fails_after_coordinated_rehash() -> None:
+    fixtures = _copy(determinism_fixture_set())
+    case = _case_from_fixture(fixtures, "rms_normalization_float16")
+    case["evaluation_mode"] = "explicit_evaluation"
+    _rehash(case, "case_contract_id")
+    _rehash(fixtures, "fixture_set_id")
+    with pytest.raises(ContractError, match="binding mismatch"):
+        verify_canary_record(fixtures)
 
 
 def test_comparison_reports_bitwise_digest_error_ulp_and_ieee_edges() -> None:
@@ -201,6 +339,37 @@ def test_comparison_reports_bitwise_digest_error_ulp_and_ieee_edges() -> None:
     assert nan_comparison["numerical_equal"] is False
 
 
+@pytest.mark.parametrize(
+    ("dtype", "negative_min", "negative_zero", "positive_zero", "positive_min"),
+    [
+        ("float16", "0180", "0080", "0000", "0100"),
+        ("bfloat16", "0180", "0080", "0000", "0100"),
+        ("float32", "01000080", "00000080", "00000000", "01000000"),
+    ],
+)
+def test_ulp_order_collapses_signed_zero_across_zero_in_both_directions(
+    dtype: str,
+    negative_min: str,
+    negative_zero: str,
+    positive_zero: str,
+    positive_min: str,
+) -> None:
+    pairs = [
+        (negative_min, positive_zero, 1),
+        (positive_zero, negative_min, 1),
+        (negative_zero, positive_min, 1),
+        (positive_min, negative_zero, 1),
+        (negative_min, positive_min, 2),
+        (positive_min, negative_min, 2),
+    ]
+    for left, right, expected_distance in pairs:
+        comparison = compare_outputs(
+            _scalar_tensor(dtype, left),
+            _scalar_tensor(dtype, right),
+        )
+        assert comparison["maximum_ulp_distance"] == expected_distance
+
+
 def test_comparison_rejects_shape_dtype_length_and_bool_integer_ambiguity() -> None:
     output = _copy(_case("softmax_float32")["expected_output"])
     reshaped = _copy(output)
@@ -235,8 +404,13 @@ def _forged_observed_synthetic(value: dict[str, JsonValue]) -> None:
     _rehash(value, "result_id")
 
 
-def _forged_synthetic_runtime_identity(value: dict[str, JsonValue]) -> None:
-    _dict(value["provenance"])["runtime_identity_id"] = "sha256:" + ("1" * 64)
+def _forged_physical_source(value: dict[str, JsonValue]) -> None:
+    _dict(value["synthetic_source"])["physical_observation"] = True
+    _rehash(value, "result_id")
+
+
+def _forged_synthetic_identity(value: dict[str, JsonValue]) -> None:
+    _dict(value["synthetic_source"])["runtime_identity_id"] = "sha256:" + ("1" * 64)
     _rehash(value, "result_id")
 
 
@@ -247,9 +421,14 @@ def _bool_result_count(value: dict[str, JsonValue]) -> None:
 
 @pytest.mark.parametrize(
     "mutate",
-    [_unknown_field, _forged_observed_synthetic, _forged_synthetic_runtime_identity],
+    [
+        _unknown_field,
+        _forged_observed_synthetic,
+        _forged_physical_source,
+        _forged_synthetic_identity,
+    ],
 )
-def test_result_schema_rejects_malformed_or_forged_provenance(
+def test_result_schema_rejects_malformed_or_physical_evidence(
     mutate: Callable[[dict[str, JsonValue]], None],
 ) -> None:
     result = _copy(build_synthetic_result(_case("softmax_float32")))
@@ -258,43 +437,59 @@ def test_result_schema_rejects_malformed_or_forged_provenance(
         verify_determinism_result(result)
 
 
-def test_future_authorized_result_binds_every_experiment_dimension() -> None:
+def test_self_asserted_identity_hashes_cannot_create_an_observation() -> None:
     result = _copy(build_synthetic_result(_case("softmax_float32")))
     result["evidence_kind"] = "authorized_observation"
-    result["condition"] = {
+    result["observation_condition"] = {
         "device_class": "gpu",
         "synchronization_mode": "explicit_synchronization",
         "process_mode": "cold_process_repetition",
         "observation_index": 1,
-        "fusion_form": "not_applicable",
     }
-    result["provenance"] = {
+    result["self_asserted_provenance"] = {
         "acquisition_mode": "future_external_authorized_protocol",
         "authorization_evidence_id": "sha256:" + ("1" * 64),
         "runtime_identity_id": "sha256:" + ("2" * 64),
         "device_identity_id": "sha256:" + ("3" * 64),
         "process_instance_id": "sha256:" + ("4" * 64),
     }
-    output = _dict(result["output"])
-    output["data_hex"] = "0100003f0000003f"
-    _rehash_tensor(output)
     result["runtime_behavior_claim"] = "authorized_observation_only"
     _rehash(result, "result_id")
-    verified = verify_determinism_result(result)
-    assert _dict(verified["condition"])["observation_index"] == 1
-    comparison = compare_outputs(
-        _case("softmax_float32")["expected_output"],
-        verified["output"],
-    )
-    assert comparison["maximum_ulp_distance"] == 1
-
-
-def test_result_rejects_retry_or_replacement() -> None:
-    result = _copy(build_synthetic_result(_case("softmax_float32")))
-    _dict(result["attempt"])["retry_count"] = 1
-    _rehash(result, "result_id")
-    with pytest.raises(ContractError, match="must be <= 0"):
+    with pytest.raises(ContractError):
         verify_determinism_result(result)
+
+
+def test_future_case_registry_record_is_rejected_in_schema_1_0() -> None:
+    registry: dict[str, JsonValue] = {
+        "record_type": "mlx_determinism_case_registry",
+        "schema_version": "1.0",
+        "registry_id": "sha256:" + ("1" * 64),
+        "cases": [],
+    }
+    with pytest.raises(ContractError, match="unsupported"):
+        verify_canary_record(registry)
+
+
+def test_result_rejects_undeclared_or_mismatched_matrix_cell() -> None:
+    result = _copy(build_synthetic_result(_case("softmax_float32")))
+    result["matrix_cell_id"] = "softmax_bfloat16_deferred_evaluation"
+    _rehash(result, "result_id")
+    with pytest.raises(ContractError, match="binding mismatch"):
+        verify_determinism_result(result)
+
+    undeclared = _copy(build_synthetic_result(_case("softmax_float32")))
+    undeclared["matrix_cell_id"] = "softmax_float64_explicit_evaluation"
+    _rehash(undeclared, "result_id")
+    with pytest.raises(ContractError, match="binding mismatch"):
+        verify_determinism_result(undeclared)
+
+    prospective_only_case = _copy(_case("softmax_float32"))
+    prospective_only_case["case_id"] = "softmax_bfloat16_deferred"
+    prospective_only_case["matrix_cell_id"] = "softmax_bfloat16_deferred_evaluation"
+    prospective_only_case["dtype"] = "bfloat16"
+    _rehash(prospective_only_case, "case_contract_id")
+    with pytest.raises(ContractError, match="exact pinned represented fixture"):
+        build_synthetic_result(prospective_only_case)
 
 
 def test_result_set_rejects_boolean_count() -> None:
@@ -319,7 +514,7 @@ def test_fixture_is_byte_identical_and_replays_offline(tmp_path: Path) -> None:
     assert first_replay == second_replay
     assert first_replay.matrix_cell_count == 48
     assert first_replay.fixture_case_count == 8
-    assert first_replay.accepted_synthetic_entries == 8
+    assert first_replay.verified_synthetic_entries == 8
     assert replay_determinism_fixture(first) == first_replay
 
 
@@ -353,7 +548,7 @@ def test_replay_rejects_coordinated_rehash_extra_missing_and_noncanonical(
         _case("softmax_float32")["expected_output"],
         output,
     )
-    entry["acceptance_status"] = "rejected_synthetic_contract_example"
+    entry["verification_status"] = "invalid_synthetic_fixture_integrity"
     _rehash(atlas, "atlas_id")
     coordinated["determinism-atlas.json"] = canonical_json(atlas)
     coordinated_bundle = publish_bundle(
@@ -475,5 +670,5 @@ def test_canary_cli_spec_verify_inspect_compile_and_replay(
     assert run(["mlx", "determinism-canary-replay", str(bundle)]) == 0
     replayed = _output(capfd)
     assert replayed["status"] == "replayed"
-    assert replayed["accepted_synthetic_entries"] == 8
+    assert replayed["verified_synthetic_entries"] == 8
     assert replayed["process_actions"] == 0

@@ -28,14 +28,23 @@ _MAX_CASES = 128
 _MAX_RESULTS = 512
 _CONTROL_CHARACTER_LIMIT = 32
 _SHA256_ID_LENGTH = 71
+_BFLOAT16_ROUND_TIE = 0x8000
+_UINT16_MASK = 0xFFFF
 _DTYPE_BYTES = {"float16": 2, "bfloat16": 2, "float32": 4}
 _EVALUATION_MODES = {"deferred_evaluation", "explicit_evaluation"}
 _SUPPORT_STATUSES = {
     "unverified_future_support",
-    "unsupported_by_authorized_runtime",
-    "verified_by_authorized_observation",
 }
-_EVIDENCE_KINDS = {"synthetic_fixture", "authorized_observation"}
+_FIXTURE_CASE_BY_CELL = {
+    "elementwise_add_float32_explicit_evaluation": "elementwise_add_float32",
+    "identity_edges_float32_deferred_evaluation": "identity_edges_float32",
+    "matrix_multiply_float16_deferred_evaluation": "matrix_multiply_float16",
+    "multiply_add_fused_float32_explicit_evaluation": "multiply_add_fused_float32",
+    "multiply_add_unfused_float32_deferred_evaluation": "multiply_add_unfused_float32",
+    "reduction_sum_bfloat16_explicit_evaluation": "reduction_sum_bfloat16",
+    "rms_normalization_float16_deferred_evaluation": "rms_normalization_float16",
+    "softmax_float32_explicit_evaluation": "softmax_float32",
+}
 _OUTPUT_SEMANTICS: dict[str, JsonValue] = {
     "byte_encoding": "ieee_754_binary_interchange",
     "canonical_byte_order": "declared_per_tensor",
@@ -121,12 +130,6 @@ def _sha256(value: JsonValue, label: str) -> str:
     return digest
 
 
-def _optional_sha256(value: JsonValue, label: str) -> str | None:
-    if value is None:
-        return None
-    return _sha256(value, label)
-
-
 def _identifier(value: JsonValue, label: str) -> str:
     identifier = _text(value, label, maximum=96)
     if any(character not in "abcdefghijklmnopqrstuvwxyz0123456789_" for character in identifier):
@@ -157,15 +160,29 @@ def _operation(
     expression: str,
     input_arity: int,
     output_rank: int,
+    parameter_schema: list[dict[str, JsonValue]],
+    synthetic_derivation: str,
 ) -> dict[str, JsonValue]:
-    return {
+    content: dict[str, JsonValue] = {
         "operation_id": operation_id,
         "family": family,
         "form": form,
         "mathematical_contract": expression,
         "input_arity": input_arity,
         "output_rank": output_rank,
+        "parameter_schema": cast("list[JsonValue]", parameter_schema),
+        "synthetic_derivation": synthetic_derivation,
         "implementation_claim": "none",
+    }
+    return _identity_record(content, "operation_spec_id")
+
+
+def _parameter(name: str, value_type: str, constraint: str) -> dict[str, JsonValue]:
+    return {
+        "name": name,
+        "value_type": value_type,
+        "constraint": constraint,
+        "required": True,
     }
 
 
@@ -178,6 +195,15 @@ def _operations() -> list[dict[str, JsonValue]]:
             "output[i]=left[i]+right[i]",
             2,
             1,
+            [
+                _parameter("arithmetic_precision", "dtype", "equal_to_matrix_dtype"),
+                _parameter(
+                    "rounding_mode",
+                    "literal",
+                    "round_to_nearest_ties_to_even",
+                ),
+            ],
+            "ieee_add_in_declared_precision_then_round_once_to_output_dtype",
         ),
         _operation(
             "identity_edges",
@@ -186,6 +212,8 @@ def _operations() -> list[dict[str, JsonValue]]:
             "output[i]=input[i]",
             1,
             1,
+            [_parameter("transfer_mode", "literal", "byte_preserving")],
+            "copy_input_payload_bytes_without_numeric_canonicalization",
         ),
         _operation(
             "matrix_multiply",
@@ -194,6 +222,29 @@ def _operations() -> list[dict[str, JsonValue]]:
             "output[i,j]=sum_k(left[i,k]*right[k,j])",
             2,
             2,
+            [
+                _parameter("transpose_left", "boolean", "explicit"),
+                _parameter("transpose_right", "boolean", "explicit"),
+                _parameter("multiply_precision", "dtype", "equal_to_matrix_dtype"),
+                _parameter("accumulation_precision", "dtype", "equal_to_matrix_dtype"),
+                _parameter(
+                    "initial_accumulator",
+                    "typed_scalar_bytes",
+                    "positive_zero_in_accumulation_precision",
+                ),
+                _parameter("accumulation_order", "literal", "ascending_k"),
+                _parameter(
+                    "intermediate_rounding",
+                    "literal",
+                    "round_each_product_and_sum_to_accumulation_precision",
+                ),
+                _parameter(
+                    "output_rounding",
+                    "literal",
+                    "round_to_nearest_ties_to_even",
+                ),
+            ],
+            "row_major_ascending_k_scalar_products_and_sums_under_declared_rounding",
         ),
         _operation(
             "multiply_add_fused",
@@ -202,6 +253,21 @@ def _operations() -> list[dict[str, JsonValue]]:
             "output[i]=fused_multiply_add(a[i],b[i],c[i])",
             3,
             1,
+            [
+                _parameter("fusion_mode", "literal", "fused_single_rounding"),
+                _parameter("arithmetic_precision", "dtype", "equal_to_matrix_dtype"),
+                _parameter(
+                    "product_add_contract",
+                    "literal",
+                    "exact_product_plus_addend_then_one_round",
+                ),
+                _parameter(
+                    "output_rounding",
+                    "literal",
+                    "round_to_nearest_ties_to_even",
+                ),
+            ],
+            "exact_product_plus_addend_then_one_round_to_output_dtype",
         ),
         _operation(
             "multiply_add_unfused",
@@ -210,47 +276,273 @@ def _operations() -> list[dict[str, JsonValue]]:
             "output[i]=(a[i]*b[i])+c[i] with an observable intermediate",
             3,
             1,
+            [
+                _parameter("fusion_mode", "literal", "unfused_two_roundings"),
+                _parameter("multiply_precision", "dtype", "equal_to_matrix_dtype"),
+                _parameter(
+                    "product_rounding",
+                    "literal",
+                    "round_to_nearest_ties_to_even",
+                ),
+                _parameter("addition_precision", "dtype", "equal_to_matrix_dtype"),
+                _parameter(
+                    "output_rounding",
+                    "literal",
+                    "round_to_nearest_ties_to_even",
+                ),
+            ],
+            "round_product_to_dtype_then_add_and_round_to_output_dtype",
         ),
         _operation(
             "reduction_sum",
             "reduction",
             "sum_all",
-            "output[0]=sum_i(input[i])",
+            "output=sum(input,axis=axes,keepdims=keepdims)",
             1,
             1,
+            [
+                _parameter("axes", "integer_array", "rank_checked_explicit_axes"),
+                _parameter("keepdims", "boolean", "explicit"),
+                _parameter("accumulation_precision", "dtype", "explicit"),
+                _parameter(
+                    "initial_accumulator",
+                    "typed_scalar_bytes",
+                    "positive_zero_in_accumulation_precision",
+                ),
+                _parameter("reduction_order", "literal", "ascending_linear_index"),
+                _parameter(
+                    "intermediate_rounding",
+                    "literal",
+                    "round_each_sum_to_accumulation_precision",
+                ),
+                _parameter(
+                    "output_rounding",
+                    "literal",
+                    "round_to_nearest_ties_to_even",
+                ),
+            ],
+            "ascending_index_scalar_sum_with_declared_intermediate_and_output_rounding",
         ),
         _operation(
             "rms_normalization",
             "normalization",
             "rms",
-            "output[i]=input[i]/sqrt(mean(input^2)+epsilon)",
+            "output=input*reciprocal_sqrt(mean(input^2,axes,keepdims)+epsilon)",
             1,
             1,
+            [
+                _parameter("axes", "integer_array", "rank_checked_explicit_axes"),
+                _parameter("keepdims", "boolean", "explicit"),
+                _parameter("epsilon", "typed_scalar_bytes", "exact_dtype_endianness_and_bits"),
+                _parameter("square_precision", "dtype", "explicit"),
+                _parameter(
+                    "square_rounding",
+                    "literal",
+                    "round_to_nearest_ties_to_even",
+                ),
+                _parameter("accumulation_precision", "dtype", "explicit"),
+                _parameter(
+                    "initial_accumulator",
+                    "typed_scalar_bytes",
+                    "positive_zero_in_accumulation_precision",
+                ),
+                _parameter("reduction_order", "literal", "ascending_linear_index"),
+                _parameter("mean_divisor", "integer", "exact_reduced_element_count"),
+                _parameter(
+                    "mean_rounding",
+                    "literal",
+                    "round_to_nearest_ties_to_even",
+                ),
+                _parameter("epsilon_addition_precision", "dtype", "explicit"),
+                _parameter(
+                    "epsilon_addition_rounding",
+                    "literal",
+                    "round_to_nearest_ties_to_even",
+                ),
+                _parameter(
+                    "reciprocal_sqrt_contract",
+                    "literal",
+                    "exact_real_reciprocal_sqrt_then_round",
+                ),
+                _parameter(
+                    "reciprocal_sqrt_rounding",
+                    "literal",
+                    "round_to_nearest_ties_to_even",
+                ),
+                _parameter("output_multiply_precision", "dtype", "explicit"),
+                _parameter(
+                    "output_rounding",
+                    "literal",
+                    "round_to_nearest_ties_to_even",
+                ),
+            ],
+            "execute_the_declared_scalar_steps_and_round_after_each_named_stage",
         ),
         _operation(
             "softmax",
             "softmax",
             "last_axis",
-            "output[i]=exp(input[i]-max(input))/sum_j(exp(input[j]-max(input)))",
+            "output=exp(input-max(input,axis))/sum(exp_shifted,axis)",
             1,
             1,
+            [
+                _parameter("axis", "integer", "rank_checked_explicit_axis"),
+                _parameter("stability_transform", "literal", "subtract_axis_maximum"),
+                _parameter("max_reduction_order", "literal", "ascending_linear_index"),
+                _parameter("max_tie_policy", "literal", "first_index"),
+                _parameter("subtraction_precision", "dtype", "explicit"),
+                _parameter(
+                    "subtraction_rounding",
+                    "literal",
+                    "round_to_nearest_ties_to_even",
+                ),
+                _parameter(
+                    "exponentiation_contract",
+                    "literal",
+                    "exact_real_exponential_then_round",
+                ),
+                _parameter(
+                    "exponentiation_rounding",
+                    "literal",
+                    "round_to_nearest_ties_to_even",
+                ),
+                _parameter("accumulation_precision", "dtype", "explicit"),
+                _parameter(
+                    "initial_accumulator",
+                    "typed_scalar_bytes",
+                    "positive_zero_in_accumulation_precision",
+                ),
+                _parameter("accumulation_order", "literal", "ascending_linear_index"),
+                _parameter("division_precision", "dtype", "explicit"),
+                _parameter(
+                    "output_rounding",
+                    "literal",
+                    "round_to_nearest_ties_to_even",
+                ),
+            ],
+            "stable_scalar_softmax_under_declared_stage_precision_and_rounding",
         ),
     ]
 
 
+def _operation_parameters(  # noqa: PLR0911
+    operation_id: str,
+    dtype: str,
+) -> dict[str, JsonValue]:
+    rounding = "round_to_nearest_ties_to_even"
+    positive_zero: dict[str, JsonValue] = {
+        "dtype": dtype,
+        "endianness": "little",
+        "data_hex": "0000" if dtype != "float32" else "00000000",
+    }
+    if operation_id == "elementwise_add":
+        return {"arithmetic_precision": dtype, "rounding_mode": rounding}
+    if operation_id == "identity_edges":
+        return {"transfer_mode": "byte_preserving"}
+    if operation_id == "matrix_multiply":
+        return {
+            "transpose_left": False,
+            "transpose_right": False,
+            "multiply_precision": dtype,
+            "accumulation_precision": dtype,
+            "initial_accumulator": positive_zero,
+            "accumulation_order": "ascending_k",
+            "intermediate_rounding": ("round_each_product_and_sum_to_accumulation_precision"),
+            "output_rounding": rounding,
+        }
+    if operation_id == "multiply_add_fused":
+        return {
+            "fusion_mode": "fused_single_rounding",
+            "arithmetic_precision": dtype,
+            "product_add_contract": "exact_product_plus_addend_then_one_round",
+            "output_rounding": rounding,
+        }
+    if operation_id == "multiply_add_unfused":
+        return {
+            "fusion_mode": "unfused_two_roundings",
+            "multiply_precision": dtype,
+            "product_rounding": rounding,
+            "addition_precision": dtype,
+            "output_rounding": rounding,
+        }
+    if operation_id == "reduction_sum":
+        return {
+            "axes": [0],
+            "keepdims": True,
+            "accumulation_precision": dtype,
+            "initial_accumulator": positive_zero,
+            "reduction_order": "ascending_linear_index",
+            "intermediate_rounding": "round_each_sum_to_accumulation_precision",
+            "output_rounding": rounding,
+        }
+    if operation_id == "rms_normalization":
+        return {
+            "axes": [0],
+            "keepdims": True,
+            "epsilon": {
+                "dtype": dtype,
+                "endianness": "little",
+                "data_hex": "0000" if dtype != "float32" else "00000000",
+            },
+            "square_precision": dtype,
+            "square_rounding": rounding,
+            "accumulation_precision": dtype,
+            "initial_accumulator": positive_zero,
+            "reduction_order": "ascending_linear_index",
+            "mean_divisor": 2,
+            "mean_rounding": rounding,
+            "epsilon_addition_precision": dtype,
+            "epsilon_addition_rounding": rounding,
+            "reciprocal_sqrt_contract": "exact_real_reciprocal_sqrt_then_round",
+            "reciprocal_sqrt_rounding": rounding,
+            "output_multiply_precision": dtype,
+            "output_rounding": rounding,
+        }
+    if operation_id == "softmax":
+        return {
+            "axis": 0,
+            "stability_transform": "subtract_axis_maximum",
+            "max_reduction_order": "ascending_linear_index",
+            "max_tie_policy": "first_index",
+            "subtraction_precision": dtype,
+            "subtraction_rounding": rounding,
+            "exponentiation_contract": "exact_real_exponential_then_round",
+            "exponentiation_rounding": rounding,
+            "accumulation_precision": dtype,
+            "initial_accumulator": positive_zero,
+            "accumulation_order": "ascending_linear_index",
+            "division_precision": dtype,
+            "output_rounding": rounding,
+        }
+    raise ContractError(f"unsupported operation parameter contract: {operation_id}")
+
+
+def _matrix_cell(
+    operation: dict[str, JsonValue],
+    dtype: str,
+    evaluation_mode: str,
+) -> dict[str, JsonValue]:
+    cell_id = f"{cast('str', operation['operation_id'])}_{dtype}_{evaluation_mode}"
+    return {
+        "cell_id": cell_id,
+        "operation_id": operation["operation_id"],
+        "operation_spec_id": operation["operation_spec_id"],
+        "dtype": dtype,
+        "evaluation_mode": evaluation_mode,
+        "support_status": "unverified_future_support",
+        "fixture_representation_status": (
+            "embedded_synthetic_fixture_available"
+            if cell_id in _FIXTURE_CASE_BY_CELL
+            else "prospective_only_no_fixture"
+        ),
+        "synthetic_fixture_case_id": _FIXTURE_CASE_BY_CELL.get(cell_id),
+        "reason": "Schema 1.0 has no runtime observation or authorization acceptance path.",
+    }
+
+
 def _operation_matrix() -> list[JsonValue]:
     return [
-        {
-            "cell_id": f"{cast('str', operation['operation_id'])}_{dtype}_{evaluation_mode}",
-            "operation_id": operation["operation_id"],
-            "dtype": dtype,
-            "evaluation_mode": evaluation_mode,
-            "support_status": "unverified_future_support",
-            "support_evidence_id": None,
-            "reason": (
-                "No authorized MLX runtime observation is bound to this prospective combination."
-            ),
-        }
+        _matrix_cell(operation, dtype, evaluation_mode)
         for operation in _operations()
         for dtype in sorted(_DTYPE_BYTES)
         for evaluation_mode in sorted(_EVALUATION_MODES)
@@ -285,7 +577,54 @@ def determinism_canary_spec() -> dict[str, JsonValue]:
                 "future_mlx_support": "unverified_future_support",
             },
         ],
+        "evaluation_modes": [
+            {
+                "evaluation_mode": "deferred_evaluation",
+                "prospective_contract": (
+                    "a future runtime may defer computation until bounded output materialization"
+                ),
+                "schema_1_0_behavior": "synthetic_label_only_no_runtime_or_sync_action",
+            },
+            {
+                "evaluation_mode": "explicit_evaluation",
+                "prospective_contract": (
+                    "a future runtime materializes the operation boundary before output capture"
+                ),
+                "schema_1_0_behavior": "synthetic_label_only_no_runtime_or_sync_action",
+            },
+        ],
         "matrix": _operation_matrix(),
+        "synthetic_fixture_coverage": {
+            "prospective_matrix_cell_count": 48,
+            "represented_synthetic_cell_count": len(_FIXTURE_CASE_BY_CELL),
+            "prospective_only_cell_count": 48 - len(_FIXTURE_CASE_BY_CELL),
+            "coverage_claim": "structural_subset_not_full_matrix_coverage",
+        },
+        "future_case_registry_contract": {
+            "status": "unavailable_and_rejected_in_schema_1_0",
+            "minimum_future_schema": "greater_than_1_0",
+            "required_registry_identity": "canonical_content_identity",
+            "required_unique_binding_fields": [
+                "case_id",
+                "case_contract_id",
+                "matrix_cell_id",
+                "operation_id",
+                "operation_spec_id",
+                "dtype",
+                "evaluation_mode",
+                "operation_parameters",
+                "inputs",
+                "expected_output_policy",
+            ],
+            "structural_rules": [
+                "each case binds exactly one declared matrix cell",
+                "operation dtype and evaluation mode equal the referenced cell",
+                "operation parameters satisfy the referenced operation schema",
+                "all tensor descriptors are bounded and content addressed",
+                "duplicate case or contract identities are forbidden",
+                "schema 1.0 verification rejects registry and physical result records",
+            ],
+        },
         "comparison_semantics": _OUTPUT_SEMANTICS,
         "bounds": {
             "maximum_rank": _MAX_RANK,
@@ -341,7 +680,7 @@ def determinism_canary_spec() -> dict[str, JsonValue]:
                     "decision": "report_only_no_acceptance_without_separate_reviewed_threshold",
                 },
                 {
-                    "rule_id": "invalid_observation",
+                    "rule_id": "future_invalid_observation",
                     "scope": "dtype_shape_endianness_or_length_mismatch",
                     "decision": "reject_record_without_computing_metrics",
                 },
@@ -360,7 +699,7 @@ def determinism_canary_spec() -> dict[str, JsonValue]:
             "device_queries": 0,
             "metal_queries": 0,
             "hardware_synchronizations": 0,
-            "tensor_operations": 0,
+            "mlx_tensor_operations": 0,
             "model_or_tokenizer_actions": 0,
             "network_actions": 0,
             "cloud_actions": 0,
@@ -370,6 +709,8 @@ def determinism_canary_spec() -> dict[str, JsonValue]:
             "synthetic vectors do not describe real MLX behavior",
             "synthetic vectors do not describe real Metal behavior",
             "matrix inclusion does not assert future runtime support",
+            "eight fixtures do not represent the forty prospective-only cells",
+            "schema 1.0 rejects authorized and physical observation records",
             "no timing or performance conclusion is defined",
         ],
     }
@@ -429,16 +770,26 @@ def _fixture_case(
     inputs: list[dict[str, JsonValue]],
     expected: dict[str, JsonValue],
 ) -> dict[str, JsonValue]:
-    return {
+    operations = {cast("str", operation["operation_id"]): operation for operation in _operations()}
+    operation = operations[operation_id]
+    matrix_cell_id = f"{operation_id}_{dtype}_{evaluation_mode}"
+    if _FIXTURE_CASE_BY_CELL.get(matrix_cell_id) != case_id:
+        raise ContractError(f"fixture case is not declared for matrix cell: {case_id}")
+    content: dict[str, JsonValue] = {
         "case_id": case_id,
+        "matrix_cell_id": matrix_cell_id,
         "operation_id": operation_id,
+        "operation_spec_id": operation["operation_spec_id"],
         "dtype": dtype,
         "evaluation_mode": evaluation_mode,
+        "operation_parameters": _operation_parameters(operation_id, dtype),
         "inputs": cast("list[JsonValue]", inputs),
         "expected_output": expected,
+        "expected_output_derivation": operation["synthetic_derivation"],
         "evidence_kind": "synthetic_fixture",
         "runtime_behavior_claim": "none",
     }
+    return _identity_record(content, "case_contract_id")
 
 
 def determinism_fixture_set() -> dict[str, JsonValue]:
@@ -566,13 +917,111 @@ def verify_determinism_fixture_set(value: JsonValue) -> dict[str, JsonValue]:
     cases = _array(fixtures["cases"], "mlx_determinism_fixture_set.cases", _MAX_CASES)
     if fixtures["case_count"] != len(cases):
         raise ContractError("fixture case count mismatch")
+    specification = determinism_canary_spec()
+    matrix = {
+        cast("str", _mapping(item, "matrix cell")["cell_id"]): _mapping(item, "matrix cell")
+        for item in cast("list[JsonValue]", specification["matrix"])
+    }
+    operations = {
+        cast("str", _mapping(item, "operation")["operation_id"]): _mapping(item, "operation")
+        for item in cast("list[JsonValue]", specification["operations"])
+    }
+    seen_case_ids: set[str] = set()
+    seen_contract_ids: set[str] = set()
     for case_index, item in enumerate(cases):
         case = _mapping(item, f"fixture.cases[{case_index}]")
+        _keys(
+            case,
+            {
+                "case_id",
+                "case_contract_id",
+                "matrix_cell_id",
+                "operation_id",
+                "operation_spec_id",
+                "dtype",
+                "evaluation_mode",
+                "operation_parameters",
+                "inputs",
+                "expected_output",
+                "expected_output_derivation",
+                "evidence_kind",
+                "runtime_behavior_claim",
+            },
+            f"fixture.cases[{case_index}]",
+        )
+        case_id = _identifier(case["case_id"], f"fixture.cases[{case_index}].case_id")
+        contract_id = _sha256(
+            case["case_contract_id"],
+            f"fixture.cases[{case_index}].case_contract_id",
+        )
+        if case_id in seen_case_ids or contract_id in seen_contract_ids:
+            raise ContractError("fixture cases require unique case and contract identities")
+        seen_case_ids.add(case_id)
+        seen_contract_ids.add(contract_id)
+        case_content = dict(case)
+        del case_content["case_contract_id"]
+        if contract_id != canonical_identity(case_content):
+            raise ContractError("fixture case contract identity mismatch")
+        matrix_cell_id = _identifier(
+            case["matrix_cell_id"],
+            f"fixture.cases[{case_index}].matrix_cell_id",
+        )
+        cell = matrix.get(matrix_cell_id)
+        if (
+            cell is None
+            or cell["fixture_representation_status"] != "embedded_synthetic_fixture_available"
+            or cell["synthetic_fixture_case_id"] != case_id
+        ):
+            raise ContractError(
+                "fixture case is not the declared representation of its matrix cell"
+            )
+        operation_id = _identifier(
+            case["operation_id"],
+            f"fixture.cases[{case_index}].operation_id",
+        )
+        operation = operations.get(operation_id)
+        if (
+            operation is None
+            or case["operation_spec_id"] != operation["operation_spec_id"]
+            or cell["operation_id"] != operation_id
+            or cell["operation_spec_id"] != operation["operation_spec_id"]
+            or cell["dtype"] != case["dtype"]
+            or cell["evaluation_mode"] != case["evaluation_mode"]
+        ):
+            raise ContractError("fixture operation or matrix-cell binding mismatch")
+        if canonical_json(case["operation_parameters"]) != canonical_json(
+            _operation_parameters(operation_id, cast("str", case["dtype"]))
+        ):
+            raise ContractError("fixture operation parameter drift")
+        if case["expected_output_derivation"] != operation["synthetic_derivation"]:
+            raise ContractError("fixture expected-output derivation mismatch")
+        if case["evidence_kind"] != "synthetic_fixture" or case["runtime_behavior_claim"] != "none":
+            raise ContractError("fixture cases must remain synthetic non-runtime evidence")
+        parsed_inputs = []
         for tensor_index, tensor in enumerate(
             _array(case["inputs"], f"fixture.cases[{case_index}].inputs", 8)
         ):
-            _parse_tensor(tensor, f"fixture.cases[{case_index}].inputs[{tensor_index}]")
-        _parse_tensor(case["expected_output"], f"fixture.cases[{case_index}].expected_output")
+            parsed_inputs.append(
+                _parse_tensor(tensor, f"fixture.cases[{case_index}].inputs[{tensor_index}]")
+            )
+        if len(parsed_inputs) != operation["input_arity"]:
+            raise ContractError("fixture input arity differs from its operation")
+        parsed_output = _parse_tensor(
+            case["expected_output"],
+            f"fixture.cases[{case_index}].expected_output",
+        )
+        if (
+            any(tensor.dtype != case["dtype"] for tensor in parsed_inputs)
+            or parsed_output.dtype != case["dtype"]
+            or len(parsed_output.shape) != operation["output_rank"]
+        ):
+            raise ContractError("fixture tensor dtype or output rank differs from its operation")
+        if _derive_fixture_output(case, parsed_inputs) != parsed_output.data:
+            raise ContractError(
+                "fixture expected bytes differ from the fully bound scalar derivation"
+            )
+    if seen_case_ids != set(_FIXTURE_CASE_BY_CELL.values()):
+        raise ContractError("fixture set does not contain the exact represented synthetic subset")
     if canonical_json(fixtures) != canonical_json(determinism_fixture_set()):
         raise ContractError("MLX determinism fixture set differs from pinned embedded bytes")
     return dict(fixtures)
@@ -654,6 +1103,148 @@ def _code_to_float(dtype: str, code: int) -> float:
     return cast("float", struct.unpack(">f", (code << 16).to_bytes(4, "big"))[0])
 
 
+def _float_to_code(dtype: str, value: float) -> int:
+    if dtype == "float32":
+        return int.from_bytes(struct.pack(">f", value), "big")
+    if dtype == "float16":
+        return int.from_bytes(struct.pack(">e", value), "big")
+    bits = int.from_bytes(struct.pack(">f", value), "big")
+    upper = bits >> 16
+    lower = bits & _UINT16_MASK
+    if lower > _BFLOAT16_ROUND_TIE or (lower == _BFLOAT16_ROUND_TIE and upper & 1):
+        upper = (upper + 1) & _UINT16_MASK
+    return upper
+
+
+def _round_to_dtype(dtype: str, value: float) -> float:
+    return _code_to_float(dtype, _float_to_code(dtype, value))
+
+
+def _typed_scalar_value(value: JsonValue, dtype: str, label: str) -> float:
+    scalar = _mapping(value, label)
+    _keys(scalar, {"dtype", "endianness", "data_hex"}, label)
+    if scalar["dtype"] != dtype:
+        raise ContractError(f"{label} dtype mismatch")
+    endianness = cast(
+        "Literal['big', 'little']",
+        _literal(scalar["endianness"], {"big", "little"}, f"{label}.endianness"),
+    )
+    data_hex = _text(scalar["data_hex"], f"{label}.data_hex", maximum=8)
+    data = bytes.fromhex(data_hex)
+    if len(data) != _DTYPE_BYTES[dtype]:
+        raise ContractError(f"{label} byte length mismatch")
+    return _code_to_float(dtype, int.from_bytes(data, endianness))
+
+
+def _encode_derived_values(
+    dtype: str,
+    endianness: Literal["big", "little"],
+    values: list[float],
+) -> bytes:
+    return b"".join(
+        _float_to_code(dtype, value).to_bytes(_DTYPE_BYTES[dtype], endianness) for value in values
+    )
+
+
+def _derive_fixture_output(
+    case: dict[str, JsonValue],
+    inputs: list[_ParsedTensor],
+) -> bytes:
+    operation_id = cast("str", case["operation_id"])
+    dtype = cast("str", case["dtype"])
+    parameters = _mapping(case["operation_parameters"], "fixture operation parameters")
+    decoded = [
+        [_code_to_float(dtype, code) for code in _element_codes(tensor)] for tensor in inputs
+    ]
+    values: list[float]
+    if operation_id == "identity_edges":
+        return inputs[0].data
+    if operation_id == "elementwise_add":
+        values = [
+            _round_to_dtype(dtype, left + right)
+            for left, right in zip(decoded[0], decoded[1], strict=True)
+        ]
+    elif operation_id == "matrix_multiply":
+        left_rows, inner = inputs[0].shape
+        right_inner, right_columns = inputs[1].shape
+        if inner != right_inner:
+            raise ContractError("fixture matrix dimensions are incompatible")
+        initial = _typed_scalar_value(
+            parameters["initial_accumulator"],
+            dtype,
+            "matrix initial accumulator",
+        )
+        values = []
+        for row in range(left_rows):
+            for column in range(right_columns):
+                accumulator = initial
+                for index in range(inner):
+                    product = _round_to_dtype(
+                        dtype,
+                        decoded[0][row * inner + index]
+                        * decoded[1][index * right_columns + column],
+                    )
+                    accumulator = _round_to_dtype(dtype, accumulator + product)
+                values.append(_round_to_dtype(dtype, accumulator))
+    elif operation_id in {"multiply_add_fused", "multiply_add_unfused"}:
+        values = []
+        for left, right, addend in zip(
+            decoded[0],
+            decoded[1],
+            decoded[2],
+            strict=True,
+        ):
+            product = left * right
+            if operation_id == "multiply_add_unfused":
+                product = _round_to_dtype(dtype, product)
+            values.append(_round_to_dtype(dtype, product + addend))
+    elif operation_id == "reduction_sum":
+        accumulator = _typed_scalar_value(
+            parameters["initial_accumulator"],
+            dtype,
+            "reduction initial accumulator",
+        )
+        for item in decoded[0]:
+            accumulator = _round_to_dtype(dtype, accumulator + item)
+        values = [_round_to_dtype(dtype, accumulator)]
+    elif operation_id == "rms_normalization":
+        accumulator = _typed_scalar_value(
+            parameters["initial_accumulator"],
+            dtype,
+            "normalization initial accumulator",
+        )
+        for item in decoded[0]:
+            square = _round_to_dtype(dtype, item * item)
+            accumulator = _round_to_dtype(dtype, accumulator + square)
+        divisor = cast("int", parameters["mean_divisor"])
+        mean = _round_to_dtype(dtype, accumulator / divisor)
+        epsilon = _typed_scalar_value(
+            parameters["epsilon"],
+            dtype,
+            "normalization epsilon",
+        )
+        stabilized = _round_to_dtype(dtype, mean + epsilon)
+        scale = _round_to_dtype(dtype, 1.0 / math.sqrt(stabilized))
+        values = [_round_to_dtype(dtype, item * scale) for item in decoded[0]]
+    elif operation_id == "softmax":
+        maximum = max(decoded[0])
+        exponentials = [
+            _round_to_dtype(dtype, math.exp(_round_to_dtype(dtype, item - maximum)))
+            for item in decoded[0]
+        ]
+        denominator = _typed_scalar_value(
+            parameters["initial_accumulator"],
+            dtype,
+            "softmax initial accumulator",
+        )
+        for item in exponentials:
+            denominator = _round_to_dtype(dtype, denominator + item)
+        values = [_round_to_dtype(dtype, item / denominator) for item in exponentials]
+    else:
+        raise ContractError(f"unsupported fixture derivation operation: {operation_id}")
+    return _encode_derived_values(dtype, inputs[0].endianness, values)
+
+
 def _is_zero(dtype: str, code: int) -> bool:
     magnitude_mask = 0x7FFF if dtype != "float32" else 0x7FFFFFFF
     return code & magnitude_mask == 0
@@ -667,7 +1258,9 @@ def _ulp_distance(dtype: str, left: int, right: int) -> int:
     mask = (1 << bits) - 1
 
     def ordered(code: int) -> int:
-        return (~code & mask) if code & sign else code | sign
+        if code & sign:
+            return ~code & mask
+        return (code | sign) - 1
 
     return abs(ordered(left) - ordered(right))
 
@@ -744,6 +1337,7 @@ def compare_outputs(left_value: JsonValue, right_value: JsonValue) -> dict[str, 
     content: dict[str, JsonValue] = {
         "record_type": "mlx_determinism_comparison",
         "schema_version": SCHEMA_VERSION,
+        "evidence_scope": "byte_comparison_only_no_runtime_provenance",
         "semantics": _OUTPUT_SEMANTICS,
         "left": left.record,
         "right": right.record,
@@ -785,38 +1379,35 @@ def verify_comparison(value: JsonValue) -> dict[str, JsonValue]:
 
 def build_synthetic_result(case: dict[str, JsonValue]) -> dict[str, JsonValue]:
     """Build one explicitly synthetic result by copying embedded expected bytes."""
+    fixtures = determinism_fixture_set()
+    matching_cases = [
+        _mapping(item, "fixture case")
+        for item in cast("list[JsonValue]", fixtures["cases"])
+        if _mapping(item, "fixture case")["case_id"] == case.get("case_id")
+    ]
+    if len(matching_cases) != 1 or canonical_json(case) != canonical_json(matching_cases[0]):
+        raise ContractError("synthetic results require an exact pinned represented fixture case")
+    case = matching_cases[0]
     content: dict[str, JsonValue] = {
         "record_type": "mlx_determinism_result",
         "schema_version": SCHEMA_VERSION,
         "spec_id": determinism_canary_spec()["spec_id"],
-        "fixture_set_id": determinism_fixture_set()["fixture_set_id"],
+        "fixture_set_id": fixtures["fixture_set_id"],
         "case_id": case["case_id"],
+        "case_contract_id": case["case_contract_id"],
+        "matrix_cell_id": case["matrix_cell_id"],
         "operation_id": case["operation_id"],
+        "operation_spec_id": case["operation_spec_id"],
         "dtype": case["dtype"],
         "evaluation_mode": case["evaluation_mode"],
+        "operation_parameters": case["operation_parameters"],
         "evidence_kind": "synthetic_fixture",
-        "condition": {
-            "device_class": "synthetic_not_applicable",
-            "synchronization_mode": "synthetic_not_applicable",
-            "process_mode": "synthetic_not_applicable",
-            "observation_index": 0,
-            "fusion_form": (
-                case["operation_id"]
-                if case["operation_id"] in {"multiply_add_fused", "multiply_add_unfused"}
-                else "not_applicable"
-            ),
-        },
-        "attempt": {
-            "attempt_index": 1,
-            "retry_count": 0,
-            "replaces_result_id": None,
-        },
-        "provenance": {
+        "synthetic_source": {
+            "record_type": "mlx_determinism_synthetic_source",
             "acquisition_mode": "embedded_scalar_byte_copy",
-            "authorization_evidence_id": None,
-            "runtime_identity_id": None,
-            "device_identity_id": None,
-            "process_instance_id": None,
+            "physical_observation": False,
+            "authorization_status": "not_available_in_schema_1_0",
+            "runtime_identity_status": "not_applicable_to_synthetic_fixture",
         },
         "output": case["expected_output"],
         "runtime_behavior_claim": "none",
@@ -825,7 +1416,7 @@ def build_synthetic_result(case: dict[str, JsonValue]) -> dict[str, JsonValue]:
 
 
 def verify_determinism_result(value: JsonValue) -> dict[str, JsonValue]:
-    """Verify one synthetic or future externally acquired result record."""
+    """Verify one pinned synthetic result; schema 1.0 rejects physical observations."""
     result = _mapping(value, "mlx_determinism_result")
     fields = {
         "record_type",
@@ -833,13 +1424,15 @@ def verify_determinism_result(value: JsonValue) -> dict[str, JsonValue]:
         "spec_id",
         "fixture_set_id",
         "case_id",
+        "case_contract_id",
+        "matrix_cell_id",
         "operation_id",
+        "operation_spec_id",
         "dtype",
         "evaluation_mode",
+        "operation_parameters",
         "evidence_kind",
-        "condition",
-        "attempt",
-        "provenance",
+        "synthetic_source",
         "output",
         "runtime_behavior_claim",
         "result_id",
@@ -853,140 +1446,44 @@ def verify_determinism_result(value: JsonValue) -> dict[str, JsonValue]:
     _sha256(result["spec_id"], "mlx_determinism_result.spec_id")
     _sha256(result["fixture_set_id"], "mlx_determinism_result.fixture_set_id")
     _identifier(result["case_id"], "mlx_determinism_result.case_id")
+    _sha256(result["case_contract_id"], "mlx_determinism_result.case_contract_id")
+    _identifier(result["matrix_cell_id"], "mlx_determinism_result.matrix_cell_id")
     _identifier(result["operation_id"], "mlx_determinism_result.operation_id")
+    _sha256(result["operation_spec_id"], "mlx_determinism_result.operation_spec_id")
     _literal(result["dtype"], set(_DTYPE_BYTES), "mlx_determinism_result.dtype")
     _literal(
         result["evaluation_mode"],
         _EVALUATION_MODES,
         "mlx_determinism_result.evaluation_mode",
     )
-    evidence_kind = _literal(
-        result["evidence_kind"],
-        _EVIDENCE_KINDS,
-        "mlx_determinism_result.evidence_kind",
-    )
-    condition = _mapping(result["condition"], "mlx_determinism_result.condition")
+    if result["evidence_kind"] != "synthetic_fixture":
+        raise ContractError("schema 1.0 rejects authorized and physical observation records")
+    source = _mapping(result["synthetic_source"], "mlx_determinism_result.synthetic_source")
     _keys(
-        condition,
+        source,
         {
-            "device_class",
-            "synchronization_mode",
-            "process_mode",
-            "observation_index",
-            "fusion_form",
+            "record_type",
+            "acquisition_mode",
+            "physical_observation",
+            "authorization_status",
+            "runtime_identity_status",
         },
-        "mlx_determinism_result.condition",
-    )
-    device_class = _literal(
-        condition["device_class"],
-        {"cpu", "gpu", "synthetic_not_applicable"},
-        "mlx_determinism_result.condition.device_class",
-    )
-    synchronization_mode = _literal(
-        condition["synchronization_mode"],
-        {
-            "explicit_synchronization",
-            "output_materialization_only",
-            "synthetic_not_applicable",
-        },
-        "mlx_determinism_result.condition.synchronization_mode",
-    )
-    process_mode = _literal(
-        condition["process_mode"],
-        {
-            "cold_process_repetition",
-            "synthetic_not_applicable",
-            "within_process_repetition",
-        },
-        "mlx_determinism_result.condition.process_mode",
-    )
-    observation_index = _integer(
-        condition["observation_index"],
-        "mlx_determinism_result.condition.observation_index",
-        maximum=5,
-    )
-    fusion_form = _literal(
-        condition["fusion_form"],
-        {
-            "multiply_add_fused",
-            "multiply_add_unfused",
-            "not_applicable",
-        },
-        "mlx_determinism_result.condition.fusion_form",
-    )
-    attempt = _mapping(result["attempt"], "mlx_determinism_result.attempt")
-    _keys(
-        attempt,
-        {"attempt_index", "retry_count", "replaces_result_id"},
-        "mlx_determinism_result.attempt",
+        "mlx_determinism_result.synthetic_source",
     )
     if (
-        _integer(
-            attempt["attempt_index"],
-            "mlx_determinism_result.attempt.attempt_index",
-            minimum=1,
-            maximum=1,
+        source["record_type"] != "mlx_determinism_synthetic_source"
+        or source["acquisition_mode"] != "embedded_scalar_byte_copy"
+        or _boolean(
+            source["physical_observation"],
+            "mlx_determinism_result.synthetic_source.physical_observation",
         )
-        != 1
-        or _integer(
-            attempt["retry_count"],
-            "mlx_determinism_result.attempt.retry_count",
-            maximum=0,
-        )
-        != 0
-        or attempt["replaces_result_id"] is not None
+        or source["authorization_status"] != "not_available_in_schema_1_0"
+        or source["runtime_identity_status"] != "not_applicable_to_synthetic_fixture"
     ):
-        raise ContractError(
-            "determinism results permit one attempt, zero retries, and no replacement"
-        )
-    provenance = _mapping(result["provenance"], "mlx_determinism_result.provenance")
-    provenance_fields = {
-        "acquisition_mode",
-        "authorization_evidence_id",
-        "runtime_identity_id",
-        "device_identity_id",
-        "process_instance_id",
-    }
-    _keys(provenance, provenance_fields, "mlx_determinism_result.provenance")
-    _text(provenance["acquisition_mode"], "mlx_determinism_result.provenance.acquisition_mode")
-    identity_fields = (
-        "authorization_evidence_id",
-        "runtime_identity_id",
-        "device_identity_id",
-        "process_instance_id",
-    )
-    identities = tuple(
-        _optional_sha256(provenance[field], f"mlx_determinism_result.provenance.{field}")
-        for field in identity_fields
-    )
-    if evidence_kind == "synthetic_fixture":
-        if any(identity is not None for identity in identities):
-            raise ContractError(
-                "synthetic result cannot contain runtime or authorization identities"
-            )
-        if (
-            provenance["acquisition_mode"] != "embedded_scalar_byte_copy"
-            or result["runtime_behavior_claim"] != "none"
-            or device_class != "synthetic_not_applicable"
-            or synchronization_mode != "synthetic_not_applicable"
-            or process_mode != "synthetic_not_applicable"
-            or observation_index != 0
-        ):
-            raise ContractError("synthetic result must remain an embedded non-runtime record")
-    else:
-        if any(identity is None for identity in identities):
-            raise ContractError("authorized observation requires every provenance identity")
-        if (
-            device_class == "synthetic_not_applicable"
-            or synchronization_mode == "synthetic_not_applicable"
-            or process_mode == "synthetic_not_applicable"
-            or observation_index == 0
-            or result["runtime_behavior_claim"] != "authorized_observation_only"
-        ):
-            raise ContractError(
-                "authorized observation requires every declared experiment condition"
-            )
+        raise ContractError("result source must remain synthetic and non-physical")
     _text(result["runtime_behavior_claim"], "mlx_determinism_result.runtime_behavior_claim")
+    if result["runtime_behavior_claim"] != "none":
+        raise ContractError("synthetic result cannot make a runtime behavior claim")
     output = _parse_tensor(result["output"], "mlx_determinism_result.output")
     if output.dtype != result["dtype"]:
         raise ContractError("result dtype does not match output dtype")
@@ -1005,11 +1502,16 @@ def verify_determinism_result(value: JsonValue) -> dict[str, JsonValue]:
         raise ContractError("result references an unknown fixture case")
     case = matching_cases[0]
     if (
-        result["operation_id"] != case["operation_id"]
+        result["case_contract_id"] != case["case_contract_id"]
+        or result["matrix_cell_id"] != case["matrix_cell_id"]
+        or result["operation_id"] != case["operation_id"]
+        or result["operation_spec_id"] != case["operation_spec_id"]
         or result["dtype"] != case["dtype"]
         or result["evaluation_mode"] != case["evaluation_mode"]
+        or canonical_json(result["operation_parameters"])
+        != canonical_json(case["operation_parameters"])
     ):
-        raise ContractError("result operation, dtype, or evaluation mode differs from its fixture")
+        raise ContractError("result case, cell, operation, parameters, or dtype binding mismatch")
     expected_output = _parse_tensor(case["expected_output"], "fixture expected output")
     if (
         output.shape != expected_output.shape
@@ -1017,16 +1519,7 @@ def verify_determinism_result(value: JsonValue) -> dict[str, JsonValue]:
         or output.record["name"] != expected_output.record["name"]
     ):
         raise ContractError("result output metadata differs from its fixture")
-    expected_fusion_form = (
-        result["operation_id"]
-        if result["operation_id"] in {"multiply_add_fused", "multiply_add_unfused"}
-        else "not_applicable"
-    )
-    if fusion_form != expected_fusion_form:
-        raise ContractError("result fusion form differs from its operation")
-    if evidence_kind == "synthetic_fixture" and canonical_json(output.record) != canonical_json(
-        expected_output.record
-    ):
+    if canonical_json(output.record) != canonical_json(expected_output.record):
         raise ContractError("synthetic result output must equal the embedded expected bytes")
     _sha256(result["result_id"], "mlx_determinism_result.result_id")
     result_content = dict(result)
@@ -1093,13 +1586,17 @@ def synthetic_determinism_atlas() -> dict[str, JsonValue]:
         entries.append(
             {
                 "case_id": result["case_id"],
+                "case_contract_id": result["case_contract_id"],
+                "matrix_cell_id": result["matrix_cell_id"],
                 "operation_id": result["operation_id"],
+                "operation_spec_id": result["operation_spec_id"],
                 "dtype": result["dtype"],
                 "evaluation_mode": result["evaluation_mode"],
+                "operation_parameters": result["operation_parameters"],
                 "result_id": result["result_id"],
                 "comparison": comparison,
-                "acceptance_rule": "same_condition_repeatability",
-                "acceptance_status": "accepted_synthetic_contract_example",
+                "verification_rule": "synthetic_expected_output_integrity",
+                "verification_status": "verified_synthetic_fixture_integrity",
             }
         )
     content: dict[str, JsonValue] = {
@@ -1216,7 +1713,7 @@ class CanaryReplayResult:
     matrix_cell_count: int
     fixture_case_count: int
     atlas_entry_count: int
-    accepted_synthetic_entries: int
+    verified_synthetic_entries: int
 
     def to_dict(self) -> dict[str, JsonValue]:
         return {
@@ -1228,7 +1725,7 @@ class CanaryReplayResult:
             "matrix_cell_count": self.matrix_cell_count,
             "fixture_case_count": self.fixture_case_count,
             "atlas_entry_count": self.atlas_entry_count,
-            "accepted_synthetic_entries": self.accepted_synthetic_entries,
+            "verified_synthetic_entries": self.verified_synthetic_entries,
             "evidence_scope": "synthetic_fixture_only",
             "mlx_imports": 0,
             "process_actions": 0,
@@ -1258,7 +1755,7 @@ def compile_determinism_fixture(output_root: Path) -> tuple[Path, CanaryReplayRe
         "device_queries": 0,
         "metal_queries": 0,
         "hardware_synchronizations": 0,
-        "tensor_operations": 0,
+        "mlx_tensor_operations": 0,
         "model_or_tokenizer_actions": 0,
         "authorization_actions": 0,
         "network_actions": 0,
@@ -1317,7 +1814,7 @@ def replay_determinism_fixture(bundle: Path) -> CanaryReplayResult:
         "device_queries": 0,
         "metal_queries": 0,
         "hardware_synchronizations": 0,
-        "tensor_operations": 0,
+        "mlx_tensor_operations": 0,
         "model_or_tokenizer_actions": 0,
         "authorization_actions": 0,
         "network_actions": 0,
@@ -1358,8 +1855,8 @@ def replay_determinism_fixture(bundle: Path) -> CanaryReplayResult:
         cast("int", fixtures["case_count"]),
         cast("int", atlas["entry_count"]),
         sum(
-            _mapping(entry, "atlas entry")["acceptance_status"]
-            == "accepted_synthetic_contract_example"
+            _mapping(entry, "atlas entry")["verification_status"]
+            == "verified_synthetic_fixture_integrity"
             for entry in entries
         ),
     )
