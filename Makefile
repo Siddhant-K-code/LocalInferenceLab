@@ -64,5 +64,12 @@ fixture:
 	qualification_b=$$(find .artifacts/qualification-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-runtime-qualification-synthetic-v1-*' -print -quit); \
 	diff -r "$$qualification_a" "$$qualification_b" && \
 	uv run localinferencelab mlx runtime-qualification-replay "$$qualification_a"
+	mkdir .artifacts/preflight-contract-a .artifacts/preflight-contract-b
+	uv run localinferencelab mlx runtime-preflight-1-1-fixture-compile .artifacts/preflight-contract-a
+	uv run localinferencelab mlx runtime-preflight-1-1-fixture-compile .artifacts/preflight-contract-b
+	preflight_contract_a=$$(find .artifacts/preflight-contract-a -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-runtime-preflight-contract-synthetic-v1-1-*' -print -quit); \
+	preflight_contract_b=$$(find .artifacts/preflight-contract-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-runtime-preflight-contract-synthetic-v1-1-*' -print -quit); \
+	diff -r "$$preflight_contract_a" "$$preflight_contract_b" && \
+	uv run localinferencelab mlx runtime-preflight-1-1-fixture-replay "$$preflight_contract_a"
 
 validate: lint type test build-smoke fixture

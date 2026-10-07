@@ -278,6 +278,59 @@ inference/generation/benchmark/cloud/spend counters are exactly zero and reject 
 1.0 remains permanently disabled; a distinct schema-1.1 protocol/spec/worker review and fresh
 explicit authorization are mandatory before any physical action.
 
+## Prospective schema-1.1 model-free runtime-preflight protocol
+
+Schema 1.1 is a contract/refusal layer only. It defines no worker or execution command. Its current
+canonical flow is:
+
+```text
+committed schema-1.0 qualification record + optional caller-supplied authorization claim ->
+strict canonical reconstruction -> prerequisite assessment ->
+disabled/unreachable contract record -> process-free inspection or closed-fixture replay
+```
+
+The qualification prerequisite must be an eligible `reviewed_candidate` record derived from the
+active schema-1.0 qualification spec, and its independently derived evidence anchor must be in that
+spec's committed anchor set. The synthetic-positive fixture is rejected by candidate kind and
+anchor membership even though it exercises the schema-1.0 positive decision. Historical
+schema-1.0 records are rejected by candidate kind, decision, and anchor membership. Their frozen
+records and identities are never rewritten.
+
+The authorization prerequisite cannot be satisfied in this milestone. Authoritative acquisition,
+current-expiry observation, exclusive consumption/non-reuse, and independently verified
+output-root and nonce facts are unavailable. An optional
+`mlx_runtime_preflight_authorization_claim` uses
+`evidence_kind=caller_supplied_structure_only` and may carry claimed one-shot, unconsumed,
+qualification, anchor, spec/protocol, root/nonce digest, and internally ordered time-window fields.
+Validation uses no wall clock and treats every field as self-asserted. The claim never proves
+current freshness, authoritative acquisition, independent binding, consumption, or non-reuse and
+can never make `prerequisites_satisfied=true`.
+
+The prospective future physical sequence is:
+
+```text
+validate committed real-candidate qualification ->
+require authoritative authorization acquisition/expiry/consumption custody ->
+require independently verified output-root and nonce facts ->
+verify exact isolated supplied runtime closure ->
+future parent launch/identity -> future authorization consumption ->
+one model-free preflight -> strict parent validation -> shutdown/parent wait
+```
+
+The base action set is exact closure verification; imports of pinned `mlx.core` and `mlx_lm`;
+bounded distribution-version, default-device, default-stream, and Metal-availability metadata.
+One default-stream synchronization canary is conditional on a distinct explicit one-shot
+authorization. There are no retries, warmups, concurrent probes, package retrieval/install,
+model/tokenizer discovery or loading, prompt/cache/inference/generation, tensor allocation or
+operations, benchmarks, cloud, or spend.
+
+Every future result must keep three separate ledgers: `attempted_actions` for all attempted allowed
+or forbidden actions, `completed_actions` only for proven completions, and `accepted_evidence` only
+for the strict parent-validated subset. Python audit hooks are defense-in-depth attempted-action
+telemetry, not an OS sandbox and not proof that an action did not occur. Current records contain no
+runtime result: all ledgers are empty, all physical counters are zero, and prerequisite
+satisfaction cannot make execution reachable.
+
 ## Ollama repeatability-study declaration
 
 `ollama_repeatability_study_declaration` schema 1.0 is additive to the existing foundation and

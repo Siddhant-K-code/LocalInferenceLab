@@ -362,8 +362,7 @@ IDs without publishing historical raw evidence or its private path. A fully supp
 closure reaches `eligible_for_new_observed_authorization` solely to demonstrate the positive
 contract; it is not evidence that any real pair is coherent. Both fixture records fix every
 package/network/process/socket/authorization/import/backend/model/cloud/spend counter to zero.
-Real reviewed candidates remain ineligible until independent review commits their derived evidence
-anchor into the qualification specification.
+Reviewed candidates without an independently committed derived evidence anchor remain ineligible.
 
 The committed real-candidate evidence package
 `evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json` supplies one such immutable
@@ -380,3 +379,34 @@ The pair edge `mlx>=0.30.4; platform_system == "Darwin"` selects and accepts `ml
 That fact does not establish complete dependency closure. No accepted or ineligible qualification
 record is committed beside the newly reviewed candidate; a later record change must reconstruct
 the decision from the immutable package.
+
+## Prospective schema-1.1 model-free contract
+
+The additive schema-1.1 protocol/spec/contract-record layer prepares deterministic prerequisite
+validation without enabling execution. It has only capability, protocol/spec emission,
+record construction/verification/inspection, and deterministic closed-fixture replay commands.
+There is no authorize, install, worker, or execute surface.
+
+A record requires both:
+
+1. an eligible schema-1.0 `reviewed_candidate` qualification record whose derived evidence anchor
+   was committed through a separate review; and
+2. future authoritative one-shot authorization acquisition, current-expiry observation,
+   exclusive consumption/non-reuse, and independently verified output-root and nonce facts.
+
+The current committed qualification anchor set includes the separately reviewed real-candidate
+evidence anchor described above, but no eligible qualification record exists for it. The synthetic
+positive fixture and the frozen historical record therefore deterministically refuse and cannot be
+used as substitutes.
+The authorization prerequisite is also categorically unsatisfied: caller-supplied claim structures
+cannot establish custody or independent bindings. No current input combination can make
+`prerequisites_satisfied=true`, and execution remains disabled.
+
+The future allowed physical action set contains only exact isolated runtime closure verification,
+imports of the pinned `mlx.core` and `mlx_lm` surfaces, and bounded distribution/backend/device/
+default-stream/Metal metadata. One default-stream synchronization canary requires its own explicit
+one-shot authorization. Model/tokenizer discovery or loading, prompt/cache/inference/generation,
+tensor operations, benchmarks, retrieval/install, retries, cloud, and spend are forbidden.
+Attempted actions, completed actions, and accepted evidence are separate ledgers. Audit hooks are
+defense in depth and are not an OS sandbox. The current deterministic record and fixture ledgers
+are empty and report zero physical actions.

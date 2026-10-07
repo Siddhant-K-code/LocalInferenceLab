@@ -44,7 +44,17 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > metadata. It performs no install, network, process, socket, authorization, MLX import, Metal,
 > synchronization, model, or spend action. `eligible_for_new_observed_authorization` is not an
 > authorization or executability claim: schema 1.0 stays permanently disabled, and schema 1.1
-> still requires distinct protocol/spec/worker review plus a fresh explicit authorization.
+> still requires distinct protocol/spec/worker review plus future authoritative one-shot
+> authorization custody.
+> The prospective schema-1.1 contract now defines those prerequisite and result shapes without
+> making execution reachable. It accepts only a committed eligible `reviewed_candidate`
+> qualification record from the separate schema-1.0 anchor set. Authoritative authorization
+> acquisition, current-expiry observation, exclusive consumption/non-reuse, and independent
+> output-root/nonce bindings are explicitly unavailable. A caller-supplied claim may be checked
+> only for canonical structure; it cannot satisfy those prerequisites. There is no
+> schema-1.1 worker, authorize command, authorization consumer, package installer, or execute
+> entrypoint. Its deterministic fixture proves that neither the synthetic-positive qualification
+> nor the frozen historical record can satisfy the prerequisites.
 > The first authorized Apple Silicon runtime preflight **failed closed** after authorization
 > consumption because the worker reported a forbidden-action attempt. It was not retried. The
 > rejected worker frame was not retained by the original failure path, so no runtime import,
@@ -251,6 +261,16 @@ localinferencelab mlx runtime-qualification-verify RECORD.json
 localinferencelab mlx runtime-qualification-inspect RECORD.json
 localinferencelab mlx runtime-qualification-fixture-compile OUTPUT_ROOT
 localinferencelab mlx runtime-qualification-replay CLOSED-QUALIFICATION-BUNDLE
+localinferencelab mlx runtime-preflight-1-1-capability-report
+localinferencelab mlx runtime-preflight-1-1-protocol > PREFLIGHT-1-1-PROTOCOL.json
+localinferencelab mlx runtime-preflight-1-1-spec > PREFLIGHT-1-1-SPEC.json
+localinferencelab mlx runtime-preflight-1-1-record-create \
+  QUALIFICATION-RECORD.json CONTRACT-RECORD.json \
+  [--authorization-claim CALLER-SUPPLIED-STRUCTURE-ONLY.json]
+localinferencelab mlx runtime-preflight-1-1-record-verify CONTRACT-RECORD.json
+localinferencelab mlx runtime-preflight-1-1-record-inspect CONTRACT-RECORD.json
+localinferencelab mlx runtime-preflight-1-1-fixture-compile OUTPUT_ROOT
+localinferencelab mlx runtime-preflight-1-1-fixture-replay CLOSED-PREFLIGHT-1-1-BUNDLE
 localinferencelab ollama output-root-init OUTPUT_ROOT --nonce NONCE
 localinferencelab ollama authorization-nonce-init NONCE_FILE
 localinferencelab ollama prospective-create SPEC OUTPUT --runtime-artifact FILE \
@@ -331,6 +351,28 @@ are not supplied. No qualification record is committed with the anchor. Candidat
 digests therefore cannot create an accepted record in this change. Every future record still binds
 the unchanged schema-1.0 negative projection, lock, terminal failure, authorization, consumption,
 historical protocol, and historical worker IDs.
+
+The schema-1.1 runtime-preflight commands are also process-free. The spec and protocol are
+candidate-agnostic: exact runtime pins and bytes must come from a separately reviewed,
+independently committed real-candidate qualification anchor. Record construction reconstructs the
+schema-1.0 qualification decision and requires `candidate_kind=reviewed_candidate`,
+`eligible_for_new_observed_authorization`, and membership of its derived anchor in the committed
+qualification spec. An optional caller-supplied authorization claim can name a qualification,
+review anchor, schema-1.1 spec/protocol, output-root digest, nonce digest, and internally ordered
+claimed time window. Those are self-asserted fields only: they do not prove acquisition, current
+freshness, independent root/nonce facts, exclusive consumption, or non-reuse.
+
+The authorization prerequisites cannot be satisfied in this milestone, and no supplied structure
+can unlock execution. The implementation, worker, installer, and public/internal execute
+entrypoints are absent. The future physical action
+contract is limited to exact isolated runtime-closure verification, imports of pinned `mlx.core`
+and `mlx_lm`, bounded distribution/backend/device/stream/Metal metadata, and at most one stream
+synchronization canary under a distinct explicit authorization. Model/tokenizer discovery or
+loading, prompts, cache/inference/generation, tensor actions, benchmarks, network retrieval,
+cloud, spend, and retries are forbidden. Attempted actions, completed actions, and
+parent-accepted evidence are separate ledgers; Python audit hooks are defense in depth, not a
+sandbox. Current records and fixtures keep all three ledgers empty and every physical counter at
+zero.
 
 `declaration-spec`, `declaration-create`, `declaration-verify`, and `declaration-inspect` are
 declaration-only operations. They do not probe the host, read an Ollama endpoint, create
@@ -440,21 +482,25 @@ The project does not claim that:
 
 1. Use the static MLX runtime qualification gate to review an exact proposed runtime pair and its
    supplied metadata/source evidence without installing or importing it.
-2. For an eligible candidate, design and review a distinct schema-1.1 protocol/spec/worker and
-   fresh authorization; eligibility alone must never unlock physical action.
-3. In that separately reviewed schema version, close applicable dependencies and Python
+2. Complete the missing transitive-distribution and worker-API evidence for the committed
+   real-candidate anchor until static qualification is eligible; the synthetic positive fixture
+   and historical records remain categorically insufficient.
+3. Review the prospective schema-1.1 protocol/spec and separately design the worker plus
+   authoritative acquisition, current-expiry, exclusive-consumption/non-reuse, and independent
+   output-root/nonce custody; the present contract machinery cannot unlock physical action.
+4. In a later execution-enabling review, close applicable dependencies and Python
    standard-library/native-loader bytes, then implement retained runtime/model descriptors,
    parent-owned private IPC/protocol/result validation, same-process
    import/backend/cache/synchronization attestation, pinned strict model key/shape loading, and
    one-shot authorization before adding any production worker start.
-4. Review the frozen Qwen3 declaration and fill only evidence obtainable without model or network
+5. Review the frozen Qwen3 declaration and fill only evidence obtainable without model or network
    action.
-5. Design a separately authorized future milestone for the two primitives named by the negative
+6. Design a separately authorized future milestone for the two primitives named by the negative
    assessment: privileged accepted-socket/process continuity plus in-process Ollama
    request-to-runner/model/Metal cooperation.
-6. Add separately authorized, preinstalled-resource runners for other backends.
-7. Publish observed bundles only after provenance, privacy, and positive-attestation review.
-8. Define a typed, indexed mapping-artifact protocol before any mapped cross-representation study.
+7. Add separately authorized, preinstalled-resource runners for other backends.
+8. Publish observed bundles only after provenance, privacy, and positive-attestation review.
+9. Define a typed, indexed mapping-artifact protocol before any mapped cross-representation study.
 
 ## Development
 
