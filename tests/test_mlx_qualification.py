@@ -17,6 +17,7 @@ from localinferencelab.canonical import (
     canonical_json,
     digest_bytes,
     encode_bytes,
+    load_canonical_json_file,
     load_json_bytes,
 )
 from localinferencelab.cli import run
@@ -258,6 +259,9 @@ def test_spec_and_decisions_are_static_bounded_and_exact() -> None:
         "terminal_failure_id": OBSERVED_FAILURE_ID,
     }
     assert spec["decisions"] == [ELIGIBLE, INELIGIBLE]
+    assert spec["reviewed_candidate_anchors"] == [
+        "sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b"
+    ]
 
     historical = build_qualification_record(historical_incompatible_qualification_package())
     eligible = build_qualification_record(synthetic_eligible_qualification_package())
@@ -279,6 +283,92 @@ def test_spec_and_decisions_are_static_bounded_and_exact() -> None:
     assert closure["standard_library_semantic_completeness_claimed"] is False
     assert closure["native_loader_semantic_completeness_claimed"] is False
     assert eligible["schema_1_0_remains_permanently_disabled"] is True
+
+
+def test_committed_real_candidate_anchor_is_exact_and_ineligible() -> None:
+    candidate_path = (
+        Path(qualification_module.__file__).resolve(strict=True).parents[2]
+        / "evidence"
+        / "mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json"
+    )
+    package = verify_qualification_package(
+        load_canonical_json_file(candidate_path, "real MLX candidate evidence")
+    )
+    assert package["qualification_spec_id"] == (
+        "sha256:8fdc6ac8adf4c077d6c89e419801c99257b7e069c77bc94b3655f16f34f6d94e"
+    )
+    assert package["package_id"] == (
+        "sha256:e1213e86b9a09f10e48d5fd53e2a6b9c71c20a2e42e2107d12e3a2eb33d9f6a3"
+    )
+    assert package["top_level_requirements"] == ["mlx==0.30.4", "mlx-lm==0.30.6"]
+
+    mlx = _distribution(package, "mlx")
+    assert _dict(mlx["source"]) == {
+        "provenance": "reviewed_git_revision_and_tag",
+        "repository_url": "https://github.com/ml-explore/mlx",
+        "revision": "2f324cc3b200700b422db4811ae3ff8bd5bf48b4",
+        "tag": "v0.30.4",
+    }
+    assert _dict(mlx["wheel"])["sha256"] == (
+        "sha256:1f367534078b10dcb660393a554f97732c194977ac8318bb389a76a6307757f8"
+    )
+    assert _dict(mlx["metadata"])["sha256"] == (
+        "sha256:c3b3faaf1dd2bd14b33a62e3eb6297a51f8108f12f8d66d05e6c74f3d5fd6d46"
+    )
+
+    mlx_lm = _distribution(package, "mlx-lm")
+    assert _dict(mlx_lm["source"]) == {
+        "provenance": "reviewed_git_revision_and_tag",
+        "repository_url": "https://github.com/ml-explore/mlx-lm",
+        "revision": "f18526f8d66f74728072e96d55acb6c451e92e88",
+        "tag": "v0.30.6",
+    }
+    assert _dict(mlx_lm["wheel"])["sha256"] == (
+        "sha256:a7405bd581eacc4bf8209d7a6b7f23629585a0d7c6740c2a97e51fee35b3b0e1"
+    )
+    assert _dict(mlx_lm["metadata"])["sha256"] == (
+        "sha256:e5903a45bc0575fd6b8d68c67ba6cab13204995d103c1f1f32b52789f84bfb8f"
+    )
+
+    record = build_qualification_record(package)
+    assessment = _dict(record["assessment"])
+    assert assessment["review_anchor_id"] == (
+        "sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b"
+    )
+    assert record["record_id"] == (
+        "sha256:3571b4e88a33eb803f8ea7026a497d90c33a778668587eed75ab95dbb156b930"
+    )
+    assert record["decision"] == INELIGIBLE
+    assert record["blockers"] == [
+        "dependency_missing:mlx-lm:jinja2",
+        "dependency_missing:mlx-lm:numpy",
+        "dependency_missing:mlx-lm:protobuf",
+        "dependency_missing:mlx-lm:pyyaml",
+        "dependency_missing:mlx-lm:sentencepiece",
+        "dependency_missing:mlx-lm:transformers>=5.0.0",
+        'dependency_missing:mlx:mlx-metal==0.30.4; platform_system == "Darwin"',
+        "missing_worker_api_evidence:default_device:mlx:mlx.core.default_device",
+        "missing_worker_api_evidence:default_stream:mlx:mlx.core.default_stream",
+        "missing_worker_api_evidence:distribution_versions:mlx-lm:METADATA.Version",
+        "missing_worker_api_evidence:import_mlx:mlx:mlx.core",
+        "missing_worker_api_evidence:import_mlx_lm:mlx-lm:mlx_lm",
+        "missing_worker_api_evidence:metal_is_available:mlx:mlx.core.metal.is_available",
+        "missing_worker_api_evidence:synchronize:mlx:mlx.core.synchronize",
+    ]
+    dependency_assessments = [_dict(item) for item in _list(assessment["dependency_assessments"])]
+    pair_dependency = next(
+        item
+        for item in dependency_assessments
+        if item["requirement"] == 'mlx>=0.30.4; platform_system == "Darwin"'
+    )
+    assert pair_dependency["selected_distribution"] == "mlx==0.30.4"
+    assert pair_dependency["satisfied"] is True
+    one_component_extra = next(
+        item for item in dependency_assessments if item["requirement"] == 'numpy>=2; extra == "dev"'
+    )
+    assert one_component_extra["applicable"] is False
+    assert all(_dict(item)["compatible"] is True for item in _list(assessment["wheel_assessments"]))
+    assert set(_dict(record["static_action_counters"]).values()) == {0}
 
 
 def test_qualification_module_has_no_runtime_action_surface() -> None:

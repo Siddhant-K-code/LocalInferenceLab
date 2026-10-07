@@ -363,4 +363,20 @@ closure reaches `eligible_for_new_observed_authorization` solely to demonstrate 
 contract; it is not evidence that any real pair is coherent. Both fixture records fix every
 package/network/process/socket/authorization/import/backend/model/cloud/spend counter to zero.
 Real reviewed candidates remain ineligible until independent review commits their derived evidence
-anchor into the qualification specification; the current anchor set is intentionally empty.
+anchor into the qualification specification.
+
+The committed real-candidate evidence package
+`evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json` supplies one such immutable
+anchor for CPython 3.13.0 on macOS 15.0 arm64:
+`sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b`.
+It embeds only the exact MLX `0.30.4` and MLX-LM `0.30.6` wheels and their raw Core Metadata.
+Those 952,038 wheel bytes are small enough to preserve the existing exact-byte verification
+contract without a network replay. The 38,255,657-byte `mlx-metal` wheel and the other transitive
+artifacts are not committed: they are outside this pair anchor, and substituting hash-only evidence
+would not prove raw METADATA equality offline. Their absence remains explicit in the deterministic
+`ineligible` blockers, together with the absent worker-API evidence.
+
+The pair edge `mlx>=0.30.4; platform_system == "Darwin"` selects and accepts `mlx==0.30.4`.
+That fact does not establish complete dependency closure. No accepted or ineligible qualification
+record is committed beside the newly reviewed candidate; a later record change must reconstruct
+the decision from the immutable package.

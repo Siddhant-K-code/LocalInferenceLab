@@ -320,10 +320,17 @@ explanations, reachability, and sorted blockers. It intentionally claims semanti
 metadata, never the Python standard library or native loader. The fixture proves both outcomes:
 the frozen MLX `0.29.3` / MLX-LM `0.30.6` projection remains `ineligible`, while a clearly labeled
 synthetic complete closure yields `eligible_for_new_observed_authorization` without claiming a
-real coherent pair. Real reviewed candidates remain ineligible until an independent review adds
-their derived evidence anchor to the committed qualification specification; candidate-controlled
-digests cannot create that trust anchor. Every record binds the unchanged schema-1.0 negative projection, lock,
-terminal failure, authorization, consumption, historical protocol, and historical worker IDs.
+real coherent pair. The repository now contains one independently reviewable real evidence package,
+`evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json`, for CPython 3.13.0 on
+macOS 15.0 arm64. It embeds the exact reviewed PyPI wheels and raw METADATA for MLX `0.30.4` and
+MLX-LM `0.30.6`, binds their immutable upstream tags/revisions, and commits review anchor
+`sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b`.
+The MLX-LM-to-MLX dependency is satisfied, but the candidate remains deterministically
+`ineligible`: its seven applicable transitive distributions and seven worker-API evidence items
+are not supplied. No qualification record is committed with the anchor. Candidate-controlled
+digests therefore cannot create an accepted record in this change. Every future record still binds
+the unchanged schema-1.0 negative projection, lock, terminal failure, authorization, consumption,
+historical protocol, and historical worker IDs.
 
 `declaration-spec`, `declaration-create`, `declaration-verify`, and `declaration-inspect` are
 declaration-only operations. They do not probe the host, read an Ollama endpoint, create

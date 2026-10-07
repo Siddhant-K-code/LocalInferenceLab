@@ -18,6 +18,39 @@ On 2026-10-04, the pinned Ollama revision was verified as current `main` (commit
 2026-10-02). The latest tagged release was `v0.35.1`, two docs-only commits behind that revision.
 The contract cites immutable source URLs; hosted docs are supplementary when their content can move.
 
+## Real MLX candidate evidence anchor
+
+Retrieved 2026-10-07 using unauthenticated official PyPI JSON/files and immutable upstream GitHub
+tags. The canonical evidence is committed at
+`evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json`; offline verification requires no
+network.
+
+| Distribution | Source tag and revision | Wheel identity | Raw METADATA |
+|---|---|---|---|
+| MLX `0.30.4` | [`v0.30.4` / `2f324cc3b200700b422db4811ae3ff8bd5bf48b4`](https://github.com/ml-explore/mlx/tree/2f324cc3b200700b422db4811ae3ff8bd5bf48b4) | `mlx-0.30.4-cp313-cp313-macosx_15_0_arm64.whl`, 572,587 bytes, `sha256:1f367534078b10dcb660393a554f97732c194977ac8318bb389a76a6307757f8`, tag `cp313-cp313-macosx_15_0_arm64` | 5,860 bytes, `sha256:c3b3faaf1dd2bd14b33a62e3eb6297a51f8108f12f8d66d05e6c74f3d5fd6d46`, `Requires-Python: >=3.10` |
+| MLX-LM `0.30.6` | [`v0.30.6` / `f18526f8d66f74728072e96d55acb6c451e92e88`](https://github.com/ml-explore/mlx-lm/tree/f18526f8d66f74728072e96d55acb6c451e92e88) | `mlx_lm-0.30.6-py3-none-any.whl`, 379,451 bytes, `sha256:a7405bd581eacc4bf8209d7a6b7f23629585a0d7c6740c2a97e51fee35b3b0e1`, tag `py3-none-any` | 9,483 bytes, `sha256:e5903a45bc0575fd6b8d68c67ba6cab13204995d103c1f1f32b52789f84bfb8f`, `Requires-Python: >=3.8` |
+
+The validator confirms that each supplied raw METADATA byte stream equals the sole wheel-embedded
+METADATA entry and that the filename tag occurs in the embedded WHEEL control record. MLX-LM's
+Darwin requirement `mlx>=0.30.4` selects and accepts the pinned MLX `0.30.4`, correcting the
+historical `0.29.3` / `0.30.6` incompatibility.
+
+The package ID is
+`sha256:e1213e86b9a09f10e48d5fd53e2a6b9c71c20a2e42e2107d12e3a2eb33d9f6a3`;
+its independently committed review anchor is
+`sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b`.
+The reconstructed, deliberately uncommitted qualification record is
+`sha256:3571b4e88a33eb803f8ea7026a497d90c33a778668587eed75ab95dbb156b930`
+and remains `ineligible`. Exact blockers are the absent applicable distributions `mlx-metal`,
+`numpy`, `transformers`, `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2`, plus absent source
+evidence for `import_mlx`, `import_mlx_lm`, `distribution_versions`, `default_device`,
+`metal_is_available`, `default_stream`, and `synchronize`.
+
+Only the two top-level wheels are embedded (952,038 bytes total). The 38,255,657-byte
+`mlx_metal-0.30.4-py3-none-macosx_15_0_arm64.whl` and unrelated transitive wheels are not committed.
+Hash-only substitutes could not preserve the existing offline wheel-to-METADATA equality proof,
+so their absence is represented by exact fail-closed blockers rather than by overclaimed evidence.
+
 ## MLX/MLX-LM normative sources
 
 Retrieved and re-verified at the pinned commits on 2026-10-05. Links below are immutable source or
