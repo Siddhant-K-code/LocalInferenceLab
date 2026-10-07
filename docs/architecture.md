@@ -22,6 +22,7 @@ Every trust transition is represented by immutable canonical data.
 | `mlx_runtime_preflight.py` | Separate exact-runtime lock/receipt validation, schema-1.0 execution gate, synthetic one-shot runtime-preflight custody, strict result/import-closure validation, closed publication, and offline replay | Public `runtime-preflight` validates then rejects the dependency-incompatible observed receipt before physical action; only exact internal synthetic fixtures may start one child/socketpair |
 | `mlx_runtime_preflight_worker.py` | Standalone sealed FD-3 runtime-only synthetic worker | After synthetic authorization only, imports bound fake `mlx.core` and `mlx_lm`, queries model-free backend/device/stream facts, and synchronizes; no model action or network/command surface |
 | `mlx_qualification.py` | Canonical static candidate package, dependency/marker/wheel/API-evidence assessment, sole deterministic decision, and two-outcome closed fixture replay | Explicit record/fixture writes only; no install, network, process, socket, authorization, runtime import, backend, model, or spend action |
+| `mlx_preflight_contract.py` | Prospective schema-1.1 model-free protocol/spec, prerequisite/refusal record, bounded inspection, and deterministic closed-fixture replay | Explicit record/fixture writes only; no authorization creation/consumption, install, import, worker, process, socket, backend/device/Metal, synchronization, model, or spend action |
 | `ollama.py` | Prospective package, direct numeric-loopback transport, one-shot authorization, bounded execution, terminal custody/replay | Explicit output-root writes; loopback calls only after authorization |
 | `ollama_declaration.py` | Canonical multi-run study intent, exact package closure binding, eligibility, and offline declaration fixture replay | Explicit declaration/fixture writes only; no host probe, socket, marker, authorization, or model |
 | `ollama_attestation.py` | Pinned listener/runner feasibility requirements, candidate evidence, derived negative verdict, and offline fixture replay | Explicit assessment/fixture writes only; no live process probe, socket, subprocess, Ollama call, authorization, output-root consumption, or model |
@@ -159,6 +160,40 @@ authorization, consumption, historical protocol, and historical worker IDs with
 `schema_1_0_state=permanently_disabled`. An eligible record still requires a distinct schema-1.1
 protocol/spec/worker review and fresh explicit authorization before any package installation,
 network, child/socket, import, backend, Metal, synchronization, or model action.
+
+## Prospective schema-1.1 runtime-preflight contract
+
+`mlx_runtime_preflight_protocol`, `mlx_runtime_preflight_spec`, and
+`mlx_runtime_preflight_contract_record` use schema 1.1 and are additive. They do not alter the
+schema-1.0 qualification, runtime-preflight, authorization, consumption, terminal-failure, or
+negative-projection records. The schema-1.0 state remains permanently disabled.
+
+The protocol and spec are candidate-agnostic. Exact runtime versions and bytes must come from an
+eligible schema-1.0 `reviewed_candidate` qualification record whose derived review anchor is in the
+committed qualification spec. Strict reconstruction rejects the synthetic-positive fixture,
+historical projections, forged decisions, uncommitted anchors, and coordinated rehashing. The
+second prerequisite is a separately supplied `mlx_runtime_preflight_observed_authorization`:
+explicit, observed, fresh, unconsumed, one-shot, bounded to 30 seconds, and identity-bound to the
+qualification record, review anchor, schema-1.1 spec, protocol, output root, and nonce commitment.
+This module can validate that future record but cannot create or consume one.
+
+The contract record keeps execution unreachable regardless of prerequisite state. There is no
+schema-1.1 worker, package installer/retriever, authorization creator/consumer, or public/internal
+execute entrypoint. Current construction and replay leave `attempted_actions`,
+`completed_actions`, and `accepted_evidence` empty and all physical counters zero. Closed fixture
+replay deterministically reconstructs refusals for the synthetic eligible qualification and the
+historical incompatible qualification; it includes no real candidate, observed authorization,
+private raw evidence, or private path.
+
+The future physical action contract is deliberately narrower than model execution: exact isolated
+runtime-closure verification; imports only of pinned `mlx.core` and `mlx_lm` plus transitive files
+from that bound closure; bounded distribution/backend/device/default-stream/Metal metadata; and at
+most one default-stream synchronization canary under its own explicit one-shot authorization.
+Package retrieval or installation, retries, model/tokenizer discovery or loading, prompts,
+cache/inference/generation, tensor allocation or operations, benchmarks, network, cloud, and spend
+are forbidden. Attempted actions, completed actions, and strict parent-accepted evidence have
+separate claim scopes. Audit hooks may add attempted-action telemetry but are defense in depth, not
+an OS sandbox or proof of non-occurrence.
 
 The first authorized observed attempt closed negatively at parent validation of
 `preflight_result`. Authorization was consumed, one child was started and reaped, and no retry was

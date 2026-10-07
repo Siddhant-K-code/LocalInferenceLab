@@ -27,6 +27,18 @@ from localinferencelab.mlx_manifest import (
     load_runtime_scan_spec,
     write_manifest,
 )
+from localinferencelab.mlx_preflight_contract import (
+    build_runtime_preflight_record_1_1,
+    compile_runtime_preflight_fixture_1_1,
+    inspect_runtime_preflight_record_1_1,
+    load_observed_authorization_1_1,
+    load_runtime_preflight_record_1_1,
+    replay_runtime_preflight_fixture_1_1,
+    runtime_preflight_capability_report_1_1,
+    runtime_preflight_protocol_1_1,
+    runtime_preflight_spec_1_1,
+    write_runtime_preflight_record_1_1,
+)
 from localinferencelab.mlx_qualification import (
     build_qualification_record,
     compile_qualification_fixture,
@@ -291,6 +303,49 @@ def _parser() -> argparse.ArgumentParser:
         help="replay one closed qualification fixture without imports or processes",
     )
     runtime_qualification_replay.add_argument("bundle", type=Path)
+    mlx_commands.add_parser(
+        "runtime-preflight-1-1-capability-report",
+        help="report the prospective model-free schema-1.1 contract with execution unreachable",
+    )
+    mlx_commands.add_parser(
+        "runtime-preflight-1-1-protocol",
+        help="emit the prospective unimplemented schema-1.1 protocol",
+    )
+    mlx_commands.add_parser(
+        "runtime-preflight-1-1-spec",
+        help="emit the candidate-agnostic schema-1.1 model-free preflight specification",
+    )
+    runtime_preflight_1_1_create = mlx_commands.add_parser(
+        "runtime-preflight-1-1-record-create",
+        help="construct a process-free schema-1.1 prerequisite/refusal record",
+    )
+    runtime_preflight_1_1_create.add_argument("qualification_record", type=Path)
+    runtime_preflight_1_1_create.add_argument("output", type=Path)
+    runtime_preflight_1_1_create.add_argument(
+        "--authorization",
+        type=Path,
+        help="supplied observed authorization record; this command cannot create or consume it",
+    )
+    runtime_preflight_1_1_verify = mlx_commands.add_parser(
+        "runtime-preflight-1-1-record-verify",
+        help="strictly verify a schema-1.1 prerequisite/refusal record",
+    )
+    runtime_preflight_1_1_verify.add_argument("record", type=Path)
+    runtime_preflight_1_1_inspect = mlx_commands.add_parser(
+        "runtime-preflight-1-1-record-inspect",
+        help="inspect schema-1.1 blockers with zero physical runtime actions",
+    )
+    runtime_preflight_1_1_inspect.add_argument("record", type=Path)
+    runtime_preflight_1_1_fixture = mlx_commands.add_parser(
+        "runtime-preflight-1-1-fixture-compile",
+        help="publish deterministic synthetic/historical refusal-only contract evidence",
+    )
+    runtime_preflight_1_1_fixture.add_argument("output_root", type=Path)
+    runtime_preflight_1_1_replay = mlx_commands.add_parser(
+        "runtime-preflight-1-1-fixture-replay",
+        help="replay one closed schema-1.1 refusal fixture without physical runtime action",
+    )
+    runtime_preflight_1_1_replay.add_argument("bundle", type=Path)
 
     ollama = commands.add_parser(
         "ollama",
@@ -671,6 +726,56 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
         if args.mlx_command == "runtime-qualification-replay":
             qualification_replay = replay_qualification_fixture(args.bundle)
             output = qualification_replay.to_dict()
+            output["status"] = "replayed"
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-preflight-1-1-capability-report":
+            _emit(runtime_preflight_capability_report_1_1())
+            return 0
+        if args.mlx_command == "runtime-preflight-1-1-protocol":
+            _emit_document(runtime_preflight_protocol_1_1())
+            return 0
+        if args.mlx_command == "runtime-preflight-1-1-spec":
+            _emit_document(runtime_preflight_spec_1_1())
+            return 0
+        if args.mlx_command == "runtime-preflight-1-1-record-create":
+            observed_authorization = (
+                None
+                if args.authorization is None
+                else load_observed_authorization_1_1(args.authorization)
+            )
+            schema_1_1_record = build_runtime_preflight_record_1_1(
+                load_qualification_record(args.qualification_record),
+                observed_authorization,
+            )
+            write_runtime_preflight_record_1_1(args.output, schema_1_1_record)
+            output = inspect_runtime_preflight_record_1_1(schema_1_1_record)
+            output["status"] = "created"
+            _emit(output)
+            return 0
+        if args.mlx_command in {
+            "runtime-preflight-1-1-record-verify",
+            "runtime-preflight-1-1-record-inspect",
+        }:
+            schema_1_1_record = load_runtime_preflight_record_1_1(args.record)
+            output = inspect_runtime_preflight_record_1_1(schema_1_1_record)
+            output["status"] = (
+                "valid"
+                if args.mlx_command == "runtime-preflight-1-1-record-verify"
+                else "inspected"
+            )
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-preflight-1-1-fixture-compile":
+            path, schema_1_1_replay = compile_runtime_preflight_fixture_1_1(args.output_root)
+            output = schema_1_1_replay.to_dict()
+            output["status"] = "compiled"
+            output["path"] = path.name
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-preflight-1-1-fixture-replay":
+            schema_1_1_replay = replay_runtime_preflight_fixture_1_1(args.bundle)
+            output = schema_1_1_replay.to_dict()
             output["status"] = "replayed"
             _emit(output)
             return 0

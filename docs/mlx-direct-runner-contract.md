@@ -380,3 +380,34 @@ The pair edge `mlx>=0.30.4; platform_system == "Darwin"` selects and accepts `ml
 That fact does not establish complete dependency closure. No accepted or ineligible qualification
 record is committed beside the newly reviewed candidate; a later record change must reconstruct
 the decision from the immutable package.
+
+## Prospective schema-1.1 model-free contract
+
+The additive schema-1.1 protocol/spec/contract-record layer prepares deterministic prerequisite
+validation without enabling execution. It has only capability, protocol/spec emission,
+record construction/verification/inspection, and deterministic closed-fixture replay commands.
+There is no authorize, install, worker, or execute surface.
+
+A record requires both:
+
+1. an eligible schema-1.0 `reviewed_candidate` qualification record whose derived evidence anchor
+   was committed through a separate review; and
+2. a separately supplied fresh, explicit, observed, unconsumed one-shot authorization bound to
+   the qualification record, review anchor, schema-1.1 spec, protocol, output-root identity, and
+   nonce commitment.
+
+The current committed qualification anchor set includes the separately reviewed real-candidate
+evidence anchor described above, but no eligible qualification record exists for it. The synthetic
+positive fixture and the frozen historical record therefore deterministically refuse and cannot be
+used as substitutes.
+Even a future record satisfying both prerequisites remains execution-disabled in this milestone:
+prerequisites are necessary contract inputs, not a switch.
+
+The future allowed physical action set contains only exact isolated runtime closure verification,
+imports of the pinned `mlx.core` and `mlx_lm` surfaces, and bounded distribution/backend/device/
+default-stream/Metal metadata. One default-stream synchronization canary requires its own explicit
+one-shot authorization. Model/tokenizer discovery or loading, prompt/cache/inference/generation,
+tensor operations, benchmarks, retrieval/install, retries, cloud, and spend are forbidden.
+Attempted actions, completed actions, and accepted evidence are separate ledgers. Audit hooks are
+defense in depth and are not an OS sandbox. The current deterministic record and fixture ledgers
+are empty and report zero physical actions.
