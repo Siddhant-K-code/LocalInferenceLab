@@ -55,6 +55,12 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > schema-1.1 worker, authorize command, authorization consumer, package installer, or execute
 > entrypoint. Its deterministic fixture proves that neither the synthetic-positive qualification
 > nor the frozen historical record can satisfy the prerequisites.
+> An independent schema-1.0 **determinism canary** now freezes prospective operation coverage,
+> exact embedded scalar/byte vectors, strict IEEE comparison semantics, result records, and a
+> machine-readable atlas. Its compile/verify/inspect/replay commands are process-free and never
+> import MLX, query a backend/device/Metal state, synchronize hardware, load a model, or execute a
+> tensor operation through MLX. Every committed output-bearing canary result is explicitly
+> synthetic and makes no claim about real MLX or Metal behavior.
 > The first authorized Apple Silicon runtime preflight **failed closed** after authorization
 > consumption because the worker reported a forbidden-action attempt. It was not retried. The
 > rejected worker frame was not retained by the original failure path, so no runtime import,
@@ -271,6 +277,11 @@ localinferencelab mlx runtime-preflight-1-1-record-verify CONTRACT-RECORD.json
 localinferencelab mlx runtime-preflight-1-1-record-inspect CONTRACT-RECORD.json
 localinferencelab mlx runtime-preflight-1-1-fixture-compile OUTPUT_ROOT
 localinferencelab mlx runtime-preflight-1-1-fixture-replay CLOSED-PREFLIGHT-1-1-BUNDLE
+localinferencelab mlx determinism-canary-spec > CANARY-SPEC.json
+localinferencelab mlx determinism-canary-verify RECORD.json
+localinferencelab mlx determinism-canary-inspect RECORD.json
+localinferencelab mlx determinism-canary-fixture-compile OUTPUT_ROOT
+localinferencelab mlx determinism-canary-replay CLOSED-CANARY-BUNDLE
 localinferencelab ollama output-root-init OUTPUT_ROOT --nonce NONCE
 localinferencelab ollama authorization-nonce-init NONCE_FILE
 localinferencelab ollama prospective-create SPEC OUTPUT --runtime-artifact FILE \
@@ -326,6 +337,24 @@ socketpair, consumes one synthetic one-shot authorization for `action=inert_refu
 publishes a bounded receipt-closed transcript. It performs zero MLX/MLX-LM imports, Metal/device
 actions, tokenizer/model loads, inference, snapshot resolution/download, cache mutation, network,
 cloud, or spend actions. `custody-replay` and `custody-inspect` are process- and socket-free.
+
+The determinism-canary commands are independent of MLX runtime qualification and authorization.
+The pinned 48-cell prospective matrix covers elementwise arithmetic (including IEEE edge
+identity), matmul, reduction, softmax, RMS normalization, fused and unfused multiply-add,
+`float32`, `float16`, `bfloat16`, and explicit/deferred evaluation. Every cell is
+`unverified_future_support`; inclusion does not assert MLX support. Exactly eight cells have
+embedded synthetic fixtures and the other 40 are explicitly `prospective_only_no_fixture`.
+Schema 1.0 rejects case-registry, authorized-observation, and physical-result records; self-asserted
+identity hashes cannot create evidence. Every represented case and result binds its matrix cell,
+operation-spec identity, axes, exact scalar bit patterns, precision, reduction/evaluation order,
+and rounding parameters. Comparison rejects dtype, shape, endianness, and byte-length mismatch
+before metrics. Valid comparisons report bitwise
+equality, canonical output digest equality, maximum absolute and relative error encoded as exact
+binary64 bytes, native-dtype ULP distance, NaN/infinity agreement, and signed-zero bit
+differences; the ULP ordering collapses both signed-zero encodings before cross-zero distance.
+The synthetic atlas is useful contract evidence only: it contains no observed
+runtime, backend, device, synchronization, model, timing, or performance fact. See
+[`docs/mlx-determinism-canary.md`](docs/mlx-determinism-canary.md).
 
 The MLX runtime qualification commands are static and process-free. A candidate package binds exact
 MLX/MLX-LM versions and immutable source revisions/tags; exact wheel names, sizes, hashes, URLs,
@@ -488,19 +517,23 @@ The project does not claim that:
 3. Review the prospective schema-1.1 protocol/spec and separately design the worker plus
    authoritative acquisition, current-expiry, exclusive-consumption/non-reuse, and independent
    output-root/nonce custody; the present contract machinery cannot unlock physical action.
-4. In a later execution-enabling review, close applicable dependencies and Python
+4. Use the determinism-canary comparison semantics as design input for a distinct future
+   case-registry and physical-evidence schema whose closed-bundle verifier independently loads and
+   validates authorization/runtime/device/process records. Schema 1.0 must continue rejecting
+   those records.
+5. In a later execution-enabling review, close applicable dependencies and Python
    standard-library/native-loader bytes, then implement retained runtime/model descriptors,
    parent-owned private IPC/protocol/result validation, same-process
    import/backend/cache/synchronization attestation, pinned strict model key/shape loading, and
    one-shot authorization before adding any production worker start.
-5. Review the frozen Qwen3 declaration and fill only evidence obtainable without model or network
+6. Review the frozen Qwen3 declaration and fill only evidence obtainable without model or network
    action.
-6. Design a separately authorized future milestone for the two primitives named by the negative
+7. Design a separately authorized future milestone for the two primitives named by the negative
    assessment: privileged accepted-socket/process continuity plus in-process Ollama
    request-to-runner/model/Metal cooperation.
-7. Add separately authorized, preinstalled-resource runners for other backends.
-8. Publish observed bundles only after provenance, privacy, and positive-attestation review.
-9. Define a typed, indexed mapping-artifact protocol before any mapped cross-representation study.
+8. Add separately authorized, preinstalled-resource runners for other backends.
+9. Publish observed bundles only after provenance, privacy, and positive-attestation review.
+10. Define a typed, indexed mapping-artifact protocol before any mapped cross-representation study.
 
 ## Development
 

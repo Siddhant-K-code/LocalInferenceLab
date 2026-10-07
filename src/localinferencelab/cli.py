@@ -19,6 +19,13 @@ from localinferencelab.mlx_custody import (
     replay_inert_custody_bundle,
     run_inert_custody_self_test,
 )
+from localinferencelab.mlx_determinism_canary import (
+    canary_inspection,
+    compile_determinism_fixture,
+    determinism_canary_spec,
+    load_canary_record,
+    replay_determinism_fixture,
+)
 from localinferencelab.mlx_fixture import compile_mlx_fixture, replay_mlx_fixture
 from localinferencelab.mlx_manifest import (
     compile_model_manifest,
@@ -349,6 +356,30 @@ def _parser() -> argparse.ArgumentParser:
         help="replay one closed schema-1.1 refusal fixture without physical runtime action",
     )
     runtime_preflight_1_1_replay.add_argument("bundle", type=Path)
+    mlx_commands.add_parser(
+        "determinism-canary-spec",
+        help="emit the runtime-independent prospective determinism canary specification",
+    )
+    determinism_verify = mlx_commands.add_parser(
+        "determinism-canary-verify",
+        help="strictly verify one canonical canary spec, fixture, result, comparison, or atlas",
+    )
+    determinism_verify.add_argument("record", type=Path)
+    determinism_inspect = mlx_commands.add_parser(
+        "determinism-canary-inspect",
+        help="inspect one verified canary record without runtime or hardware access",
+    )
+    determinism_inspect.add_argument("record", type=Path)
+    determinism_fixture = mlx_commands.add_parser(
+        "determinism-canary-fixture-compile",
+        help="publish exact embedded synthetic vectors, results, comparisons, and atlas",
+    )
+    determinism_fixture.add_argument("output_root", type=Path)
+    determinism_replay = mlx_commands.add_parser(
+        "determinism-canary-replay",
+        help="replay one closed synthetic canary bundle without physical actions",
+    )
+    determinism_replay.add_argument("bundle", type=Path)
 
     ollama = commands.add_parser(
         "ollama",
@@ -779,6 +810,32 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
         if args.mlx_command == "runtime-preflight-1-1-fixture-replay":
             schema_1_1_replay = replay_runtime_preflight_fixture_1_1(args.bundle)
             output = schema_1_1_replay.to_dict()
+            output["status"] = "replayed"
+            _emit(output)
+            return 0
+        if args.mlx_command == "determinism-canary-spec":
+            _emit_document(determinism_canary_spec())
+            return 0
+        if args.mlx_command in {
+            "determinism-canary-verify",
+            "determinism-canary-inspect",
+        }:
+            output = canary_inspection(load_canary_record(args.record))
+            output["status"] = (
+                "valid" if args.mlx_command == "determinism-canary-verify" else "inspected"
+            )
+            _emit(output)
+            return 0
+        if args.mlx_command == "determinism-canary-fixture-compile":
+            fixture_path, canary_replay = compile_determinism_fixture(args.output_root)
+            output = canary_replay.to_dict()
+            output["status"] = "compiled"
+            output["path"] = fixture_path.name
+            _emit(output)
+            return 0
+        if args.mlx_command == "determinism-canary-replay":
+            canary_replay = replay_determinism_fixture(args.bundle)
+            output = canary_replay.to_dict()
             output["status"] = "replayed"
             _emit(output)
             return 0

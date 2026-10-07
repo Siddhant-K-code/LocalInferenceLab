@@ -228,6 +228,56 @@ PRNG. Fixed controls are not a determinism guarantee. Prompt/template/tokenizati
 token IDs, stop criteria, cache construction, prefill, KV quantization state, exact runtime cache
 classes, memory limits, and final stream synchronization all remain part of the run identity.
 
+## Runtime-independent determinism canary protocol
+
+The determinism canary is an offline schema and analyzer, not an execution protocol. Schema 1.0
+contains no canary launch, import, backend/device/Metal query, synchronization, model, MLX tensor, or
+authorization command. Every committed output-bearing result is an embedded
+`synthetic_fixture`; it is not evidence of real MLX/Metal behavior.
+
+Schema 1.0 accepts only the pinned synthetic cases/results. It rejects
+`authorized_observation`, physical result, and case-registry records even if they contain
+well-formed self-asserted SHA-256 strings. A future physical-evidence milestone needs a distinct
+schema and closed-bundle verifier that loads and independently validates the referenced
+authorization, runtime, device, process, acquisition, and case-registry records.
+
+The prospective matrix includes elementwise add and IEEE-edge identity, matmul, reduction sum,
+softmax, RMS normalization, and paired fused/unfused multiply-add across `float32`, `float16`, and
+`bfloat16`, each under explicit and deferred evaluation. Every one of the 48 cells is
+`unverified_future_support`. Eight cells have exact embedded synthetic cases; 40 are explicitly
+prospective-only and cannot produce a schema-1.0 result. A successor protocol must independently
+prove support before changing a cell status.
+
+Each operation has a content identity over its mathematical contract and full parameter schema.
+Each represented case/result binds that identity, its exact matrix cell, and concrete parameters.
+Reduction and normalization bind axes/keepdims, initial accumulator bytes, accumulation order and
+precision, and stage rounding. RMS normalization additionally binds exact epsilon bits, mean
+divisor, epsilon-add precision/rounding, reciprocal-square-root contract/rounding, and output
+multiply precision/rounding. Matmul, softmax, and fused/unfused arithmetic similarly bind every
+intermediate order, precision, fusion, and rounding decision. Verification re-derives all expected
+fixture bytes with bounded standard-library scalar arithmetic.
+
+Output comparison requires identical dtype, shape, endianness, element count, and exact byte
+length. A mismatch rejects the record; it cannot yield a partial metric. For compatible records:
+
+- bitwise equality compares payload bytes and canonical output digests compare the full descriptor;
+- finite pairs report maximum absolute/relative error as exact big-endian binary64 hex and maximum
+  native-dtype ULP distance;
+- NaN pairs are numerically equal only when sign and payload bits match;
+- infinity pairs are equal only when signs match;
+- signed zeros have zero numerical/ULP error while their bit difference is counted;
+- the ordered ULP mapping collapses both signed-zero encodings before cross-zero distance;
+- non-finite pairs are excluded from finite error maxima and counted separately.
+
+The future experiment declaration is precommitted: five repeated evaluations within one process,
+five cold-process observations, paired five-CPU/five-GPU observations, paired five-fused/five-
+unfused observations, and paired five-output-materialization-only/five-explicit-synchronization
+observations.
+Retries and selective replacement are zero. Same-condition repeatability accepts only when every
+output is bitwise equal. CPU/GPU, fusion, and synchronization comparisons remain report-only
+unless a separate reviewed protocol defines a threshold. Timing is forbidden unless a later
+protocol separately authorizes it.
+
 Native prompt TPS includes prefill plus the first decode step. Native generation TPS is a
 cumulative decode average after that first token. Peak memory is scoped since process start or the
 last explicit reset; TTFT is unavailable. Device strings and stream completion do not prove
