@@ -16,6 +16,13 @@ it; a compatible source/version pair requires a separately reviewed schema and n
 Only `custody-self-test` can currently start a public child/private socket; all
 capability/spec/inspect/replay commands remain process-free.
 
+The additive static runtime qualification gate does not relax that boundary. It can derive only
+`eligible_for_new_observed_authorization` or `ineligible` from explicit candidate bytes and
+metadata. The positive value means eligible for human review toward a distinct schema-1.1
+milestone, not permission, runtime executability, import success, Metal availability, model
+support, or synchronization. Schema 1.0 remains permanently disabled and the sole observed attempt
+must never be rerun.
+
 The built-in package is deliberately incomplete. No exact preexisting local MLX model was supplied
 or discovered, and discovery would violate the explicit-path boundary. Wired/cache limits, active
 runtime/backend evidence, applicable dependency closure, Python standard-library/native-loader
@@ -329,3 +336,29 @@ numeric `completed_runtime_actions`, `model_non_actions`, Python-audited
 authorization/consumption bindings, and parent-owned wait status. It never publishes rejected
 backend, synchronization, or completion bytes as accepted evidence. Both terminal records and the
 committed negative projection have pure replay commands.
+
+## Static qualification for a future schema 1.1
+
+The process-free qualification package binds exact MLX/MLX-LM versions and immutable source
+revision/tag provenance; exact wheel filenames, SHA-256 digests, sizes, URLs and tags; target
+CPython ABI and macOS version/arm64 architecture; exact wheel bytes bound to embedded WHEEL tags
+and METADATA; canonical METADATA bytes/digests and normalized
+names/versions; every supplied `Requires-Dist` entry and marker; a forbid-all-extras policy; the
+supplied top-level/transitive distribution graph; and immutable source-byte evidence for
+`import_mlx`, `import_mlx_lm`, `distribution_versions`, `default_device`,
+`metal_is_available`, `default_stream`, and `synchronize`.
+
+The derived record includes marker applicability, selected dependency versions, exact satisfaction
+or failure explanations, wheel compatibility, graph reachability, API-evidence presence, and sorted
+blockers. It claims closure only over supplied canonical distribution metadata. Complete Python
+standard-library, native-runtime, dynamic-loader, shared-library, backend, device, Metal,
+synchronization, and model semantics remain outside the gate.
+
+The deterministic fixture contains two candidates. The frozen historical MLX `0.29.3` / MLX-LM
+`0.30.6` requirement projection remains `ineligible` and binds the unchanged schema-1.0 negative
+IDs without publishing historical raw evidence or its private path. A fully supplied synthetic
+closure reaches `eligible_for_new_observed_authorization` solely to demonstrate the positive
+contract; it is not evidence that any real pair is coherent. Both fixture records fix every
+package/network/process/socket/authorization/import/backend/model/cloud/spend counter to zero.
+Real reviewed candidates remain ineligible until independent review commits their derived evidence
+anchor into the qualification specification; the current anchor set is intentionally empty.

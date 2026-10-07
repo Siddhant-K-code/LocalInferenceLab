@@ -233,6 +233,39 @@ cumulative decode average after that first token. Peak memory is scoped since pr
 last explicit reset; TTFT is unavailable. Device strings and stream completion do not prove
 individual Metal kernels executed, so the protocol forbids that claim.
 
+## Static MLX runtime qualification protocol
+
+The qualification gate has no transport, worker, nonce, authorization, or execution command. Its
+canonical flow is:
+
+```text
+explicit qualification package -> strict static validation ->
+dependency/wheel/closure/API assessment -> exactly one qualification record
+```
+
+The package binds one exact target environment; exact MLX/MLX-LM and supplied transitive
+distribution versions; immutable source revisions/tags; wheel filenames, hashes, sizes, provenance
+URLs, tags, and exact supplied wheel bytes; canonical METADATA bytes; all supplied requirements and markers; the forbid-all
+extras policy; and immutable supplied source bytes for the seven future preflight probes. Marker
+evaluation uses only the package's explicit environment. Dependency explanations name the selected
+version or exact absence. Closure is limited to supplied distribution metadata and never claims
+stdlib/native-loader completeness.
+
+Eligibility verifies that supplied wheel bytes match the declared size/digest, contain exactly one
+bounded dist-info METADATA and WHEEL control record, and bind the same metadata bytes and filename
+tag. Probe evidence tokens are fixed by the specification rather than caller-selected. A real
+reviewed candidate additionally needs an independently committed evidence anchor in the
+qualification specification; that anchor set is empty in this milestone. Historical projections
+are always ineligible.
+
+The record reconstructs rather than trusts its decision and sorted blockers. Coordinated package
+and record rehashing cannot preserve a stale assessment. All install/network/process/socket,
+authorization, import, Metal/device/backend/synchronization, model/tokenizer/prompt/cache,
+inference/generation/benchmark/cloud/spend counters are exactly zero and reject booleans.
+`eligible_for_new_observed_authorization` is only a static prerequisite for human review. Schema
+1.0 remains permanently disabled; a distinct schema-1.1 protocol/spec/worker review and fresh
+explicit authorization are mandatory before any physical action.
+
 ## Ollama repeatability-study declaration
 
 `ollama_repeatability_study_declaration` schema 1.0 is additive to the existing foundation and

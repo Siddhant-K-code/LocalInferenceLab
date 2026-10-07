@@ -38,6 +38,13 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > receipt before any output-root access, socket, child, authorization, MLX import, or probe. A
 > compatible source/version pair requires a separately reviewed schema and new authorization.
 > Capability/spec and negative/failure replay remain process-free.
+> A new schema-1.0 **static qualification gate** can now decide whether an exact proposed
+> MLX/MLX-LM pair is eligible for human review toward a future schema-1.1 observed preflight.
+> It evaluates only supplied canonical METADATA/source bytes and explicit wheel/source/platform
+> metadata. It performs no install, network, process, socket, authorization, MLX import, Metal,
+> synchronization, model, or spend action. `eligible_for_new_observed_authorization` is not an
+> authorization or executability claim: schema 1.0 stays permanently disabled, and schema 1.1
+> still requires distinct protocol/spec/worker review plus a fresh explicit authorization.
 > The first authorized Apple Silicon runtime preflight **failed closed** after authorization
 > consumption because the worker reported a forbidden-action attempt. It was not retried. The
 > rejected worker frame was not retained by the original failure path, so no runtime import,
@@ -238,6 +245,12 @@ localinferencelab mlx fixture-replay CLOSED-BUNDLE
 localinferencelab mlx custody-self-test MODE_0700_OUTPUT_ROOT
 localinferencelab mlx custody-replay CLOSED-CUSTODY-BUNDLE
 localinferencelab mlx custody-inspect CLOSED-CUSTODY-BUNDLE
+localinferencelab mlx runtime-qualification-spec > QUALIFICATION-SPEC.json
+localinferencelab mlx runtime-qualification-create CANDIDATE.json RECORD.json
+localinferencelab mlx runtime-qualification-verify RECORD.json
+localinferencelab mlx runtime-qualification-inspect RECORD.json
+localinferencelab mlx runtime-qualification-fixture-compile OUTPUT_ROOT
+localinferencelab mlx runtime-qualification-replay CLOSED-QUALIFICATION-BUNDLE
 localinferencelab ollama output-root-init OUTPUT_ROOT --nonce NONCE
 localinferencelab ollama authorization-nonce-init NONCE_FILE
 localinferencelab ollama prospective-create SPEC OUTPUT --runtime-artifact FILE \
@@ -293,6 +306,22 @@ socketpair, consumes one synthetic one-shot authorization for `action=inert_refu
 publishes a bounded receipt-closed transcript. It performs zero MLX/MLX-LM imports, Metal/device
 actions, tokenizer/model loads, inference, snapshot resolution/download, cache mutation, network,
 cloud, or spend actions. `custody-replay` and `custody-inspect` are process- and socket-free.
+
+The MLX runtime qualification commands are static and process-free. A candidate package binds exact
+MLX/MLX-LM versions and immutable source revisions/tags; exact wheel names, sizes, hashes, URLs,
+Python/ABI/macOS/architecture tags and, for potentially eligible candidates, exact wheel bytes
+whose embedded METADATA and WHEEL tag are verified; canonical METADATA bytes; every supplied `Requires-Dist`,
+marker and extras policy; the supplied top-level/transitive distribution graph; and source-byte
+evidence for each future preflight API/probe. The gate derives wheel compatibility, marker
+applicability, selected dependency versions, exact satisfaction explanations, reachability, and
+sorted blockers. It intentionally claims semantic closure only over supplied distribution
+metadata, never the Python standard library or native loader. The fixture proves both outcomes:
+the frozen MLX `0.29.3` / MLX-LM `0.30.6` projection remains `ineligible`, while a clearly labeled
+synthetic complete closure yields `eligible_for_new_observed_authorization` without claiming a
+real coherent pair. Real reviewed candidates remain ineligible until an independent review adds
+their derived evidence anchor to the committed qualification specification; candidate-controlled
+digests cannot create that trust anchor. Every record binds the unchanged schema-1.0 negative projection, lock,
+terminal failure, authorization, consumption, historical protocol, and historical worker IDs.
 
 `declaration-spec`, `declaration-create`, `declaration-verify`, and `declaration-inspect` are
 declaration-only operations. They do not probe the host, read an Ollama endpoint, create
@@ -370,6 +399,14 @@ then retains the model-action authorization, generated-result, runtime/model/bac
 synchronization, and cross-platform executable-observation blockers. Replay opens no socket and
 starts no process.
 
+Qualification replay requires the canonical specification, exact historical-negative and
+synthetic-positive packages, their fully reconstructed records, the closed index, and receipt.
+It rejects missing/extra files, unknown fields, duplicate metadata, bool/int ambiguity, marker or
+extras ambiguity, incompatible wheel/platform/ABI tags, unsatisfied or incomplete dependency
+closure, source/wheel/METADATA/hash drift, unsupported provenance domains, stale decisions after
+coordinated rehashing, and any attempt to make qualification create or consume authorization or
+perform execution.
+
 See [Architecture](docs/architecture.md), [Protocol](docs/protocol.md), and
 [Current source research](docs/research/current-sources.md). The exact Ollama boundary is specified
 in [Ollama runner contract](docs/ollama-runner-contract.md); prospective preparation is described in
@@ -390,21 +427,23 @@ The project does not claim that:
 
 ## Roadmap
 
-1. Review the direct MLX supplied package/model-root byte closures and projections, protocol
-   design, exact controls, and refusal fixture.
-2. In a separately reviewed schema version, close applicable dependencies and Python
+1. Use the static MLX runtime qualification gate to review an exact proposed runtime pair and its
+   supplied metadata/source evidence without installing or importing it.
+2. For an eligible candidate, design and review a distinct schema-1.1 protocol/spec/worker and
+   fresh authorization; eligibility alone must never unlock physical action.
+3. In that separately reviewed schema version, close applicable dependencies and Python
    standard-library/native-loader bytes, then implement retained runtime/model descriptors,
    parent-owned private IPC/protocol/result validation, same-process
    import/backend/cache/synchronization attestation, pinned strict model key/shape loading, and
    one-shot authorization before adding any production worker start.
-3. Review the frozen Qwen3 declaration and fill only evidence obtainable without model or network
+4. Review the frozen Qwen3 declaration and fill only evidence obtainable without model or network
    action.
-4. Design a separately authorized future milestone for the two primitives named by the negative
+5. Design a separately authorized future milestone for the two primitives named by the negative
    assessment: privileged accepted-socket/process continuity plus in-process Ollama
    request-to-runner/model/Metal cooperation.
-5. Add separately authorized, preinstalled-resource runners for other backends.
-6. Publish observed bundles only after provenance, privacy, and positive-attestation review.
-7. Define a typed, indexed mapping-artifact protocol before any mapped cross-representation study.
+6. Add separately authorized, preinstalled-resource runners for other backends.
+7. Publish observed bundles only after provenance, privacy, and positive-attestation review.
+8. Define a typed, indexed mapping-artifact protocol before any mapped cross-representation study.
 
 ## Development
 
