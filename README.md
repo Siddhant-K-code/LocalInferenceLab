@@ -44,11 +44,14 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > metadata. It performs no install, network, process, socket, authorization, MLX import, Metal,
 > synchronization, model, or spend action. `eligible_for_new_observed_authorization` is not an
 > authorization or executability claim: schema 1.0 stays permanently disabled, and schema 1.1
-> still requires distinct protocol/spec/worker review plus a fresh explicit authorization.
+> still requires distinct protocol/spec/worker review plus future authoritative one-shot
+> authorization custody.
 > The prospective schema-1.1 contract now defines those prerequisite and result shapes without
 > making execution reachable. It accepts only a committed eligible `reviewed_candidate`
-> qualification record from the separate schema-1.0 anchor set plus a supplied fresh, unconsumed,
-> one-shot observed authorization bound to that record, anchor, spec, and protocol. There is no
+> qualification record from the separate schema-1.0 anchor set. Authoritative authorization
+> acquisition, current-expiry observation, exclusive consumption/non-reuse, and independent
+> output-root/nonce bindings are explicitly unavailable. A caller-supplied claim may be checked
+> only for canonical structure; it cannot satisfy those prerequisites. There is no
 > schema-1.1 worker, authorize command, authorization consumer, package installer, or execute
 > entrypoint. Its deterministic fixture proves that neither the synthetic-positive qualification
 > nor the frozen historical record can satisfy the prerequisites.
@@ -263,7 +266,7 @@ localinferencelab mlx runtime-preflight-1-1-protocol > PREFLIGHT-1-1-PROTOCOL.js
 localinferencelab mlx runtime-preflight-1-1-spec > PREFLIGHT-1-1-SPEC.json
 localinferencelab mlx runtime-preflight-1-1-record-create \
   QUALIFICATION-RECORD.json CONTRACT-RECORD.json \
-  [--authorization SUPPLIED-OBSERVED-AUTHORIZATION.json]
+  [--authorization-claim CALLER-SUPPLIED-STRUCTURE-ONLY.json]
 localinferencelab mlx runtime-preflight-1-1-record-verify CONTRACT-RECORD.json
 localinferencelab mlx runtime-preflight-1-1-record-inspect CONTRACT-RECORD.json
 localinferencelab mlx runtime-preflight-1-1-fixture-compile OUTPUT_ROOT
@@ -354,13 +357,14 @@ candidate-agnostic: exact runtime pins and bytes must come from a separately rev
 independently committed real-candidate qualification anchor. Record construction reconstructs the
 schema-1.0 qualification decision and requires `candidate_kind=reviewed_candidate`,
 `eligible_for_new_observed_authorization`, and membership of its derived anchor in the committed
-qualification spec. A supplied authorization must be canonical, explicitly observed, fresh,
-unconsumed, one-shot, and bound to the qualification record, review anchor, schema-1.1 spec, and
-protocol, output-root identity, and nonce commitment. This repository has no command to create or
-consume it.
+qualification spec. An optional caller-supplied authorization claim can name a qualification,
+review anchor, schema-1.1 spec/protocol, output-root digest, nonce digest, and internally ordered
+claimed time window. Those are self-asserted fields only: they do not prove acquisition, current
+freshness, independent root/nonce facts, exclusive consumption, or non-reuse.
 
-Even satisfied prerequisites would not unlock execution in this milestone. The implementation,
-worker, installer, and public/internal execute entrypoints are absent. The future physical action
+The authorization prerequisites cannot be satisfied in this milestone, and no supplied structure
+can unlock execution. The implementation, worker, installer, and public/internal execute
+entrypoints are absent. The future physical action
 contract is limited to exact isolated runtime-closure verification, imports of pinned `mlx.core`
 and `mlx_lm`, bounded distribution/backend/device/stream/Metal metadata, and at most one stream
 synchronization canary under a distinct explicit authorization. Model/tokenizer discovery or
@@ -480,8 +484,9 @@ The project does not claim that:
    supplied metadata/source evidence without installing or importing it.
 2. Commit an independently reviewed real-candidate anchor in the schema-1.0 qualification spec;
    the synthetic positive fixture and historical records remain categorically insufficient.
-3. Review the prospective schema-1.1 protocol/spec and separately design the worker plus fresh
-   observed authorization custody; the present contract machinery cannot unlock physical action.
+3. Review the prospective schema-1.1 protocol/spec and separately design the worker plus
+   authoritative acquisition, current-expiry, exclusive-consumption/non-reuse, and independent
+   output-root/nonce custody; the present contract machinery cannot unlock physical action.
 4. In a later execution-enabling review, close applicable dependencies and Python
    standard-library/native-loader bytes, then implement retained runtime/model descriptors,
    parent-owned private IPC/protocol/result validation, same-process

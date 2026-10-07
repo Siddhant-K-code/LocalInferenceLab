@@ -284,7 +284,7 @@ Schema 1.1 is a contract/refusal layer only. It defines no worker or execution c
 canonical flow is:
 
 ```text
-committed schema-1.0 qualification record + optional supplied observed authorization ->
+committed schema-1.0 qualification record + optional caller-supplied authorization claim ->
 strict canonical reconstruction -> prerequisite assessment ->
 disabled/unreachable contract record -> process-free inspection or closed-fixture replay
 ```
@@ -296,20 +296,22 @@ anchor membership even though it exercises the schema-1.0 positive decision. His
 schema-1.0 records are rejected by candidate kind, decision, and anchor membership. Their frozen
 records and identities are never rewritten.
 
-The authorization prerequisite is a separately supplied canonical
-`mlx_runtime_preflight_observed_authorization`. It must say
-`evidence_kind=observed_explicit_authorization`, `explicit_decision=authorize_once`,
-`one_shot=true`, and `consumption_state=fresh_unconsumed`; bind the exact qualification record,
-review anchor, schema-1.1 spec, protocol, output-root identity, and authorization-nonce commitment;
-and carry an issue/observation/expiry ordering within a 30-second maximum lifetime. Validation uses
-only those supplied integer timestamps and does not consult or mutate a clock. No command creates
-or consumes the record, and validation is not proof of its future acquisition custody.
+The authorization prerequisite cannot be satisfied in this milestone. Authoritative acquisition,
+current-expiry observation, exclusive consumption/non-reuse, and independently verified
+output-root and nonce facts are unavailable. An optional
+`mlx_runtime_preflight_authorization_claim` uses
+`evidence_kind=caller_supplied_structure_only` and may carry claimed one-shot, unconsumed,
+qualification, anchor, spec/protocol, root/nonce digest, and internally ordered time-window fields.
+Validation uses no wall clock and treats every field as self-asserted. The claim never proves
+current freshness, authoritative acquisition, independent binding, consumption, or non-reuse and
+can never make `prerequisites_satisfied=true`.
 
 The prospective future physical sequence is:
 
 ```text
 validate committed real-candidate qualification ->
-validate fresh observed one-shot authorization ->
+require authoritative authorization acquisition/expiry/consumption custody ->
+require independently verified output-root and nonce facts ->
 verify exact isolated supplied runtime closure ->
 future parent launch/identity -> future authorization consumption ->
 one model-free preflight -> strict parent validation -> shutdown/parent wait

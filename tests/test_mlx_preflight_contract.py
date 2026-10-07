@@ -37,7 +37,7 @@ from localinferencelab.mlx_preflight_contract import (
     runtime_preflight_capability_report_1_1,
     runtime_preflight_protocol_1_1,
     runtime_preflight_spec_1_1,
-    verify_observed_authorization_1_1,
+    verify_authorization_claim_1_1,
     verify_runtime_preflight_record_1_1,
     write_runtime_preflight_record_1_1,
 )
@@ -75,33 +75,35 @@ def _qualification(candidate: str = "synthetic") -> dict[str, JsonValue]:
     return build_qualification_record(package)
 
 
-def _authorization(
+def _authorization_claim(
     qualification: dict[str, JsonValue],
     *,
     issued_at: int = 1_000_000_000,
+    nonce_sha256: str = "sha256:" + ("1" * 64),
+    output_root_id: str = "sha256:" + ("2" * 64),
 ) -> dict[str, JsonValue]:
     assessment = _dict(qualification["assessment"])
     spec = runtime_preflight_spec_1_1()
     value: dict[str, JsonValue] = {
-        "record_type": "mlx_runtime_preflight_observed_authorization",
+        "record_type": "mlx_runtime_preflight_authorization_claim",
         "schema_version": "1.1",
-        "evidence_kind": "observed_explicit_authorization",
+        "evidence_kind": "caller_supplied_structure_only",
         "action": ACTION,
-        "explicit_decision": "authorize_once",
-        "one_shot": True,
-        "consumption_state": "fresh_unconsumed",
+        "claimed_decision": "authorize_once",
+        "claimed_one_shot": True,
+        "claimed_consumption_state": "unconsumed",
         "qualification_record_id": qualification["record_id"],
         "qualification_review_anchor_id": assessment["review_anchor_id"],
-        "nonce_sha256": "sha256:" + ("1" * 64),
-        "output_root_id": "sha256:" + ("2" * 64),
+        "claimed_nonce_sha256": nonce_sha256,
+        "claimed_output_root_id": output_root_id,
         "spec_id": spec["spec_id"],
         "protocol_id": spec["protocol_id"],
-        "issued_at_unix_ns": issued_at,
-        "observed_at_unix_ns": issued_at + 1,
-        "expires_at_unix_ns": issued_at + AUTHORIZATION_LIFETIME_NS,
-        "synchronization_canary_authorized": False,
+        "claimed_issued_at_unix_ns": issued_at,
+        "claimed_validation_time_unix_ns": issued_at + 1,
+        "claimed_expires_at_unix_ns": issued_at + AUTHORIZATION_LIFETIME_NS,
+        "synchronization_canary_claimed_authorized": False,
     }
-    value["authorization_id"] = canonical_identity(value)
+    value["claim_id"] = canonical_identity(value)
     return value
 
 
@@ -109,6 +111,15 @@ def _rehash(value: dict[str, JsonValue], identity_field: str) -> None:
     content = dict(value)
     content.pop(identity_field, None)
     value[identity_field] = canonical_identity(content)
+
+
+_UNRESOLVED_AUTHORIZATION_BLOCKERS = {
+    "authoritative_authorization_acquisition_custody_unimplemented",
+    "authoritative_authorization_current_expiry_observation_unimplemented",
+    "authoritative_authorization_exclusive_consumption_and_nonreuse_custody_unimplemented",
+    "independent_authorization_nonce_binding_unimplemented",
+    "independent_output_root_identity_binding_unimplemented",
+}
 
 
 def test_spec_protocol_and_capability_keep_execution_unreachable() -> None:
@@ -122,6 +133,7 @@ def test_spec_protocol_and_capability_keep_execution_unreachable() -> None:
     assert _dict(spec["execution"]) == {
         "authorization_consumer_present": False,
         "authorization_creator_present": False,
+        "authoritative_authorization_prerequisite_satisfiable": False,
         "becomes_reachable_when_prerequisites_satisfied": False,
         "implementation_present": False,
         "package_retrieval_or_installation_present": False,
@@ -134,6 +146,10 @@ def test_spec_protocol_and_capability_keep_execution_unreachable() -> None:
     assert report["execution_reachable"] is False
     assert report["execute_command_present"] is False
     assert report["physical_actions"] == 0
+    assert report["prerequisites_satisfiable"] is False
+    assert set(_list(report["unresolved_authorization_blockers"])) == (
+        _UNRESOLVED_AUTHORIZATION_BLOCKERS
+    )
     assert not any("execute" in cast("str", item) for item in _list(report["pure_commands"]))
 
 
@@ -227,7 +243,7 @@ def test_synthetic_positive_and_historical_records_cannot_satisfy_prerequisites(
     assert synthetic["decision"] == ELIGIBLE
     synthetic_record = build_runtime_preflight_record_1_1(
         synthetic,
-        _authorization(synthetic),
+        _authorization_claim(synthetic),
     )
     synthetic_inspection = inspect_runtime_preflight_record_1_1(synthetic_record)
     assert synthetic_inspection["prerequisites_satisfied"] is False
@@ -242,7 +258,7 @@ def test_synthetic_positive_and_historical_records_cannot_satisfy_prerequisites(
     historical = _qualification("historical")
     historical_record = build_runtime_preflight_record_1_1(
         historical,
-        _authorization(historical),
+        _authorization_claim(historical),
     )
     historical_inspection = inspect_runtime_preflight_record_1_1(historical_record)
     assert historical_inspection["prerequisites_satisfied"] is False
@@ -253,11 +269,16 @@ def test_synthetic_positive_and_historical_records_cannot_satisfy_prerequisites(
     assert qualification_spec()["reviewed_candidate_anchors"] == []
 
 
-def test_missing_authorization_refuses_without_creating_or_consuming_one() -> None:
+def test_missing_authorization_claim_refuses_without_authoritative_custody() -> None:
     record = build_runtime_preflight_record_1_1(_qualification())
     inspection = inspect_runtime_preflight_record_1_1(record)
-    assert inspection["authorization_id"] is None
-    assert "fresh_observed_one_shot_authorization_missing" in _list(inspection["blockers"])
+    assert inspection["authorization_claim_id"] is None
+    blockers = set(_list(inspection["blockers"]))
+    assert "authorization_claim_structure_missing" in blockers
+    assert blockers >= _UNRESOLVED_AUTHORIZATION_BLOCKERS
+    assert inspection["authoritative_authorization_custody_supported"] is False
+    assert inspection["independent_output_root_binding_supported"] is False
+    assert inspection["independent_nonce_binding_supported"] is False
     assert inspection["execution_state"] == "disabled_unreachable_contract_only"
     assert inspection["schema_1_0_state"] == "permanently_disabled"
     assert inspection["attempted_actions"] == []
@@ -270,51 +291,100 @@ def test_missing_authorization_refuses_without_creating_or_consuming_one() -> No
     ("field", "value", "message"),
     [
         ("evidence_kind", "synthetic_fixture", "unsupported"),
-        ("one_shot", 1, "unsupported"),
-        ("consumption_state", "consumed", "unsupported"),
-        ("synchronization_canary_authorized", True, "unsupported"),
-        ("observed_at_unix_ns", True, "integer"),
+        ("claimed_one_shot", 1, "unsupported"),
+        ("claimed_consumption_state", "consumed", "unsupported"),
+        ("synchronization_canary_claimed_authorized", True, "unsupported"),
+        ("claimed_validation_time_unix_ns", True, "integer"),
     ],
 )
-def test_authorization_validation_fails_closed(
+def test_authorization_claim_structure_validation_fails_closed(
     field: str,
     value: JsonValue,
     message: str,
 ) -> None:
     qualification = _qualification()
-    authorization = _authorization(qualification)
-    authorization[field] = value
-    _rehash(authorization, "authorization_id")
+    claim = _authorization_claim(qualification)
+    claim[field] = value
+    _rehash(claim, "claim_id")
     with pytest.raises(ContractError, match=message):
-        verify_observed_authorization_1_1(authorization)
+        verify_authorization_claim_1_1(claim)
 
 
-def test_authorization_rejects_excess_lifetime_and_binding_mismatch() -> None:
+def test_authorization_claim_rejects_excess_window_and_named_record_mismatch() -> None:
     qualification = _qualification()
-    excessive = _authorization(qualification)
-    excessive["expires_at_unix_ns"] = cast("int", excessive["issued_at_unix_ns"]) + (
-        AUTHORIZATION_LIFETIME_NS + 1
-    )
-    _rehash(excessive, "authorization_id")
-    with pytest.raises(ContractError, match="lifetime bound"):
-        verify_observed_authorization_1_1(excessive)
+    excessive = _authorization_claim(qualification)
+    excessive["claimed_expires_at_unix_ns"] = cast(
+        "int", excessive["claimed_issued_at_unix_ns"]
+    ) + (AUTHORIZATION_LIFETIME_NS + 1)
+    _rehash(excessive, "claim_id")
+    with pytest.raises(ContractError, match="structural lifetime bound"):
+        verify_authorization_claim_1_1(excessive)
 
-    mismatched = _authorization(qualification)
+    mismatched = _authorization_claim(qualification)
     mismatched["qualification_record_id"] = "sha256:" + ("0" * 64)
-    _rehash(mismatched, "authorization_id")
+    _rehash(mismatched, "claim_id")
     record = build_runtime_preflight_record_1_1(qualification, mismatched)
-    assert "authorization_qualification_record_mismatch" in _list(
+    assert "authorization_claim_qualification_record_mismatch" in _list(
         _dict(record["prerequisite_assessment"])["blockers"]
     )
+
+
+def test_fabricated_historical_claim_replay_and_reuse_always_refuse() -> None:
+    qualification = _qualification()
+    historical_claim = _authorization_claim(qualification, issued_at=1)
+    assert verify_authorization_claim_1_1(historical_claim) == historical_claim
+
+    first = build_runtime_preflight_record_1_1(qualification, historical_claim)
+    replayed = build_runtime_preflight_record_1_1(qualification, historical_claim)
+    assert first == replayed
+    for record in (first, replayed):
+        assessment = _dict(record["prerequisite_assessment"])
+        assert assessment["prerequisites_satisfied"] is False
+        blockers = set(_list(assessment["blockers"]))
+        assert blockers >= _UNRESOLVED_AUTHORIZATION_BLOCKERS
+        assert "authoritative_authorization_current_expiry_observation_unimplemented" in blockers
+        assert (
+            "authoritative_authorization_exclusive_consumption_and_nonreuse_custody_unimplemented"
+            in blockers
+        )
+
+
+def test_arbitrary_claimed_root_and_nonce_values_never_satisfy_bindings() -> None:
+    qualification = _qualification()
+    records = [
+        build_runtime_preflight_record_1_1(
+            qualification,
+            _authorization_claim(
+                qualification,
+                nonce_sha256="sha256:" + (nonce_digit * 64),
+                output_root_id="sha256:" + (root_digit * 64),
+            ),
+        )
+        for nonce_digit, root_digit in (("3", "4"), ("5", "6"))
+    ]
+    assert records[0]["authorization_claim_id"] != records[1]["authorization_claim_id"]
+    for record in records:
+        inspection = inspect_runtime_preflight_record_1_1(record)
+        assert inspection["prerequisites_satisfied"] is False
+        blockers = set(_list(inspection["blockers"]))
+        assert "independent_authorization_nonce_binding_unimplemented" in blockers
+        assert "independent_output_root_identity_binding_unimplemented" in blockers
+        assert inspection["independent_nonce_binding_supported"] is False
+        assert inspection["independent_output_root_binding_supported"] is False
 
 
 def test_record_rejects_forged_readiness_ledgers_and_coordinated_rehashing() -> None:
     record = build_runtime_preflight_record_1_1(_qualification())
 
     forged = _copy(record)
-    _dict(forged["prerequisite_assessment"])["prerequisites_satisfied"] = True
+    forged_assessment = _dict(forged["prerequisite_assessment"])
+    forged_assessment["prerequisites_satisfied"] = True
+    forged_assessment["authoritative_authorization_custody_supported"] = True
+    forged_assessment["independent_output_root_binding_supported"] = True
+    forged_assessment["independent_nonce_binding_supported"] = True
+    forged_assessment["blockers"] = []
     _rehash(forged, "record_id")
-    with pytest.raises(ContractError, match="reconstruction mismatch"):
+    with pytest.raises(ContractError, match="authoritative authorization prerequisites"):
         verify_runtime_preflight_record_1_1(forged)
 
     attempted = _copy(record)
@@ -362,6 +432,9 @@ def test_fixture_is_deterministic_process_free_and_contains_no_private_path(
     }
     assert first_replay.synthetic_prerequisites_satisfied is False
     assert first_replay.historical_prerequisites_satisfied is False
+    assert first_replay.authoritative_authorization_custody_supported is False
+    assert first_replay.independent_output_root_binding_supported is False
+    assert first_replay.independent_nonce_binding_supported is False
     assert first_replay.fixture_id.startswith("sha256:")
     assert first_replay.physical_actions == 0
     assert first_replay.authorization_creations == 0
@@ -392,8 +465,12 @@ def test_validation_and_replay_touch_no_physical_boundary(
     monkeypatch.setattr(custody_module, "run_inert_custody_self_test", forbidden)
 
     qualification = _qualification()
-    record = build_runtime_preflight_record_1_1(qualification, _authorization(qualification))
+    record = build_runtime_preflight_record_1_1(
+        qualification,
+        _authorization_claim(qualification),
+    )
     verify_runtime_preflight_record_1_1(record)
+    assert _dict(record["prerequisite_assessment"])["prerequisites_satisfied"] is False
     replay = replay_runtime_preflight_fixture_1_1(bundle)
     assert replay.physical_actions == 0
 
@@ -435,6 +512,26 @@ def test_cli_contract_record_and_fixture_commands_are_pure(
     created = _dict(load_json_bytes(capfd.readouterr().out.encode("utf-8").strip()))
     assert created["status"] == "created"
     assert created["prerequisites_satisfied"] is False
+    qualification = _qualification()
+    claim_path = tmp_path / "authorization-claim.json"
+    claim_path.write_bytes(canonical_json(_authorization_claim(qualification, issued_at=1)))
+    claimed_record_path = tmp_path / "claimed-record.json"
+    assert (
+        run(
+            [
+                "mlx",
+                "runtime-preflight-1-1-record-create",
+                str(qualification_path),
+                str(claimed_record_path),
+                "--authorization-claim",
+                str(claim_path),
+            ]
+        )
+        == 0
+    )
+    claimed = _dict(load_json_bytes(capfd.readouterr().out.encode("utf-8").strip()))
+    assert claimed["prerequisites_satisfied"] is False
+    assert set(_list(claimed["blockers"])) >= _UNRESOLVED_AUTHORIZATION_BLOCKERS
     assert run(["mlx", "runtime-preflight-1-1-record-verify", str(record_path)]) == 0
     assert (
         _dict(load_json_bytes(capfd.readouterr().out.encode("utf-8").strip()))["status"] == "valid"

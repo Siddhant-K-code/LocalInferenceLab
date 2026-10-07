@@ -158,8 +158,8 @@ Every package binds the frozen schema-1.0 negative projection, runtime lock, ter
 authorization, consumption, historical protocol, and historical worker IDs with
 `ids_modified=false`, `retry_authorized=false`, and
 `schema_1_0_state=permanently_disabled`. An eligible record still requires a distinct schema-1.1
-protocol/spec/worker review and fresh explicit authorization before any package installation,
-network, child/socket, import, backend, Metal, synchronization, or model action.
+protocol/spec/worker review and authoritative one-shot authorization custody before any package
+installation, network, child/socket, import, backend, Metal, synchronization, or model action.
 
 ## Prospective schema-1.1 runtime-preflight contract
 
@@ -172,18 +172,20 @@ The protocol and spec are candidate-agnostic. Exact runtime versions and bytes m
 eligible schema-1.0 `reviewed_candidate` qualification record whose derived review anchor is in the
 committed qualification spec. Strict reconstruction rejects the synthetic-positive fixture,
 historical projections, forged decisions, uncommitted anchors, and coordinated rehashing. The
-second prerequisite is a separately supplied `mlx_runtime_preflight_observed_authorization`:
-explicit, observed, fresh, unconsumed, one-shot, bounded to 30 seconds, and identity-bound to the
-qualification record, review anchor, schema-1.1 spec, protocol, output root, and nonce commitment.
-This module can validate that future record but cannot create or consume one.
+second prerequisite is future authoritative one-shot authorization custody. Acquisition,
+current-expiry observation, exclusive consumption/non-reuse, and independently verified
+output-root and nonce facts are all unimplemented. A caller may supply an
+`mlx_runtime_preflight_authorization_claim` whose canonical structure and internal claimed time
+ordering are checked, but every field remains self-asserted. The claim cannot satisfy any
+authoritative custody or independent-binding prerequisite.
 
 The contract record keeps execution unreachable regardless of prerequisite state. There is no
 schema-1.1 worker, package installer/retriever, authorization creator/consumer, or public/internal
 execute entrypoint. Current construction and replay leave `attempted_actions`,
 `completed_actions`, and `accepted_evidence` empty and all physical counters zero. Closed fixture
 replay deterministically reconstructs refusals for the synthetic eligible qualification and the
-historical incompatible qualification; it includes no real candidate, observed authorization,
-private raw evidence, or private path.
+historical incompatible qualification; it includes no real candidate, authoritative
+authorization, private raw evidence, or private path.
 
 The future physical action contract is deliberately narrower than model execution: exact isolated
 runtime-closure verification; imports only of pinned `mlx.core` and `mlx_lm` plus transitive files

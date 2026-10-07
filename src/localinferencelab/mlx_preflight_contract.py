@@ -40,6 +40,13 @@ _ATTEMPTED_ACTIONS = (
     "mlx_lm_import",
 )
 _CONDITIONAL_SYNCHRONIZATION_ACTION = "single_default_stream_synchronization_canary"
+_UNRESOLVED_AUTHORIZATION_BLOCKERS = (
+    "authoritative_authorization_acquisition_custody_unimplemented",
+    "authoritative_authorization_current_expiry_observation_unimplemented",
+    "authoritative_authorization_exclusive_consumption_and_nonreuse_custody_unimplemented",
+    "independent_authorization_nonce_binding_unimplemented",
+    "independent_output_root_identity_binding_unimplemented",
+)
 _FORBIDDEN_ACTIONS = (
     "arbitrary_command",
     "benchmark",
@@ -98,6 +105,9 @@ class Schema11ReplayResult:
     historical_record_id: str
     synthetic_prerequisites_satisfied: bool
     historical_prerequisites_satisfied: bool
+    authoritative_authorization_custody_supported: bool
+    independent_output_root_binding_supported: bool
+    independent_nonce_binding_supported: bool
     package_installations: int
     process_starts: int
     runtime_imports: int
@@ -115,6 +125,13 @@ class Schema11ReplayResult:
             "historical_record_id": self.historical_record_id,
             "synthetic_prerequisites_satisfied": self.synthetic_prerequisites_satisfied,
             "historical_prerequisites_satisfied": self.historical_prerequisites_satisfied,
+            "authoritative_authorization_custody_supported": (
+                self.authoritative_authorization_custody_supported
+            ),
+            "independent_output_root_binding_supported": (
+                self.independent_output_root_binding_supported
+            ),
+            "independent_nonce_binding_supported": self.independent_nonce_binding_supported,
             "package_installations": self.package_installations,
             "process_starts": self.process_starts,
             "runtime_imports": self.runtime_imports,
@@ -201,7 +218,8 @@ def runtime_preflight_protocol_1_1() -> dict[str, JsonValue]:
         "framing": "uint32_be_length_then_canonical_json",
         "sequence": [
             "validate_committed_real_candidate_qualification",
-            "validate_fresh_observed_one_shot_authorization",
+            "require_authoritative_authorization_acquisition_expiry_and_consumption_custody",
+            "require_independent_output_root_and_nonce_bindings",
             "verify_exact_isolated_runtime_closure",
             "future_parent_launch_and_identity",
             "future_authorization_consumption",
@@ -287,21 +305,27 @@ def runtime_preflight_spec_1_1() -> dict[str, JsonValue]:
                 "historical_schema_1_0_record_accepted": False,
             },
             "authorization": {
-                "record_type": "mlx_runtime_preflight_observed_authorization",
-                "schema_version": SCHEMA_VERSION,
-                "evidence_kind": "observed_explicit_authorization",
-                "action": ACTION,
-                "one_shot": True,
-                "state": "fresh_unconsumed",
-                "maximum_lifetime_ns": AUTHORIZATION_LIFETIME_NS,
-                "must_bind": [
-                    "authorization_nonce_commitment",
-                    "output_root_identity",
-                    "protocol_id",
-                    "qualification_record_id",
-                    "qualification_review_anchor_id",
-                    "spec_id",
+                "authoritative_custody_state": "unimplemented_unavailable",
+                "required_future_properties": [
+                    "authoritative_acquisition",
+                    "current_expiry_observation",
+                    "exclusive_consumption",
+                    "independent_nonce_binding",
+                    "independent_output_root_binding",
+                    "nonreuse_proof",
+                    "one_shot",
                 ],
+                "maximum_future_lifetime_ns": AUTHORIZATION_LIFETIME_NS,
+                "caller_supplied_claim": {
+                    "record_type": "mlx_runtime_preflight_authorization_claim",
+                    "schema_version": SCHEMA_VERSION,
+                    "evidence_kind": "caller_supplied_structure_only",
+                    "can_satisfy_authoritative_prerequisite": False,
+                    "can_prove_current_freshness": False,
+                    "can_prove_independent_bindings": False,
+                    "can_prove_nonreuse_or_consumption": False,
+                },
+                "unresolved_blockers": list(_UNRESOLVED_AUTHORIZATION_BLOCKERS),
             },
         },
         "execution": {
@@ -310,6 +334,7 @@ def runtime_preflight_spec_1_1() -> dict[str, JsonValue]:
             "worker_present": False,
             "authorization_creator_present": False,
             "authorization_consumer_present": False,
+            "authoritative_authorization_prerequisite_satisfiable": False,
             "package_retrieval_or_installation_present": False,
             "public_or_internal_execute_entrypoint_present": False,
             "becomes_reachable_when_prerequisites_satisfied": False,
@@ -334,92 +359,92 @@ def runtime_preflight_spec_1_1() -> dict[str, JsonValue]:
     return content
 
 
-def verify_observed_authorization_1_1(value: JsonValue) -> dict[str, JsonValue]:
-    """Validate a supplied future authorization record without creating or consuming it."""
-    authorization = _mapping(value, "schema_1_1_observed_authorization")
+def verify_authorization_claim_1_1(value: JsonValue) -> dict[str, JsonValue]:
+    """Validate a caller-supplied structure that is not authoritative authorization evidence."""
+    claim = _mapping(value, "schema_1_1_authorization_claim")
     fields = {
         "action",
-        "authorization_id",
-        "consumption_state",
+        "claim_id",
+        "claimed_consumption_state",
+        "claimed_decision",
+        "claimed_expires_at_unix_ns",
+        "claimed_issued_at_unix_ns",
+        "claimed_nonce_sha256",
+        "claimed_one_shot",
+        "claimed_output_root_id",
+        "claimed_validation_time_unix_ns",
         "evidence_kind",
-        "expires_at_unix_ns",
-        "explicit_decision",
-        "issued_at_unix_ns",
-        "nonce_sha256",
-        "observed_at_unix_ns",
-        "one_shot",
-        "output_root_id",
         "protocol_id",
         "qualification_record_id",
         "qualification_review_anchor_id",
         "record_type",
         "schema_version",
         "spec_id",
-        "synchronization_canary_authorized",
+        "synchronization_canary_claimed_authorized",
     }
-    _keys(authorization, fields, "schema_1_1_observed_authorization")
+    _keys(claim, fields, "schema_1_1_authorization_claim")
     spec = runtime_preflight_spec_1_1()
     if (
-        authorization["record_type"] != "mlx_runtime_preflight_observed_authorization"
-        or authorization["schema_version"] != SCHEMA_VERSION
-        or authorization["evidence_kind"] != "observed_explicit_authorization"
-        or authorization["action"] != ACTION
-        or authorization["explicit_decision"] != "authorize_once"
-        or authorization["one_shot"] is not True
-        or authorization["consumption_state"] != "fresh_unconsumed"
-        or authorization["synchronization_canary_authorized"] is not False
-        or authorization["spec_id"] != spec["spec_id"]
-        or authorization["protocol_id"] != spec["protocol_id"]
+        claim["record_type"] != "mlx_runtime_preflight_authorization_claim"
+        or claim["schema_version"] != SCHEMA_VERSION
+        or claim["evidence_kind"] != "caller_supplied_structure_only"
+        or claim["action"] != ACTION
+        or claim["claimed_decision"] != "authorize_once"
+        or claim["claimed_one_shot"] is not True
+        or claim["claimed_consumption_state"] != "unconsumed"
+        or claim["synchronization_canary_claimed_authorized"] is not False
+        or claim["spec_id"] != spec["spec_id"]
+        or claim["protocol_id"] != spec["protocol_id"]
     ):
-        raise ContractError("unsupported schema-1.1 observed authorization")
+        raise ContractError("unsupported schema-1.1 authorization claim")
     _sha256(
-        authorization["qualification_record_id"],
-        "schema_1_1_observed_authorization.qualification_record_id",
+        claim["qualification_record_id"],
+        "schema_1_1_authorization_claim.qualification_record_id",
     )
     _sha256(
-        authorization["qualification_review_anchor_id"],
-        "schema_1_1_observed_authorization.qualification_review_anchor_id",
+        claim["qualification_review_anchor_id"],
+        "schema_1_1_authorization_claim.qualification_review_anchor_id",
     )
     _sha256(
-        authorization["nonce_sha256"],
-        "schema_1_1_observed_authorization.nonce_sha256",
+        claim["claimed_nonce_sha256"],
+        "schema_1_1_authorization_claim.claimed_nonce_sha256",
     )
     _sha256(
-        authorization["output_root_id"],
-        "schema_1_1_observed_authorization.output_root_id",
+        claim["claimed_output_root_id"],
+        "schema_1_1_authorization_claim.claimed_output_root_id",
     )
     issued = _integer(
-        authorization["issued_at_unix_ns"],
-        "schema_1_1_observed_authorization.issued_at_unix_ns",
+        claim["claimed_issued_at_unix_ns"],
+        "schema_1_1_authorization_claim.claimed_issued_at_unix_ns",
         minimum=1,
     )
-    observed = _integer(
-        authorization["observed_at_unix_ns"],
-        "schema_1_1_observed_authorization.observed_at_unix_ns",
+    validation_time = _integer(
+        claim["claimed_validation_time_unix_ns"],
+        "schema_1_1_authorization_claim.claimed_validation_time_unix_ns",
         minimum=issued,
     )
     expires = _integer(
-        authorization["expires_at_unix_ns"],
-        "schema_1_1_observed_authorization.expires_at_unix_ns",
-        minimum=observed + 1,
+        claim["claimed_expires_at_unix_ns"],
+        "schema_1_1_authorization_claim.claimed_expires_at_unix_ns",
+        minimum=validation_time + 1,
     )
     if expires - issued > AUTHORIZATION_LIFETIME_NS:
-        raise ContractError("schema-1.1 observed authorization exceeds its lifetime bound")
+        raise ContractError("schema-1.1 authorization claim exceeds its structural lifetime bound")
     identity = _sha256(
-        authorization["authorization_id"],
-        "schema_1_1_observed_authorization.authorization_id",
+        claim["claim_id"],
+        "schema_1_1_authorization_claim.claim_id",
     )
-    content = dict(authorization)
-    del content["authorization_id"]
+    content = dict(claim)
+    del content["claim_id"]
     if identity != canonical_identity(content):
-        raise ContractError("schema-1.1 observed authorization identity mismatch")
-    return dict(authorization)
+        raise ContractError("schema-1.1 authorization claim identity mismatch")
+    return dict(claim)
 
 
-def load_observed_authorization_1_1(path: Path) -> dict[str, JsonValue]:
-    """Load a supplied canonical future authorization record."""
-    return verify_observed_authorization_1_1(
-        load_canonical_json_file(path, "schema-1.1 observed authorization")
+def load_authorization_claim_1_1(path: Path) -> dict[str, JsonValue]:
+    """Load a canonical caller-supplied authorization claim."""
+    return verify_authorization_claim_1_1(
+        load_canonical_json_file(path, "schema-1.1 authorization claim")
     )
 
 
@@ -475,44 +500,50 @@ def _qualification_prerequisite_assessment(
 
 def build_runtime_preflight_record_1_1(
     qualification_value: JsonValue,
-    authorization_value: JsonValue | None = None,
+    authorization_claim_value: JsonValue | None = None,
 ) -> dict[str, JsonValue]:
     """Build a deterministic contract/refusal record without physical runtime action."""
     qualification_record = verify_qualification_record(qualification_value)
     qualification_checks, blockers, review_anchor_id = _qualification_prerequisite_assessment(
         qualification_record
     )
-    authorization: dict[str, JsonValue] | None
-    authorization_checks: list[JsonValue]
-    if authorization_value is None:
-        authorization = None
-        authorization_checks = [
-            {"name": "fresh_observed_one_shot_authorization_present", "satisfied": False}
+    authorization_claim: dict[str, JsonValue] | None
+    authorization_claim_checks: list[JsonValue]
+    if authorization_claim_value is None:
+        authorization_claim = None
+        authorization_claim_checks = [
+            {
+                "name": "caller_supplied_authorization_claim_structure_present",
+                "satisfied": False,
+            }
         ]
-        blockers.append("fresh_observed_one_shot_authorization_missing")
+        blockers.append("authorization_claim_structure_missing")
     else:
-        authorization = verify_observed_authorization_1_1(authorization_value)
+        authorization_claim = verify_authorization_claim_1_1(authorization_claim_value)
         bindings = [
             (
-                "authorization_binds_qualification_record",
-                authorization["qualification_record_id"] == qualification_record["record_id"],
-                "authorization_qualification_record_mismatch",
+                "authorization_claim_names_qualification_record",
+                authorization_claim["qualification_record_id"] == qualification_record["record_id"],
+                "authorization_claim_qualification_record_mismatch",
             ),
             (
-                "authorization_binds_review_anchor",
-                authorization["qualification_review_anchor_id"] == review_anchor_id,
-                "authorization_review_anchor_mismatch",
+                "authorization_claim_names_review_anchor",
+                authorization_claim["qualification_review_anchor_id"] == review_anchor_id,
+                "authorization_claim_review_anchor_mismatch",
             ),
         ]
-        authorization_checks = [
-            {"name": "fresh_observed_one_shot_authorization_present", "satisfied": True}
+        authorization_claim_checks = [
+            {
+                "name": "caller_supplied_authorization_claim_structure_present",
+                "satisfied": True,
+            }
         ]
         for name, satisfied, blocker in bindings:
-            authorization_checks.append({"name": name, "satisfied": satisfied})
+            authorization_claim_checks.append({"name": name, "satisfied": satisfied})
             if not satisfied:
                 blockers.append(blocker)
+    blockers.extend(_UNRESOLVED_AUTHORIZATION_BLOCKERS)
     sorted_blockers = sorted(set(blockers))
-    prerequisites_satisfied = not sorted_blockers
     spec = runtime_preflight_spec_1_1()
     record: dict[str, JsonValue] = {
         "record_type": "mlx_runtime_preflight_contract_record",
@@ -522,13 +553,18 @@ def build_runtime_preflight_record_1_1(
         "qualification_record": qualification_record,
         "qualification_record_id": qualification_record["record_id"],
         "qualification_review_anchor_id": review_anchor_id,
-        "authorization_evidence": authorization,
-        "authorization_id": None if authorization is None else authorization["authorization_id"],
+        "authorization_claim": authorization_claim,
+        "authorization_claim_id": (
+            None if authorization_claim is None else authorization_claim["claim_id"]
+        ),
         "prerequisite_assessment": {
             "qualification_checks": qualification_checks,
-            "authorization_checks": authorization_checks,
+            "authorization_claim_checks": authorization_claim_checks,
+            "authoritative_authorization_custody_supported": False,
+            "independent_output_root_binding_supported": False,
+            "independent_nonce_binding_supported": False,
             "blockers": cast("list[JsonValue]", sorted_blockers),
-            "prerequisites_satisfied": prerequisites_satisfied,
+            "prerequisites_satisfied": False,
         },
         "execution_disposition": {
             "state": "disabled_unreachable_contract_only",
@@ -536,6 +572,7 @@ def build_runtime_preflight_record_1_1(
             "worker_implementation_present": False,
             "execute_entrypoint_present": False,
             "prerequisites_do_not_unlock_execution": True,
+            "authoritative_authorization_prerequisite_satisfiable": False,
         },
         "evidence_ledgers": {
             "attempted_actions": [],
@@ -555,8 +592,8 @@ def verify_runtime_preflight_record_1_1(value: JsonValue) -> dict[str, JsonValue
     """Reconstruct a schema-1.1 contract record and reject forged readiness claims."""
     record = _mapping(value, "schema_1_1_runtime_preflight_record")
     fields = {
-        "authorization_evidence",
-        "authorization_id",
+        "authorization_claim",
+        "authorization_claim_id",
         "evidence_ledgers",
         "execution_disposition",
         "historical_records_rewritten",
@@ -598,15 +635,30 @@ def verify_runtime_preflight_record_1_1(value: JsonValue) -> dict[str, JsonValue
     for name in ("attempted_actions", "completed_actions", "accepted_evidence"):
         if _array(ledgers[name], f"schema-1.1 evidence ledgers.{name}") != []:
             raise ContractError(f"schema-1.1 evidence ledgers.{name} must remain empty")
+    assessment = _mapping(record["prerequisite_assessment"], "schema-1.1 assessment")
+    blockers = {
+        _text(item, f"schema-1.1 assessment.blockers[{index}]")
+        for index, item in enumerate(_array(assessment["blockers"], "schema-1.1 blockers"))
+    }
+    if (
+        assessment["prerequisites_satisfied"] is not False
+        or assessment["authoritative_authorization_custody_supported"] is not False
+        or assessment["independent_output_root_binding_supported"] is not False
+        or assessment["independent_nonce_binding_supported"] is not False
+        or not set(_UNRESOLVED_AUTHORIZATION_BLOCKERS).issubset(blockers)
+    ):
+        raise ContractError(
+            "schema-1.1 authoritative authorization prerequisites remain unresolved"
+        )
     identity = _sha256(record["record_id"], "schema_1_1_runtime_preflight_record.record_id")
     content = dict(record)
     del content["record_id"]
     if identity != canonical_identity(content):
         raise ContractError("schema-1.1 runtime preflight record identity mismatch")
-    authorization = record["authorization_evidence"]
+    authorization_claim = record["authorization_claim"]
     rebuilt = build_runtime_preflight_record_1_1(
         record["qualification_record"],
-        authorization,
+        authorization_claim,
     )
     if canonical_json(rebuilt) != canonical_json(record):
         raise ContractError("schema-1.1 runtime preflight record reconstruction mismatch")
@@ -649,9 +701,12 @@ def inspect_runtime_preflight_record_1_1(value: JsonValue) -> dict[str, JsonValu
         "protocol_id": record["protocol_id"],
         "qualification_record_id": record["qualification_record_id"],
         "qualification_review_anchor_id": record["qualification_review_anchor_id"],
-        "authorization_id": record["authorization_id"],
+        "authorization_claim_id": record["authorization_claim_id"],
         "prerequisites_satisfied": assessment["prerequisites_satisfied"],
         "blockers": assessment["blockers"],
+        "authoritative_authorization_custody_supported": False,
+        "independent_output_root_binding_supported": False,
+        "independent_nonce_binding_supported": False,
         "execution_state": "disabled_unreachable_contract_only",
         "schema_1_0_state": "permanently_disabled",
         "private_raw_evidence_published": False,
@@ -676,6 +731,9 @@ def runtime_preflight_capability_report_1_1() -> dict[str, JsonValue]:
         "worker_implementation_present": False,
         "authorization_creator_present": False,
         "authorization_consumer_present": False,
+        "authoritative_authorization_custody_present": False,
+        "prerequisites_satisfiable": False,
+        "unresolved_authorization_blockers": list(_UNRESOLVED_AUTHORIZATION_BLOCKERS),
         "pure_commands": [
             "mlx runtime-preflight-1-1-capability-report",
             "mlx runtime-preflight-1-1-fixture-compile",
@@ -697,7 +755,10 @@ def _fixture_source() -> dict[str, JsonValue]:
         "schema_version": SCHEMA_VERSION,
         "evidence_status": "synthetic_and_historical_refusal_contract_evidence",
         "real_candidate_evidence_present": False,
-        "observed_authorization_present": False,
+        "authoritative_authorization_custody_present": False,
+        "authorization_claim_present": False,
+        "independent_output_root_binding_present": False,
+        "independent_nonce_binding_present": False,
         "private_raw_evidence_committed": False,
         "private_raw_evidence_path_disclosed": False,
         "historical_records_rewritten": False,
@@ -826,6 +887,9 @@ def replay_runtime_preflight_fixture_1_1(bundle: Path) -> Schema11ReplayResult:
         historical_record_id=cast("str", historical_record["record_id"]),
         synthetic_prerequisites_satisfied=False,
         historical_prerequisites_satisfied=False,
+        authoritative_authorization_custody_supported=False,
+        independent_output_root_binding_supported=False,
+        independent_nonce_binding_supported=False,
         package_installations=0,
         process_starts=0,
         runtime_imports=0,

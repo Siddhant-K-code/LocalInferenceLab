@@ -31,7 +31,7 @@ from localinferencelab.mlx_preflight_contract import (
     build_runtime_preflight_record_1_1,
     compile_runtime_preflight_fixture_1_1,
     inspect_runtime_preflight_record_1_1,
-    load_observed_authorization_1_1,
+    load_authorization_claim_1_1,
     load_runtime_preflight_record_1_1,
     replay_runtime_preflight_fixture_1_1,
     runtime_preflight_capability_report_1_1,
@@ -322,9 +322,12 @@ def _parser() -> argparse.ArgumentParser:
     runtime_preflight_1_1_create.add_argument("qualification_record", type=Path)
     runtime_preflight_1_1_create.add_argument("output", type=Path)
     runtime_preflight_1_1_create.add_argument(
-        "--authorization",
+        "--authorization-claim",
         type=Path,
-        help="supplied observed authorization record; this command cannot create or consume it",
+        help=(
+            "caller-supplied structure only; cannot prove authorization, freshness, "
+            "independent bindings, consumption, or non-reuse"
+        ),
     )
     runtime_preflight_1_1_verify = mlx_commands.add_parser(
         "runtime-preflight-1-1-record-verify",
@@ -739,14 +742,14 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
             _emit_document(runtime_preflight_spec_1_1())
             return 0
         if args.mlx_command == "runtime-preflight-1-1-record-create":
-            observed_authorization = (
+            authorization_claim = (
                 None
-                if args.authorization is None
-                else load_observed_authorization_1_1(args.authorization)
+                if args.authorization_claim is None
+                else load_authorization_claim_1_1(args.authorization_claim)
             )
             schema_1_1_record = build_runtime_preflight_record_1_1(
                 load_qualification_record(args.qualification_record),
-                observed_authorization,
+                authorization_claim,
             )
             write_runtime_preflight_record_1_1(args.output, schema_1_1_record)
             output = inspect_runtime_preflight_record_1_1(schema_1_1_record)

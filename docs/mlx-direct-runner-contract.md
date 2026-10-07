@@ -392,16 +392,16 @@ A record requires both:
 
 1. an eligible schema-1.0 `reviewed_candidate` qualification record whose derived evidence anchor
    was committed through a separate review; and
-2. a separately supplied fresh, explicit, observed, unconsumed one-shot authorization bound to
-   the qualification record, review anchor, schema-1.1 spec, protocol, output-root identity, and
-   nonce commitment.
+2. future authoritative one-shot authorization acquisition, current-expiry observation,
+   exclusive consumption/non-reuse, and independently verified output-root and nonce facts.
 
 The current committed qualification anchor set includes the separately reviewed real-candidate
 evidence anchor described above, but no eligible qualification record exists for it. The synthetic
 positive fixture and the frozen historical record therefore deterministically refuse and cannot be
 used as substitutes.
-Even a future record satisfying both prerequisites remains execution-disabled in this milestone:
-prerequisites are necessary contract inputs, not a switch.
+The authorization prerequisite is also categorically unsatisfied: caller-supplied claim structures
+cannot establish custody or independent bindings. No current input combination can make
+`prerequisites_satisfied=true`, and execution remains disabled.
 
 The future allowed physical action set contains only exact isolated runtime closure verification,
 imports of the pinned `mlx.core` and `mlx_lm` surfaces, and bounded distribution/backend/device/
