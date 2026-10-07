@@ -139,10 +139,19 @@ without fallback.
 
 Candidate-supplied hashes are integrity bindings, not independent review. A real
 `reviewed_candidate` is therefore ineligible unless its derived source/wheel/METADATA evidence
-anchor is also present in the committed qualification specification. The current anchor set is
-empty because this milestone claims no real coherent pair. Synthetic fixtures may exercise the
-positive contract; historical projections are categorically ineligible and may not relabel partial
-METADATA as complete.
+anchor is also present in the committed qualification specification. The first real anchor is
+`sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b`,
+derived from the canonical evidence package for MLX `0.30.4` and MLX-LM `0.30.6` targeting
+CPython 3.13.0 on macOS 15.0 arm64. The package embeds both exact PyPI wheel byte streams; the
+validator rechecks their sizes, hashes, dist-info identities, raw METADATA equality, and WHEEL
+tags offline. It binds source tags `v0.30.4` and `v0.30.6` to their exact Git revisions.
+
+This is an evidence anchor, not an accepted qualification record. Its derived result is
+`ineligible` because the applicable transitive distribution closure and all seven worker-API
+evidence items are intentionally absent. The satisfied MLX-LM `mlx>=0.30.4` Darwin edge establishes
+only pair-level dependency coherence. No result record is committed in the same change. Synthetic
+fixtures may continue to exercise the positive contract; historical projections are categorically
+ineligible and may not relabel partial METADATA as complete.
 
 Every package binds the frozen schema-1.0 negative projection, runtime lock, terminal failure,
 authorization, consumption, historical protocol, and historical worker IDs with

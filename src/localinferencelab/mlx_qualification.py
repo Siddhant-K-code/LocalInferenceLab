@@ -49,7 +49,7 @@ _PACKAGE_DOMAINS = {"files.pythonhosted.org"}
 _SOURCE_DOMAINS = {"github.com"}
 _SYNTHETIC_DOMAIN = "fixtures.localinferencelab.invalid"
 _NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-_VERSION_PATTERN = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){1,3}$")
+_VERSION_PATTERN = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,3}$")
 _REVISION_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 _TAG_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
 _WHEEL_TAG_PATTERN = re.compile(
@@ -67,7 +67,7 @@ _MARKER_CLAUSE_PATTERN = re.compile(
 )
 _SPECIFIER_PATTERN = re.compile(
     r"(?P<operator>===|==|!=|~=|<=|>=|<|>)(?P<version>"
-    r"(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){1,3})"
+    r"(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,3})"
 )
 _SUPPORTED_METADATA_VERSIONS = {"2.1", "2.2", "2.3", "2.4"}
 _METADATA_POLICY = policy.default.clone(
@@ -127,6 +127,9 @@ _HISTORICAL_PROTOCOL_ID = "sha256:c3df6f0eb9a67a00e1f1f180b0e34fd9b5ac5dd662b430
 _HISTORICAL_WORKER_CODE_ID = (
     "sha256:bfd840635879dfae9a57fb11cae0e6ddef4f3f5f3b9b81f39e8e1cec51539fe3"
 )
+_REVIEWED_CANDIDATE_ANCHORS = [
+    "sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b"
+]
 
 
 class Requirement(NamedTuple):
@@ -336,7 +339,7 @@ def qualification_spec() -> dict[str, JsonValue]:
         "extras_policy": "forbid_all_extras",
         "frozen_schema_1_0_negative": _frozen_negative_relationship(),
         "required_top_level_distributions": ["mlx", "mlx-lm"],
-        "reviewed_candidate_anchors": [],
+        "reviewed_candidate_anchors": list(_REVIEWED_CANDIDATE_ANCHORS),
         "requirement_grammar": (
             "canonical_release_versions_with_comma_conjoined_specifiers_and_"
             "and_conjoined_environment_markers"

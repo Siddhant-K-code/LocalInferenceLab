@@ -261,8 +261,14 @@ headers or the description body; the whole payload must be valid UTF-8, identity
 duplicated, and all raw bytes remain digest-bound. Probe evidence
 tokens are fixed by the specification rather than caller-selected. A real
 reviewed candidate additionally needs an independently committed evidence anchor in the
-qualification specification; that anchor set is empty in this milestone. Historical projections
-are always ineligible.
+qualification specification. Anchor
+`sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b`
+binds the committed MLX `0.30.4` / MLX-LM `0.30.6` evidence package for CPython 3.13.0,
+`cp313`, macOS 15.0, and arm64. Both exact wheel byte streams and exact raw METADATA are embedded,
+so verification and reconstruction are offline. The pair dependency is satisfied, while absent
+transitive distributions and worker-API evidence keep the result deterministically ineligible.
+No qualification record is committed in the anchor change. Historical projections are always
+ineligible.
 
 The record reconstructs rather than trusts its decision and sorted blockers. Coordinated package
 and record rehashing cannot preserve a stale assessment. All install/network/process/socket,
