@@ -57,5 +57,12 @@ fixture:
 	mlx_b=$$(find .artifacts/mlx-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-direct-refused-synthetic-v1-*' -print -quit); \
 	diff -r "$$mlx_a" "$$mlx_b" && \
 	uv run localinferencelab mlx fixture-replay "$$mlx_a"
+	mkdir .artifacts/qualification-a .artifacts/qualification-b
+	uv run localinferencelab mlx runtime-qualification-fixture-compile .artifacts/qualification-a
+	uv run localinferencelab mlx runtime-qualification-fixture-compile .artifacts/qualification-b
+	qualification_a=$$(find .artifacts/qualification-a -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-runtime-qualification-synthetic-v1-*' -print -quit); \
+	qualification_b=$$(find .artifacts/qualification-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-runtime-qualification-synthetic-v1-*' -print -quit); \
+	diff -r "$$qualification_a" "$$qualification_b" && \
+	uv run localinferencelab mlx runtime-qualification-replay "$$qualification_a"
 
 validate: lint type test build-smoke fixture

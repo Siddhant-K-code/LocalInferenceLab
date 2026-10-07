@@ -27,6 +27,16 @@ from localinferencelab.mlx_manifest import (
     load_runtime_scan_spec,
     write_manifest,
 )
+from localinferencelab.mlx_qualification import (
+    build_qualification_record,
+    compile_qualification_fixture,
+    load_qualification_package,
+    load_qualification_record,
+    qualification_inspection,
+    qualification_spec,
+    replay_qualification_fixture,
+    write_qualification_record,
+)
 from localinferencelab.mlx_runner import (
     build_mlx_prospective_package,
     load_mlx_prospective_package,
@@ -251,6 +261,36 @@ def _parser() -> argparse.ArgumentParser:
         help="replay the pinned failed observed-attempt projection without imports or processes",
     )
     runtime_preflight_negative_replay.add_argument("projection", type=Path)
+    mlx_commands.add_parser(
+        "runtime-qualification-spec",
+        help="emit the process-free schema-1.0 static qualification specification",
+    )
+    runtime_qualification_create = mlx_commands.add_parser(
+        "runtime-qualification-create",
+        help="derive one static decision record from explicit candidate bytes and metadata",
+    )
+    runtime_qualification_create.add_argument("candidate", type=Path)
+    runtime_qualification_create.add_argument("output", type=Path)
+    runtime_qualification_verify = mlx_commands.add_parser(
+        "runtime-qualification-verify",
+        help="strictly verify and reconstruct one static qualification record",
+    )
+    runtime_qualification_verify.add_argument("record", type=Path)
+    runtime_qualification_inspect = mlx_commands.add_parser(
+        "runtime-qualification-inspect",
+        help="inspect static eligibility and exact blockers without runtime action",
+    )
+    runtime_qualification_inspect.add_argument("record", type=Path)
+    runtime_qualification_fixture = mlx_commands.add_parser(
+        "runtime-qualification-fixture-compile",
+        help="publish deterministic historical-negative and synthetic-positive evidence",
+    )
+    runtime_qualification_fixture.add_argument("output_root", type=Path)
+    runtime_qualification_replay = mlx_commands.add_parser(
+        "runtime-qualification-replay",
+        help="replay one closed qualification fixture without imports or processes",
+    )
+    runtime_qualification_replay.add_argument("bundle", type=Path)
 
     ollama = commands.add_parser(
         "ollama",
@@ -591,6 +631,47 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
             output["mlx_imports_during_replay"] = 0
             output["process_actions_during_replay"] = 0
             output["socket_actions_during_replay"] = 0
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-qualification-spec":
+            _emit_document(qualification_spec())
+            return 0
+        if args.mlx_command == "runtime-qualification-create":
+            qualification_record = build_qualification_record(
+                load_qualification_package(args.candidate)
+            )
+            write_qualification_record(args.output, qualification_record)
+            output = qualification_inspection(qualification_record)
+            output["status"] = "created"
+            _emit(output)
+            return 0
+        if args.mlx_command in {
+            "runtime-qualification-verify",
+            "runtime-qualification-inspect",
+        }:
+            qualification_record = load_qualification_record(args.record)
+            output = qualification_inspection(qualification_record)
+            output["status"] = (
+                "valid" if args.mlx_command == "runtime-qualification-verify" else "inspected"
+            )
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-qualification-fixture-compile":
+            fixture_path, qualification_fixture_replay = compile_qualification_fixture(
+                args.output_root
+            )
+            output = qualification_fixture_replay.to_dict()
+            output["status"] = "compiled"
+            output["path"] = fixture_path.name
+            output["evidence_status"] = (
+                "synthetic_static_contract_evidence_and_historical_projection"
+            )
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-qualification-replay":
+            qualification_replay = replay_qualification_fixture(args.bundle)
+            output = qualification_replay.to_dict()
+            output["status"] = "replayed"
             _emit(output)
             return 0
         mlx_replay_result = replay_mlx_fixture(args.bundle)

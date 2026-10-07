@@ -21,6 +21,7 @@ Every trust transition is represented by immutable canonical data.
 | `mlx_inert_worker.py` | Standalone stdlib refusal-only FD-3 worker | Reads/writes the inherited socket only; no model/backend/network/generated-result surface |
 | `mlx_runtime_preflight.py` | Separate exact-runtime lock/receipt validation, schema-1.0 execution gate, synthetic one-shot runtime-preflight custody, strict result/import-closure validation, closed publication, and offline replay | Public `runtime-preflight` validates then rejects the dependency-incompatible observed receipt before physical action; only exact internal synthetic fixtures may start one child/socketpair |
 | `mlx_runtime_preflight_worker.py` | Standalone sealed FD-3 runtime-only synthetic worker | After synthetic authorization only, imports bound fake `mlx.core` and `mlx_lm`, queries model-free backend/device/stream facts, and synchronizes; no model action or network/command surface |
+| `mlx_qualification.py` | Canonical static candidate package, dependency/marker/wheel/API-evidence assessment, sole deterministic decision, and two-outcome closed fixture replay | Explicit record/fixture writes only; no install, network, process, socket, authorization, runtime import, backend, model, or spend action |
 | `ollama.py` | Prospective package, direct numeric-loopback transport, one-shot authorization, bounded execution, terminal custody/replay | Explicit output-root writes; loopback calls only after authorization |
 | `ollama_declaration.py` | Canonical multi-run study intent, exact package closure binding, eligibility, and offline declaration fixture replay | Explicit declaration/fixture writes only; no host probe, socket, marker, authorization, or model |
 | `ollama_attestation.py` | Pinned listener/runner feasibility requirements, candidate evidence, derived negative verdict, and offline fixture replay | Explicit assessment/fixture writes only; no live process probe, socket, subprocess, Ollama call, authorization, output-root consumption, or model |
@@ -46,6 +47,16 @@ may use it after output-root and artifact validation. The `execute` surface vali
 and artifacts but production-refuses before authorization consumption or socket access until the
 listening process and active runner/Metal state can be mechanically attested. The attestation
 module intentionally imports no socket, subprocess, HTTP transport, host probe, or runtime probe.
+
+The qualification module is also isolated from runtime action. It reads only explicit canonical
+candidate/record bytes and closed fixture bundles. Its schema-1.0 package binds exact source
+revision/tag provenance, wheel artifact metadata and tags, target Python ABI/macOS/architecture,
+exact supplied wheel bytes with embedded METADATA/WHEEL-tag verification, exact raw reviewed
+METADATA bytes (or canonical synthetic/projection bytes), bounded `Requires-Dist`,
+`Requires-Python`, and marker grammar, the supplied distribution
+closure, and immutable source-byte evidence for the future preflight API set. It derives one of
+two decisions and cannot construct authorization. Importing the module does not import MLX or
+MLX-LM.
 
 ## Direct MLX prospective layer
 
@@ -97,6 +108,48 @@ dependency closure remains explicitly blocked. That mismatch makes the observed 
 execution-ineligible for schema 1.0. Public `mlx runtime-preflight` is a pure validation/refusal
 surface and no public flag bypasses the gate. A compatible source/version pair requires a
 separately reviewed schema and new authorization.
+
+## Static MLX runtime qualification layer
+
+`mlx_runtime_qualification_spec`, `mlx_runtime_qualification_package`, and
+`mlx_runtime_qualification_record` are additive schema-1.0 records. They do not change any frozen
+foundation, Ollama, direct-MLX, inert-custody, runtime-preflight, protocol, worker, or negative
+projection identity.
+
+The package is self-contained and binds exact normalized distribution names/versions, immutable
+reviewed source revisions and tags, source provenance URLs, wheel filename/size/SHA-256/URL and
+Python/ABI/platform tags, target CPython ABI and macOS version/architecture, exact raw METADATA
+bytes and digests, every supplied requirement and marker, one exact `Requires-Python` constraint
+for complete metadata, a forbid-all-extras policy, exact `==` top-level MLX/MLX-LM pins,
+transitive distributions, and source bytes/digests for each expected future
+preflight probe. Potentially eligible candidates must supply exact readable wheel bytes whose
+size/digest, embedded METADATA, dist-info identity, and WHEEL tag match the declarations. Public
+PyPI and GitHub domains are allowlisted for reviewed candidates; a reserved
+`.invalid` domain is accepted only for explicitly synthetic fixtures.
+
+Assessment mechanically evaluates marker applicability and the supported release-version
+specifiers, evaluates `Requires-Python` against the exact target `python_full_version`, records
+selected dependency versions and exact explanations, computes wheel
+compatibility and graph reachability, and requires complete supplied METADATA plus all API evidence.
+It fixes every physical/runtime/model counter to zero. The only positive decision,
+`eligible_for_new_observed_authorization`, means eligible for human review only. It does not prove
+installation, import, runtime/native-loader/stdlib completeness, Metal/device/backend state,
+synchronization, model support, or permission. The negative decision carries sorted exact blockers
+without fallback.
+
+Candidate-supplied hashes are integrity bindings, not independent review. A real
+`reviewed_candidate` is therefore ineligible unless its derived source/wheel/METADATA evidence
+anchor is also present in the committed qualification specification. The current anchor set is
+empty because this milestone claims no real coherent pair. Synthetic fixtures may exercise the
+positive contract; historical projections are categorically ineligible and may not relabel partial
+METADATA as complete.
+
+Every package binds the frozen schema-1.0 negative projection, runtime lock, terminal failure,
+authorization, consumption, historical protocol, and historical worker IDs with
+`ids_modified=false`, `retry_authorized=false`, and
+`schema_1_0_state=permanently_disabled`. An eligible record still requires a distinct schema-1.1
+protocol/spec/worker review and fresh explicit authorization before any package installation,
+network, child/socket, import, backend, Metal, synchronization, or model action.
 
 The first authorized observed attempt closed negatively at parent validation of
 `preflight_result`. Authorization was consumed, one child was started and reaped, and no retry was
