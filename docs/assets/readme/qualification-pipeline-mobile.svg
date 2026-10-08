@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" viewBox="0 0 600 1120">
   <title id="title">LocalInferenceLab qualification pipeline on a narrow screen</title>
-  <desc id="desc">A vertical five-stage path runs from proposal to static qualification, a human gate, bounded custody, and evidence. The current state stops after static qualification. Missing authority routes to deterministic refusal with no runtime action.</desc>
+  <desc id="desc">A vertical five-stage path runs from proposal to static qualification, a human gate, an inactive schema-1.1 execution path, and evidence. The current state stops after static qualification. Missing authority routes to deterministic refusal with no runtime action.</desc>
 
   <rect width="600" height="1120" fill="#0b1020"/>
   <g font-family="Arial, Helvetica, sans-serif">
@@ -36,8 +36,8 @@
     <path d="M288 750L300 764L312 750" fill="none" stroke="#65718e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
 
     <rect x="38" y="770" width="252" height="104" rx="12" fill="#141a2a" stroke="#65718e" stroke-width="3" stroke-dasharray="10 8"/>
-    <text x="60" y="807" fill="#95a1bd" font-size="17" font-weight="700">04 / CUSTODY</text>
-    <text x="60" y="846" fill="#dfe5f3" font-size="23" font-weight="700">Not implemented</text>
+    <text x="60" y="807" fill="#95a1bd" font-size="15" font-weight="700">04 / NO ACTIVE PATH</text>
+    <text x="60" y="846" fill="#dfe5f3" font-size="23" font-weight="700">Unreachable</text>
 
     <rect x="310" y="770" width="252" height="104" rx="12" fill="#141a2a" stroke="#65718e" stroke-width="3" stroke-dasharray="10 8"/>
     <text x="332" y="807" fill="#95a1bd" font-size="17" font-weight="700">05 / EVIDENCE</text>

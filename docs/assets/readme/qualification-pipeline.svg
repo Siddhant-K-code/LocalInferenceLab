@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" viewBox="0 0 1200 620">
   <title id="title">LocalInferenceLab qualification pipeline</title>
-  <desc id="desc">A five-stage path runs from proposal to static qualification, a human gate, bounded custody, and evidence. The current state stops after static qualification. Missing authority or any mismatch routes to deterministic refusal with no runtime action.</desc>
+  <desc id="desc">A five-stage path runs from proposal to static qualification, a human gate, an inactive schema-1.1 execution path, and evidence. The current state stops after static qualification. Missing authority or any mismatch routes to deterministic refusal with no runtime action.</desc>
 
   <rect width="1200" height="620" fill="#0b1020"/>
   <path d="M0 118H1200M0 482H1200" stroke="#26314d" stroke-width="1"/>
@@ -36,9 +36,9 @@
     <path d="M769 229L780 238L769 247" fill="none" stroke="#65718e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 
     <rect x="785" y="172" width="190" height="132" rx="12" fill="#141a2a" stroke="#65718e" stroke-width="2" stroke-dasharray="8 7"/>
-    <text x="805" y="207" fill="#95a1bd" font-size="14" font-weight="700" letter-spacing="1.5">04 / CUSTODY</text>
-    <text x="805" y="242" fill="#dfe5f3" font-size="24" font-weight="700">Bounded action</text>
-    <text x="805" y="272" fill="#aeb9d0" font-size="16">not implemented</text>
+    <text x="805" y="207" fill="#95a1bd" font-size="14" font-weight="700" letter-spacing="1.2">04 / NO ACTIVE PATH</text>
+    <text x="805" y="242" fill="#dfe5f3" font-size="24" font-weight="700">Schema 1.1</text>
+    <text x="805" y="272" fill="#aeb9d0" font-size="16">unreachable</text>
 
     <path d="M983 238H1018" stroke="#65718e" stroke-width="3" stroke-linecap="round" stroke-dasharray="5 9"/>
     <path d="M1009 229L1020 238L1009 247" fill="none" stroke="#65718e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
