@@ -50,7 +50,10 @@ from localinferencelab.mlx_qualification import (
     synthetic_eligible_qualification_package,
     verify_qualification_package,
 )
-from localinferencelab.mlx_runtime_target import EXPECTED_RUNTIME_TARGET_ANCHOR_ID
+from localinferencelab.mlx_runtime_target import (
+    EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
+    RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS,
+)
 
 
 def _dict(value: JsonValue) -> dict[str, JsonValue]:
@@ -131,6 +134,7 @@ _UNRESOLVED_AUTHORIZATION_BLOCKERS = {
     "independent_authorization_nonce_binding_unimplemented",
     "independent_output_root_identity_binding_unimplemented",
 }
+_UNRESOLVED_TARGET_OBSERVATION_BLOCKERS = set(RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS)
 
 
 def test_spec_protocol_and_capability_keep_execution_unreachable() -> None:
@@ -145,10 +149,14 @@ def test_spec_protocol_and_capability_keep_execution_unreachable() -> None:
     assert protocol["runtime_target_anchor_id"] == EXPECTED_RUNTIME_TARGET_ANCHOR_ID
     runtime_target_prerequisite = _dict(_dict(spec["prerequisites"])["runtime_target_observation"])
     assert runtime_target_prerequisite == {
+        "authoritative_observer_identity_custody_supported": False,
+        "caller_supplied_claim_can_satisfy_prerequisite": False,
+        "custody_bound_measurement_supported": False,
         "development_host_observation_accepted": False,
         "future_independent_observation_required": True,
         "self_attested_observation_accepted": False,
         "target_drift_accepted": False,
+        "unresolved_blockers": list(RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS),
     }
     assert _dict(spec["execution"]) == {
         "authorization_consumer_present": False,
@@ -159,6 +167,7 @@ def test_spec_protocol_and_capability_keep_execution_unreachable() -> None:
         "package_retrieval_or_installation_present": False,
         "public_or_internal_execute_entrypoint_present": False,
         "reachable": False,
+        "runtime_observation_prerequisite_satisfiable": False,
         "worker_present": False,
     }
     assert protocol["worker_implementation_present"] is False
@@ -170,6 +179,11 @@ def test_spec_protocol_and_capability_keep_execution_unreachable() -> None:
     assert set(_list(report["unresolved_authorization_blockers"])) == (
         _UNRESOLVED_AUTHORIZATION_BLOCKERS
     )
+    assert set(_list(report["unresolved_target_observation_blockers"])) == (
+        _UNRESOLVED_TARGET_OBSERVATION_BLOCKERS
+    )
+    assert report["authoritative_runtime_observer_identity_present"] is False
+    assert report["custody_bound_runtime_measurement_present"] is False
     assert not any("execute" in cast("str", item) for item in _list(report["pure_commands"]))
 
 
@@ -310,6 +324,7 @@ def test_synthetic_positive_and_historical_records_cannot_satisfy_prerequisites(
     assert f"qualification_review_anchor_not_committed:{migrated_anchor}" in reviewed_blockers
     assert "qualification_runtime_target_anchor_is_not_exact" not in reviewed_blockers
     assert reviewed_blockers >= _UNRESOLVED_AUTHORIZATION_BLOCKERS
+    assert reviewed_blockers >= _UNRESOLVED_TARGET_OBSERVATION_BLOCKERS
 
 
 def test_missing_authorization_claim_refuses_without_authoritative_custody() -> None:
@@ -319,7 +334,10 @@ def test_missing_authorization_claim_refuses_without_authoritative_custody() -> 
     blockers = set(_list(inspection["blockers"]))
     assert "authorization_claim_structure_missing" in blockers
     assert blockers >= _UNRESOLVED_AUTHORIZATION_BLOCKERS
+    assert blockers >= _UNRESOLVED_TARGET_OBSERVATION_BLOCKERS
     assert inspection["authoritative_authorization_custody_supported"] is False
+    assert inspection["authoritative_runtime_observer_identity_supported"] is False
+    assert inspection["custody_bound_runtime_measurement_supported"] is False
     assert inspection["independent_output_root_binding_supported"] is False
     assert inspection["independent_nonce_binding_supported"] is False
     assert inspection["execution_state"] == "disabled_unreachable_contract_only"

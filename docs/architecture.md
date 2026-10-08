@@ -177,10 +177,9 @@ anchor are
 and `sha256:10ab50cbfb94890bae1dd8c57180645d5781e454b1a8171b158c4d932121d9dd`.
 The package is also bound to runtime target anchor
 `sha256:008f7c3ac60614bc6909822180a4bc0b9be17eaf0aa3abc23829eb2842c4fdc0`.
+The pending anchor is intentionally absent from the allowlist until a later separate review.
 That target pins CPython 3.13.15, `cp313`, macOS 27.0.1 build 26A434, the 15.0 runtime-wheel
-deployment floor, and arm64. The package embeds both exact PyPI wheel byte streams; the validator
-rechecks their sizes, hashes, dist-info identities, raw METADATA equality, and WHEEL tags offline.
-It binds source tags `v0.30.4` and `v0.30.6` to their exact Git revisions.
+deployment floor, and arm64.
 
 The target anchor is a trust root, not runtime attestation. It keeps a publishable,
 installation-root-relative executable realpath and exact executable/code-signature digests while
@@ -188,10 +187,11 @@ omitting the development machine's absolute private path. Its development-host o
 only why 3.13.15 is an available prospective choice. The failed historical receipt's 3.13.15
 value remains rejected historical evidence, and the superseded 3.13.0 candidate value is not an
 allowed fallback. Schema-1.1 prerequisites bind the exact target anchor, while independent future
-runtime observation remains unavailable and execution remains unreachable.
-Caller-supplied observation claims can validate canonical structure and exact target equality
-only; they always retain authoritative-observer-identity and custody-bound-measurement blockers
-and never become accepted runtime evidence.
+runtime observation remains unavailable and execution remains unreachable. Caller-supplied
+observation claims can validate canonical structure and exact target-field equality only. They
+always carry authoritative-observer-identity and custody-bound-measurement blockers and never
+become accepted runtime evidence, regardless of caller-selected provenance labels or recomputed
+claim IDs.
 
 This is an evidence anchor, not an accepted qualification record. Its derived result is
 `ineligible` because the applicable `mlx-metal`, `numpy`, `transformers`, `sentencepiece`,

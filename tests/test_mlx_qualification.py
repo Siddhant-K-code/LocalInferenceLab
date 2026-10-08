@@ -496,6 +496,28 @@ def test_committed_real_candidate_anchor_is_exact_and_ineligible() -> None:
     )
     assert one_component_extra["applicable"] is False
     assert all(_dict(item)["compatible"] is True for item in _list(assessment["wheel_assessments"]))
+
+
+def test_target_migration_cannot_self_promote_review_anchor() -> None:
+    candidate_path = (
+        Path(qualification_module.__file__).resolve(strict=True).parents[2]
+        / "evidence"
+        / "mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json"
+    )
+    package = verify_qualification_package(
+        load_canonical_json_file(candidate_path, "target-migrated candidate")
+    )
+    record = build_qualification_record(package)
+    assessment = _dict(record["assessment"])
+    migrated_anchor = cast("str", assessment["review_anchor_id"])
+    assert migrated_anchor == (
+        "sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f"
+    )
+    assert migrated_anchor not in _list(qualification_spec()["reviewed_candidate_anchors"])
+    assert f"reviewed_candidate_not_committed_in_spec:{migrated_anchor}" in _list(
+        record["blockers"]
+    )
+    assert record["decision"] == INELIGIBLE
     assert set(_dict(record["static_action_counters"]).values()) == {0}
 
 

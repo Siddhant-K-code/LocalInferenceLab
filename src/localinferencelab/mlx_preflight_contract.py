@@ -24,7 +24,10 @@ from localinferencelab.mlx_qualification import (
     synthetic_eligible_qualification_package,
     verify_qualification_record,
 )
-from localinferencelab.mlx_runtime_target import EXPECTED_RUNTIME_TARGET_ANCHOR_ID
+from localinferencelab.mlx_runtime_target import (
+    EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
+    RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS,
+)
 
 SCHEMA_VERSION = "1.1"
 ACTION = "mlx_runtime_preflight_model_free"
@@ -312,10 +315,14 @@ def runtime_preflight_spec_1_1() -> dict[str, JsonValue]:
                 "exact_runtime_target_identity_required": True,
             },
             "runtime_target_observation": {
+                "authoritative_observer_identity_custody_supported": False,
+                "caller_supplied_claim_can_satisfy_prerequisite": False,
+                "custody_bound_measurement_supported": False,
                 "development_host_observation_accepted": False,
                 "future_independent_observation_required": True,
                 "self_attested_observation_accepted": False,
                 "target_drift_accepted": False,
+                "unresolved_blockers": list(RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS),
             },
             "authorization": {
                 "authoritative_custody_state": "unimplemented_unavailable",
@@ -348,6 +355,7 @@ def runtime_preflight_spec_1_1() -> dict[str, JsonValue]:
             "authorization_creator_present": False,
             "authorization_consumer_present": False,
             "authoritative_authorization_prerequisite_satisfiable": False,
+            "runtime_observation_prerequisite_satisfiable": False,
             "package_retrieval_or_installation_present": False,
             "public_or_internal_execute_entrypoint_present": False,
             "becomes_reachable_when_prerequisites_satisfied": False,
@@ -564,6 +572,7 @@ def build_runtime_preflight_record_1_1(
             authorization_claim_checks.append({"name": name, "satisfied": satisfied})
             if not satisfied:
                 blockers.append(blocker)
+    blockers.extend(RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS)
     blockers.extend(_UNRESOLVED_AUTHORIZATION_BLOCKERS)
     sorted_blockers = sorted(set(blockers))
     spec = runtime_preflight_spec_1_1()
@@ -582,6 +591,8 @@ def build_runtime_preflight_record_1_1(
         "prerequisite_assessment": {
             "qualification_checks": qualification_checks,
             "authorization_claim_checks": authorization_claim_checks,
+            "authoritative_runtime_observer_identity_supported": False,
+            "custody_bound_runtime_measurement_supported": False,
             "authoritative_authorization_custody_supported": False,
             "independent_output_root_binding_supported": False,
             "independent_nonce_binding_supported": False,
@@ -594,6 +605,7 @@ def build_runtime_preflight_record_1_1(
             "worker_implementation_present": False,
             "execute_entrypoint_present": False,
             "prerequisites_do_not_unlock_execution": True,
+            "runtime_observation_prerequisite_satisfiable": False,
             "authoritative_authorization_prerequisite_satisfiable": False,
         },
         "evidence_ledgers": {
@@ -667,6 +679,9 @@ def verify_runtime_preflight_record_1_1(value: JsonValue) -> dict[str, JsonValue
         or assessment["authoritative_authorization_custody_supported"] is not False
         or assessment["independent_output_root_binding_supported"] is not False
         or assessment["independent_nonce_binding_supported"] is not False
+        or assessment["authoritative_runtime_observer_identity_supported"] is not False
+        or assessment["custody_bound_runtime_measurement_supported"] is not False
+        or not set(RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS).issubset(blockers)
         or not set(_UNRESOLVED_AUTHORIZATION_BLOCKERS).issubset(blockers)
     ):
         raise ContractError(
@@ -726,6 +741,8 @@ def inspect_runtime_preflight_record_1_1(value: JsonValue) -> dict[str, JsonValu
         "authorization_claim_id": record["authorization_claim_id"],
         "prerequisites_satisfied": assessment["prerequisites_satisfied"],
         "blockers": assessment["blockers"],
+        "authoritative_runtime_observer_identity_supported": False,
+        "custody_bound_runtime_measurement_supported": False,
         "authoritative_authorization_custody_supported": False,
         "independent_output_root_binding_supported": False,
         "independent_nonce_binding_supported": False,
@@ -753,8 +770,11 @@ def runtime_preflight_capability_report_1_1() -> dict[str, JsonValue]:
         "worker_implementation_present": False,
         "authorization_creator_present": False,
         "authorization_consumer_present": False,
+        "authoritative_runtime_observer_identity_present": False,
+        "custody_bound_runtime_measurement_present": False,
         "authoritative_authorization_custody_present": False,
         "prerequisites_satisfiable": False,
+        "unresolved_target_observation_blockers": list(RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS),
         "unresolved_authorization_blockers": list(_UNRESOLVED_AUTHORIZATION_BLOCKERS),
         "pure_commands": [
             "mlx runtime-preflight-1-1-capability-report",

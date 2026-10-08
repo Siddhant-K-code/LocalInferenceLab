@@ -337,18 +337,23 @@ METADATA are embedded, so verification and reconstruction are offline. `Requires
 full 3.13.15 value; wheel compatibility remains `cp313`-scoped. The pair dependency and all seven
 source/API surfaces are satisfied, while the absent `mlx-metal`, `numpy`, `transformers`,
 `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2` distributions plus unreviewed-anchor blocker
-keep the result deterministically ineligible. No qualification record is committed. Historical
-projections are always ineligible.
+keep the result deterministically ineligible. The exact anchor blocker is
+`reviewed_candidate_not_committed_in_spec:sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`.
+No qualification record is committed in the target change. Historical projections are always
+ineligible.
 
 The prior prospective value 3.13.0 is superseded. A bounded development-host observation of an
 already available 3.13.15 interpreter is retained in the target anchor without its private
 absolute path and is explicitly not future runtime evidence. The failed historical receipt also
 reported 3.13.15, but it is not accepted as target or runtime evidence and its existing evidence
-IDs remain unchanged. Caller-supplied observation envelopes remain structure-only and are always
-refused as runtime evidence because authoritative observer identity and custody-bound
-executable/platform measurement are unavailable. Validation rejects self-attestation, provenance
-relabeling, ambiguous host promotion, executable/hash/realpath, version/cache-tag/ABI/SOABI,
-macOS product/build/deployment, and architecture drift even when claim identities are recomputed.
+IDs remain unchanged. Caller-supplied observation envelopes are structure-only claims. Exact
+identity fields, `claimed_observer_relationship=independent_from_candidate`, and
+`claimed_self_attested=false` remain self-asserted and can never satisfy qualification or
+preflight. Replay always reports unavailable authoritative observer identity and unavailable
+custody-bound executable/platform measurement. Structural validation rejects self-attestation,
+provenance relabeling, ambiguous host promotion, executable/hash/realpath,
+version/cache-tag/ABI/SOABI, macOS product/build/deployment, and architecture drift even when
+claim identities are recomputed.
 
 The evidence supports only source-surface availability. The import records prove intended module
 names and declarations, not import or native-loader success. Callable declarations do not prove

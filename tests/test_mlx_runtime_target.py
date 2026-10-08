@@ -19,16 +19,22 @@ from localinferencelab.canonical import (
 from localinferencelab.cli import run
 from localinferencelab.mlx_runtime_target import (
     EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
+    RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS,
     load_runtime_target_anchor,
     runtime_target_anchor,
     runtime_target_replay,
     verify_runtime_target_anchor,
-    verify_runtime_target_observation,
+    verify_runtime_target_observation_claim,
 )
 
 
 def _dict(value: JsonValue) -> dict[str, JsonValue]:
     assert isinstance(value, dict)
+    return value
+
+
+def _list(value: JsonValue) -> list[JsonValue]:
+    assert isinstance(value, list)
     return value
 
 
@@ -46,15 +52,15 @@ def _anchor_path() -> Path:
     )
 
 
-def _observation(anchor: dict[str, JsonValue]) -> dict[str, JsonValue]:
+def _observation_claim(anchor: dict[str, JsonValue]) -> dict[str, JsonValue]:
     target = _dict(anchor["prospective_target"])
     value: dict[str, JsonValue] = {
-        "record_type": "mlx_runtime_target_observation",
+        "record_type": "mlx_runtime_target_observation_claim",
         "schema_version": "1.0",
-        "evidence_kind": "future_independent_runtime_identity_observation",
-        "observer_relationship": "independent_from_candidate",
-        "self_attested": False,
-        "ambiguous_host_promotion": False,
+        "evidence_kind": "caller_supplied_structure_only",
+        "claimed_observer_relationship": "independent_from_candidate",
+        "claimed_self_attested": False,
+        "claimed_ambiguous_host_promotion": False,
         "target_anchor_id": anchor["anchor_id"],
         "interpreter": _copy(target["interpreter"]),
         "platform": _copy(target["platform"]),
@@ -71,13 +77,13 @@ def _observation(anchor: dict[str, JsonValue]) -> dict[str, JsonValue]:
             "synchronizations": 0,
         },
     }
-    value["observation_id"] = canonical_identity(value)
+    value["claim_id"] = canonical_identity(value)
     return value
 
 
-def _rehash_observation(observation: dict[str, JsonValue]) -> None:
-    observation.pop("observation_id", None)
-    observation["observation_id"] = canonical_identity(observation)
+def _rehash_claim(claim: dict[str, JsonValue]) -> None:
+    claim.pop("claim_id", None)
+    claim["claim_id"] = canonical_identity(claim)
 
 
 def test_committed_target_anchor_is_exact_and_process_free() -> None:
@@ -134,10 +140,16 @@ def test_committed_target_anchor_is_exact_and_process_free() -> None:
     assert b"siddhant" not in serialized.lower()
 
 
-def test_future_independent_observation_must_match_every_target_field() -> None:
+def test_structure_only_observation_claim_must_match_every_target_field() -> None:
     anchor = runtime_target_anchor()
-    observation = _observation(anchor)
-    assert verify_runtime_target_observation(anchor, observation) == observation
+    claim = _observation_claim(anchor)
+    inspection = verify_runtime_target_observation_claim(anchor, claim)
+    assert inspection["claimed_identity_fields_match_target"] is True
+    assert inspection["runtime_evidence_accepted"] is False
+    assert inspection["independent_provenance_proven"] is False
+    assert inspection["custody_bound_measurement_proven"] is False
+    assert inspection["can_satisfy_qualification_or_preflight"] is False
+    assert set(_list(inspection["blockers"])) == set(RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS)
 
     mutations = [
         ("interpreter", "executable_sha256", "sha256:" + ("0" * 64)),
@@ -158,40 +170,60 @@ def test_future_independent_observation_must_match_every_target_field() -> None:
         ("platform", "architecture", "x86_64"),
     ]
     for section, field, value in mutations:
-        drifted = _copy(observation)
+        drifted = _copy(claim)
         _dict(drifted[section])[field] = value
-        _rehash_observation(drifted)
+        _rehash_claim(drifted)
         with pytest.raises(ContractError, match=f"{section} identity drift"):
-            verify_runtime_target_observation(anchor, drifted)
+            verify_runtime_target_observation_claim(anchor, drifted)
 
 
 def test_target_rejects_self_attestation_ambiguity_and_malformed_types() -> None:
     anchor = runtime_target_anchor()
     for field, message in (
-        ("self_attested", "self-attested"),
-        ("ambiguous_host_promotion", "ambiguous host promotion"),
+        ("claimed_self_attested", "self-attested"),
+        ("claimed_ambiguous_host_promotion", "ambiguous host promotion"),
     ):
-        observation = _observation(anchor)
-        observation[field] = True
-        _rehash_observation(observation)
+        claim = _observation_claim(anchor)
+        claim[field] = True
+        _rehash_claim(claim)
         with pytest.raises(ContractError, match=message):
-            verify_runtime_target_observation(anchor, observation)
+            verify_runtime_target_observation_claim(anchor, claim)
 
-    malformed = _observation(anchor)
-    malformed["self_attested"] = 0
-    _rehash_observation(malformed)
+    malformed = _observation_claim(anchor)
+    malformed["claimed_self_attested"] = 0
+    _rehash_claim(malformed)
     with pytest.raises(ContractError, match="must be a boolean"):
-        verify_runtime_target_observation(anchor, malformed)
+        verify_runtime_target_observation_claim(anchor, malformed)
 
-    boolean_counter = _observation(anchor)
+    boolean_counter = _observation_claim(anchor)
     _dict(boolean_counter["static_action_counters"])["process_starts"] = False
-    _rehash_observation(boolean_counter)
+    _rehash_claim(boolean_counter)
     with pytest.raises(ContractError, match="must be an integer"):
-        verify_runtime_target_observation(anchor, boolean_counter)
+        verify_runtime_target_observation_claim(anchor, boolean_counter)
 
     development = _dict(anchor["development_host_observation"])
     with pytest.raises(ContractError, match="missing keys"):
-        verify_runtime_target_observation(anchor, development)
+        verify_runtime_target_observation_claim(anchor, development)
+
+
+def test_rehashed_provenance_labels_never_create_runtime_evidence() -> None:
+    anchor = runtime_target_anchor()
+    claim = _observation_claim(anchor)
+    claim["claimed_observer_relationship"] = "independent_from_candidate"
+    claim["claimed_self_attested"] = False
+    _rehash_claim(claim)
+    inspection = verify_runtime_target_observation_claim(anchor, claim)
+    assert inspection["runtime_evidence_accepted"] is False
+    assert "caller_supplied_provenance_is_self_asserted" in inspection["blockers"]
+    assert "authoritative_observer_identity_unavailable" in inspection["blockers"]
+    assert "custody_bound_executable_measurement_unavailable" in inspection["blockers"]
+    assert "custody_bound_platform_measurement_unavailable" in inspection["blockers"]
+
+    relabeled = _copy(claim)
+    relabeled["evidence_kind"] = "future_independent_runtime_identity_observation"
+    _rehash_claim(relabeled)
+    with pytest.raises(ContractError, match="unsupported runtime target observation claim"):
+        verify_runtime_target_observation_claim(anchor, relabeled)
 
 
 def test_anchor_rejects_coordinated_rehashing_and_unknown_fields() -> None:
@@ -217,6 +249,7 @@ def test_anchor_rejects_coordinated_rehashing_and_unknown_fields() -> None:
 
 
 def test_target_cli_emission_and_replay_are_offline(
+    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     assert run(["mlx", "runtime-target-anchor"]) == 0
@@ -228,6 +261,24 @@ def test_target_cli_emission_and_replay_are_offline(
     assert replay["status"] == "replayed"
     assert replay["runtime_authorized"] is False
     assert replay["mlx_or_metal_actions"] == 0
+
+    claim_path = tmp_path / "claim.json"
+    claim_path.write_bytes(canonical_json(_observation_claim(runtime_target_anchor())))
+    assert (
+        run(
+            [
+                "mlx",
+                "runtime-target-observation-claim-replay",
+                str(_anchor_path()),
+                str(claim_path),
+            ]
+        )
+        == 0
+    )
+    claim_replay = json.loads(capsys.readouterr().out)
+    assert claim_replay["status"] == "structure_valid_runtime_evidence_refused"
+    assert claim_replay["runtime_evidence_accepted"] is False
+    assert claim_replay["can_satisfy_qualification_or_preflight"] is False
 
 
 def test_anchor_file_is_canonical() -> None:

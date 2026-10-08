@@ -31,6 +31,13 @@ _ZERO_ACTION_COUNTERS: dict[str, int] = {
     "socket_creations": 0,
     "synchronizations": 0,
 }
+RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS = (
+    "authoritative_observer_identity_unavailable",
+    "caller_supplied_provenance_is_self_asserted",
+    "custody_bound_executable_measurement_unavailable",
+    "custody_bound_platform_measurement_unavailable",
+    "runtime_observation_acceptance_unimplemented",
+)
 _INTERPRETER_IDENTITY: dict[str, JsonValue] = {
     "abi_flags": "",
     "cache_tag": "cpython-313",
@@ -237,69 +244,94 @@ def load_runtime_target_anchor(path: Path) -> dict[str, JsonValue]:
     return verify_runtime_target_anchor(load_canonical_json_file(path, "MLX runtime target anchor"))
 
 
-def verify_runtime_target_observation(
+def _validate_runtime_target_observation_claim(
     anchor_value: JsonValue,
-    observation_value: JsonValue,
+    claim_value: JsonValue,
 ) -> dict[str, JsonValue]:
-    """Verify a future independent identity observation against the exact target."""
+    """Validate a caller-supplied structure that can never become runtime evidence."""
     anchor = verify_runtime_target_anchor(anchor_value)
-    observation = _mapping(observation_value, "mlx_runtime_target_observation")
+    claim = _mapping(claim_value, "mlx_runtime_target_observation_claim")
     fields = {
-        "ambiguous_host_promotion",
+        "claim_id",
+        "claimed_ambiguous_host_promotion",
+        "claimed_observer_relationship",
+        "claimed_self_attested",
         "evidence_kind",
         "interpreter",
-        "observation_id",
-        "observer_relationship",
         "platform",
         "record_type",
         "schema_version",
-        "self_attested",
         "static_action_counters",
         "target_anchor_id",
     }
-    _keys(observation, fields, "mlx_runtime_target_observation")
+    _keys(claim, fields, "mlx_runtime_target_observation_claim")
     if (
-        observation["record_type"] != "mlx_runtime_target_observation"
-        or observation["schema_version"] != SCHEMA_VERSION
-        or observation["evidence_kind"] != "future_independent_runtime_identity_observation"
-        or observation["observer_relationship"] != "independent_from_candidate"
+        claim["record_type"] != "mlx_runtime_target_observation_claim"
+        or claim["schema_version"] != SCHEMA_VERSION
+        or claim["evidence_kind"] != "caller_supplied_structure_only"
+        or claim["claimed_observer_relationship"] != "independent_from_candidate"
     ):
-        raise ContractError("unsupported runtime target observation")
-    if _boolean(observation["self_attested"], "runtime_target_observation.self_attested"):
-        raise ContractError("self-attested runtime target observations are forbidden")
+        raise ContractError("unsupported runtime target observation claim")
     if _boolean(
-        observation["ambiguous_host_promotion"],
-        "runtime_target_observation.ambiguous_host_promotion",
+        claim["claimed_self_attested"],
+        "runtime_target_observation_claim.claimed_self_attested",
+    ):
+        raise ContractError("self-attested runtime target observation claims are forbidden")
+    if _boolean(
+        claim["claimed_ambiguous_host_promotion"],
+        "runtime_target_observation_claim.claimed_ambiguous_host_promotion",
     ):
         raise ContractError("ambiguous host promotion is forbidden")
-    if observation["target_anchor_id"] != anchor["anchor_id"]:
-        raise ContractError("runtime target observation anchor identity mismatch")
+    if claim["target_anchor_id"] != anchor["anchor_id"]:
+        raise ContractError("runtime target observation claim anchor identity mismatch")
     target = _mapping(anchor["prospective_target"], "prospective target")
     interpreter = _mapping(
-        observation["interpreter"],
-        "runtime_target_observation.interpreter",
+        claim["interpreter"],
+        "runtime_target_observation_claim.interpreter",
     )
     platform = _mapping(
-        observation["platform"],
-        "runtime_target_observation.platform",
+        claim["platform"],
+        "runtime_target_observation_claim.platform",
     )
     if canonical_json(interpreter) != canonical_json(target["interpreter"]):
-        raise ContractError("runtime target observation interpreter identity drift")
+        raise ContractError("runtime target observation claim interpreter identity drift")
     if canonical_json(platform) != canonical_json(target["platform"]):
-        raise ContractError("runtime target observation platform identity drift")
+        raise ContractError("runtime target observation claim platform identity drift")
     _verify_zero_actions(
-        observation["static_action_counters"],
-        "runtime_target_observation.static_action_counters",
+        claim["static_action_counters"],
+        "runtime_target_observation_claim.static_action_counters",
     )
     identity = _sha256(
-        observation["observation_id"],
-        "runtime_target_observation.observation_id",
+        claim["claim_id"],
+        "runtime_target_observation_claim.claim_id",
     )
-    content = dict(observation)
-    del content["observation_id"]
+    content = dict(claim)
+    del content["claim_id"]
     if canonical_identity(content) != identity:
-        raise ContractError("runtime target observation identity mismatch")
-    return dict(observation)
+        raise ContractError("runtime target observation claim identity mismatch")
+    return dict(claim)
+
+
+def verify_runtime_target_observation_claim(
+    anchor_value: JsonValue,
+    claim_value: JsonValue,
+) -> dict[str, JsonValue]:
+    """Validate one structure-only claim and return only its refusal projection."""
+    anchor = verify_runtime_target_anchor(anchor_value)
+    claim = _validate_runtime_target_observation_claim(anchor, claim_value)
+    return {
+        "claim_id": claim["claim_id"],
+        "target_anchor_id": anchor["anchor_id"],
+        "evidence_kind": "caller_supplied_structure_only",
+        "claimed_identity_fields_match_target": True,
+        "runtime_evidence_accepted": False,
+        "independent_provenance_proven": False,
+        "custody_bound_measurement_proven": False,
+        "can_satisfy_qualification_or_preflight": False,
+        "blockers": list(RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS),
+        "runtime_authorized": False,
+        "mlx_or_metal_actions": 0,
+    }
 
 
 def runtime_target_replay(value: JsonValue) -> dict[str, JsonValue]:

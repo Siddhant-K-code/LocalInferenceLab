@@ -67,6 +67,11 @@ and remains `ineligible`. Exact blockers are the absent applicable distributions
 `numpy`, `transformers`, `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2`, plus
 `reviewed_candidate_not_committed_in_spec:sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`.
 
+Caller-supplied observation claims are not independent evidence. Canonical identity and exact
+target-field equality may be replayed offline, but claimed provenance remains self-asserted.
+Authoritative observer identity and custody-bound executable/platform measurement are
+unimplemented blockers, so no supplied envelope can satisfy qualification or preflight.
+
 Only the two top-level wheels are embedded (952,038 bytes total). The 38,255,657-byte
 `mlx_metal-0.30.4-py3-none-macosx_15_0_arm64.whl` and unrelated transitive wheels are not committed.
 Hash-only substitutes could not preserve the existing offline wheel-to-METADATA equality proof,

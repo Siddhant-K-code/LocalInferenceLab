@@ -403,17 +403,20 @@ it is explicitly not observed runtime evidence. The previous candidate's 3.13.0 
 superseded. The failed historical receipt's 3.13.15 value is recorded only to resolve the
 ambiguity, is not accepted as target or runtime evidence, and none of its frozen IDs are rewritten.
 `mlx runtime-target-anchor` emits the trust root and `mlx runtime-target-replay <anchor>` verifies
-it offline without probing the host. Caller-supplied observation envelopes are structure-only and
-are always refused as runtime evidence with authoritative-observer and measurement-custody
-blockers.
+it offline without probing the host. A supplied envelope may only be replayed as
+`caller_supplied_structure_only` with `mlx runtime-target-observation-claim-replay`; even an exact
+identity match plus claimed independent provenance is refused as runtime evidence because
+authoritative observer identity and custody-bound executable/platform measurement are unavailable.
 
 The MLX-LM-to-MLX dependency and all seven reviewed source/API surfaces are satisfied, but the
 candidate remains deterministically `ineligible`: its seven applicable transitive distributions
 are not supplied, and the target-derived review anchor is not in the committed allowlist. That
 allowlist retains only previously merged anchor
 `sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`;
-this change cannot promote its own candidate mutation. No qualification record is committed.
-Every future record still binds
+this change cannot promote its own candidate mutation. The exact blocker is
+`reviewed_candidate_not_committed_in_spec:sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`.
+No qualification record is committed. Candidate-controlled digests therefore cannot create an
+accepted record in this change. Every future record still binds
 the unchanged schema-1.0 negative projection, lock, terminal failure, authorization, consumption,
 historical protocol, and historical worker IDs.
 

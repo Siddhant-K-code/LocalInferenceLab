@@ -398,6 +398,8 @@ All seven source/API blockers are removed. The remaining blockers are exactly th
 `mlx-metal`, `numpy`, `transformers`, `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2`
 distributions. Source evidence does not prove runtime executability, native loading, backend or
 device availability, Metal availability, or synchronization success.
+The same record also carries the exact pending-anchor blocker
+`reviewed_candidate_not_committed_in_spec:sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`.
 
 The pair edge `mlx>=0.30.4; platform_system == "Darwin"` selects and accepts `mlx==0.30.4`.
 That fact does not establish complete dependency closure. No accepted or ineligible qualification
@@ -412,6 +414,9 @@ runtime evidence requires observer identity and custody-bound executable/platfor
 this change does not implement. Caller-supplied envelopes remain structure-only refusal claims;
 self-attestation, provenance relabeling, ambiguous promotion, and coordinated rehashing cannot
 make them accepted evidence.
+The `mlx runtime-target-observation-claim-replay` command reports
+`structure_valid_runtime_evidence_refused` for an exact canonical claim; authoritative provenance
+and custody cannot be supplied by caller-selected labels.
 
 ## Prospective schema-1.1 model-free contract
 
