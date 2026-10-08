@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" viewBox="0 0 1200 500">
+  <title id="title">Checking sealed ingredients is not cooking</title>
+  <desc id="desc">A sealed crate of exact candidate bytes passes through an offline checklist. A locked kitchen remains closed because fresh authorization and custody are missing. The analogy explains that static qualification is not runtime execution.</desc>
+
+  <rect width="1200" height="500" fill="#101827"/>
+  <text x="60" y="64" fill="#f8fafc" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="700">Checking ingredients is not cooking.</text>
+  <text x="60" y="98" fill="#bdc9df" font-family="Arial, Helvetica, sans-serif" font-size="19">Static qualification checks the sealed plan. It never turns on the kitchen.</text>
+
+  <g font-family="Arial, Helvetica, sans-serif">
+    <rect x="60" y="150" width="275" height="236" rx="14" fill="#18243a" stroke="#6ee7f5" stroke-width="3"/>
+    <text x="86" y="188" fill="#8cf4ff" font-size="14" font-weight="700" letter-spacing="1.4">SEALED INGREDIENTS</text>
+    <path d="M104 238H291V345H104Z" fill="#233856" stroke="#9bd6e5" stroke-width="3"/>
+    <path d="M104 268H291M197.5 238V345" stroke="#9bd6e5" stroke-width="3"/>
+    <rect x="144" y="220" width="108" height="39" rx="6" fill="#6ee7f5"/>
+    <text x="198" y="245" fill="#07141d" font-size="15" font-weight="700" text-anchor="middle">HASHED + PINNED</text>
+    <text x="86" y="374" fill="#d8e3f4" font-size="17">exact bytes + metadata</text>
+
+    <path d="M353 270H408" stroke="#6ee7f5" stroke-width="5" stroke-linecap="round"/>
+    <path d="M397 259L410 270L397 281" fill="none" stroke="#6ee7f5" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="425" y="150" width="300" height="236" rx="14" fill="#152c31" stroke="#5ee0c1" stroke-width="3"/>
+    <text x="451" y="188" fill="#84f3da" font-size="14" font-weight="700" letter-spacing="1.4">OFFLINE CHECKLIST</text>
+    <rect x="484" y="213" width="182" height="129" rx="8" fill="#eafdf8"/>
+    <rect x="540" y="199" width="70" height="28" rx="8" fill="#5ee0c1"/>
+    <path d="M510 252L519 262L537 241M510 290L519 300L537 279M510 328L519 338L537 317" fill="none" stroke="#0f6f64" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M554 253H636M554 291H636M554 329H616" stroke="#335a5a" stroke-width="5" stroke-linecap="round"/>
+    <text x="451" y="374" fill="#dbf5ee" font-size="17">coherent enough for review</text>
+
+    <path d="M743 270H798" stroke="#d7a94a" stroke-width="5" stroke-linecap="round" stroke-dasharray="8 9"/>
+    <path d="M787 259L800 270L787 281" fill="none" stroke="#d7a94a" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="815" y="150" width="325" height="236" rx="14" fill="#251f20" stroke="#d7a94a" stroke-width="3" stroke-dasharray="10 8"/>
+    <text x="841" y="188" fill="#f1c76c" font-size="14" font-weight="700" letter-spacing="1.4">LOCKED KITCHEN</text>
+    <rect x="876" y="215" width="201" height="140" rx="8" fill="#352d2c" stroke="#e9d4a5" stroke-width="3"/>
+    <circle cx="1048" cy="286" r="7" fill="#e9d4a5"/>
+    <path d="M941 248V231C941 207 957 193 977 193C997 193 1013 207 1013 231V248" fill="none" stroke="#f1c76c" stroke-width="10" stroke-linecap="round"/>
+    <rect x="924" y="242" width="106" height="76" rx="10" fill="#d7a94a"/>
+    <circle cx="977" cy="274" r="10" fill="#211c1d"/>
+    <path d="M977 282V298" stroke="#211c1d" stroke-width="8" stroke-linecap="round"/>
+    <text x="841" y="374" fill="#f0e2c8" font-size="17">fresh authority + custody missing</text>
+
+    <rect x="60" y="416" width="1080" height="50" rx="25" fill="#22304a"/>
+    <text x="600" y="448" fill="#f8fafc" font-size="20" font-weight="700" text-anchor="middle">Static coherence is evidence about a plan - not evidence that the plan ran.</text>
+  </g>
+</svg>

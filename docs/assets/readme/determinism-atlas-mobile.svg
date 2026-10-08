@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" viewBox="0 0 600 900">
+  <title id="title">Determinism atlas preview on a narrow screen</title>
+  <desc id="desc">A large grid counts 48 prospective operation cells. Eight are represented by synthetic fixtures. No cell contains an accepted physical MLX or Metal observation.</desc>
+
+  <rect width="600" height="900" fill="#0b1020"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="38" y="58" fill="#f7f9ff" font-size="32" font-weight="700">A map, not a benchmark</text>
+    <text x="38" y="94" fill="#b9c6e4" font-size="19">Comparison slots come before observations.</text>
+    <text x="38" y="140" fill="#9eb0d5" font-size="17" font-weight="700" letter-spacing="1.4">48 PROSPECTIVE CELLS</text>
+
+    <g fill="#25314d" stroke="#53617f" stroke-width="2">
+      <rect x="62" y="166" width="52" height="52" rx="7"/><rect x="122" y="166" width="52" height="52" rx="7"/><rect x="182" y="166" width="52" height="52" rx="7"/><rect x="242" y="166" width="52" height="52" rx="7"/><rect x="302" y="166" width="52" height="52" rx="7"/><rect x="362" y="166" width="52" height="52" rx="7"/><rect x="422" y="166" width="52" height="52" rx="7"/><rect x="482" y="166" width="52" height="52" rx="7"/>
+      <rect x="62" y="226" width="52" height="52" rx="7"/><rect x="122" y="226" width="52" height="52" rx="7"/><rect x="182" y="226" width="52" height="52" rx="7"/><rect x="242" y="226" width="52" height="52" rx="7"/><rect x="302" y="226" width="52" height="52" rx="7"/><rect x="362" y="226" width="52" height="52" rx="7"/><rect x="422" y="226" width="52" height="52" rx="7"/><rect x="482" y="226" width="52" height="52" rx="7"/>
+      <rect x="62" y="286" width="52" height="52" rx="7"/><rect x="122" y="286" width="52" height="52" rx="7"/><rect x="182" y="286" width="52" height="52" rx="7"/><rect x="242" y="286" width="52" height="52" rx="7"/><rect x="302" y="286" width="52" height="52" rx="7"/><rect x="362" y="286" width="52" height="52" rx="7"/><rect x="422" y="286" width="52" height="52" rx="7"/><rect x="482" y="286" width="52" height="52" rx="7"/>
+      <rect x="62" y="346" width="52" height="52" rx="7"/><rect x="122" y="346" width="52" height="52" rx="7"/><rect x="182" y="346" width="52" height="52" rx="7"/><rect x="242" y="346" width="52" height="52" rx="7"/><rect x="302" y="346" width="52" height="52" rx="7"/><rect x="362" y="346" width="52" height="52" rx="7"/><rect x="422" y="346" width="52" height="52" rx="7"/><rect x="482" y="346" width="52" height="52" rx="7"/>
+      <rect x="62" y="406" width="52" height="52" rx="7"/><rect x="122" y="406" width="52" height="52" rx="7"/><rect x="182" y="406" width="52" height="52" rx="7"/><rect x="242" y="406" width="52" height="52" rx="7"/><rect x="302" y="406" width="52" height="52" rx="7"/><rect x="362" y="406" width="52" height="52" rx="7"/><rect x="422" y="406" width="52" height="52" rx="7"/><rect x="482" y="406" width="52" height="52" rx="7"/>
+      <rect x="62" y="466" width="52" height="52" rx="7"/><rect x="122" y="466" width="52" height="52" rx="7"/><rect x="182" y="466" width="52" height="52" rx="7"/><rect x="242" y="466" width="52" height="52" rx="7"/><rect x="302" y="466" width="52" height="52" rx="7"/><rect x="362" y="466" width="52" height="52" rx="7"/><rect x="422" y="466" width="52" height="52" rx="7"/><rect x="482" y="466" width="52" height="52" rx="7"/>
+    </g>
+
+    <g fill="#55d8bd" stroke="#a1f4df" stroke-width="2">
+      <rect x="62" y="166" width="52" height="52" rx="7"/><rect x="122" y="166" width="52" height="52" rx="7"/><rect x="182" y="166" width="52" height="52" rx="7"/><rect x="242" y="166" width="52" height="52" rx="7"/>
+      <rect x="302" y="166" width="52" height="52" rx="7"/><rect x="362" y="166" width="52" height="52" rx="7"/><rect x="422" y="166" width="52" height="52" rx="7"/><rect x="482" y="166" width="52" height="52" rx="7"/>
+    </g>
+
+    <rect x="38" y="566" width="524" height="270" rx="14" fill="#151d30" stroke="#34415f" stroke-width="3"/>
+    <circle cx="78" cy="617" r="14" fill="#25314d" stroke="#53617f" stroke-width="2"/>
+    <text x="110" y="626" fill="#f7f9ff" font-size="26" font-weight="700">48</text>
+    <text x="164" y="626" fill="#cbd5eb" font-size="19">prospective cells</text>
+
+    <circle cx="78" cy="681" r="14" fill="#55d8bd" stroke="#a1f4df" stroke-width="2"/>
+    <text x="110" y="690" fill="#f7f9ff" font-size="26" font-weight="700">8</text>
+    <text x="150" y="690" fill="#cbd5eb" font-size="19">synthetic represented cells</text>
+
+    <circle cx="78" cy="745" r="14" fill="none" stroke="#ffb86c" stroke-width="3"/>
+    <text x="110" y="754" fill="#f7f9ff" font-size="26" font-weight="700">0</text>
+    <text x="150" y="754" fill="#cbd5eb" font-size="19">accepted physical observations</text>
+
+    <path d="M62 787H538" stroke="#34415f" stroke-width="1"/>
+    <text x="62" y="817" fill="#ffcf9b" font-size="18" font-weight="700">No physical MLX or Metal result is accepted.</text>
+  </g>
+</svg>
