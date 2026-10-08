@@ -369,6 +369,31 @@ inference/generation/benchmark/cloud/spend counters are exactly zero and reject 
 1.0 remains permanently disabled; a distinct schema-1.1 protocol/spec/worker review and fresh
 explicit authorization are mandatory before any physical action.
 
+### Scalable supplied-wheel closure custody
+
+Large or numerous third-party wheels are not embedded in Git. The additive
+`mlx_wheel_evidence_pack_manifest` binds their official PyPI identities, exact raw dist-info
+METADATA/WHEEL bytes, applicable dependency graph, deterministic selection rationale, and source
+bindings. The canonical real manifest is
+`evidence/mlx-wheel-closure-mlx-0.30.4-mlx-lm-0.30.6-macos-arm64-py313-v1.json`,
+with manifest ID
+`sha256:837deaf4265bf921e36712ee4ea7210eb7869b1487cc196e701689dd0fdd38be`
+and pack-spec ID
+`sha256:14b823fcf06c3107d76bbc41742353d6d2e57aa5683ab298533c9b7f84a714b7`.
+
+The verifier requires that manifest ID as a separately trusted caller input and an exact local
+directory containing all 34 named wheels and nothing else. It uses bounded no-follow descriptor
+reads and inert ZIP inspection only. It rejects substituted bytes, links, unsafe basenames,
+missing/extras, duplicate/case-colliding or overlapping ZIP entries, traversal, multiple dist-info
+records, malformed UTF-8 metadata, raw METADATA/WHEEL drift, tag drift, marker-dependent omissions,
+recursive gaps, and coordinated rehashing against the trusted ID. No network is available during
+verification or record reconstruction.
+
+A successful pack receipt proves only that those exact supplied bytes were present for that
+verification. A committed manifest does not. A later record may remove distribution blockers only
+by reconstructing with the pack present; it remains `ineligible` while the seven worker-API source
+evidence items are absent. No eligible real qualification record is committed here.
+
 ## Prospective schema-1.1 model-free runtime-preflight protocol
 
 Schema 1.1 is a contract/refusal layer only. It defines no worker or execution command. Its current

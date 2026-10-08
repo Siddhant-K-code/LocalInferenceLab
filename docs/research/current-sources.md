@@ -72,10 +72,43 @@ target-field equality may be replayed offline, but claimed provenance remains se
 Authoritative observer identity and custody-bound executable/platform measurement are
 unimplemented blockers, so no supplied envelope can satisfy qualification or preflight.
 
-Only the two top-level wheels are embedded (952,038 bytes total). The 38,255,657-byte
-`mlx_metal-0.30.4-py3-none-macosx_15_0_arm64.whl` and unrelated transitive wheels are not committed.
-Hash-only substitutes could not preserve the existing offline wheel-to-METADATA equality proof,
-so their absence is represented by exact fail-closed blockers rather than by overclaimed evidence.
+Only the two top-level wheels are embedded in the original candidate (952,038 bytes total). The
+additive closure manifest at
+`evidence/mlx-wheel-closure-mlx-0.30.4-mlx-lm-0.30.6-macos-arm64-py313-v1.json`
+now binds 34 exact official wheels (70,700,189 bytes total) without adding any wheel files or
+embedding the 32 transitive wheel binaries. The original candidate's two embedded roots remain
+unchanged. The manifest ID is
+`sha256:837deaf4265bf921e36712ee4ea7210eb7869b1487cc196e701689dd0fdd38be`;
+its pack-spec ID is
+`sha256:14b823fcf06c3107d76bbc41742353d6d2e57aa5683ab298533c9b7f84a714b7`.
+Raw wheel-embedded METADATA and WHEEL control bytes are committed in the manifest, including the
+38,255,657-byte macOS 15 MLX-Metal wheel's metadata, but no `.whl` files are committed.
+A manifest is not proof of local byte presence: only verification of the exact separately supplied
+pack can produce that proof.
+
+The deterministic rule keeps the two root pins exact and selects the highest non-yanked stable
+release satisfying all currently applicable constraints, then the highest-ranked compatible
+official wheel for CPython 3.13/macOS 15/arm64. This selects `transformers==5.19.0`; its
+`tokenizers<0.24.0,>=0.23.1` edge constrains `huggingface-hub` to `1.33.0` instead of incompatible
+2.x. Recursive discovery closes at 34 distributions:
+
+`annotated-doc==0.0.5`, `anyio==4.15.1`, `certifi==2026.7.22`, `click==8.5.0`,
+`filelock==4.0.12`, `fsspec==2026.9.0`, `h11==0.16.0`, `hf-xet==1.7.0`,
+`httpcore==1.0.9`, `httpx==0.28.1`, `huggingface-hub==1.33.0`, `idna==3.20`,
+`jinja2==3.1.6`, `markdown-it-py==4.2.0`, `markupsafe==3.0.4`, `mdurl==0.1.2`,
+`mlx==0.30.4`, `mlx-lm==0.30.6`, `mlx-metal==0.30.4`, `numpy==2.5.3`,
+`packaging==26.3`, `protobuf==7.36.2`, `pygments==2.21.0`, `pyyaml==6.0.3`,
+`regex==2026.9.29`, `rich==15.0.0`, `safetensors==0.8.0`,
+`sentencepiece==0.2.2`, `shellingham==1.5.4`, `tokenizers==0.23.2`,
+`tqdm==4.70.1`, `transformers==5.19.0`, `typer==0.27.3`, and
+`typing-extensions==4.16.0`.
+
+Private inert verification produced receipt
+`sha256:5401e65eb204b49318c044fd38ecaa48ac253b81bfbfc0f265dec9605431672e`.
+The deliberately uncommitted reconstructed supplied-pack qualification record is
+`sha256:852035e357fd24dbf0984048583f15fd172af8dcaafcd479a1abcaf49bb67b46`
+and remains `ineligible` only on the seven worker-API source-evidence blockers. These identities do
+not authorize installation, import, execution, MLX/Metal access, or model action.
 
 ## Candidate worker API source evidence
 

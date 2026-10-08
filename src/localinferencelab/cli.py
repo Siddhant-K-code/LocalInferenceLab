@@ -85,6 +85,15 @@ from localinferencelab.mlx_runtime_target import (
     runtime_target_replay,
     verify_runtime_target_observation_claim,
 )
+from localinferencelab.mlx_wheel_custody import (
+    build_supplied_pack_qualification_record,
+    load_supplied_pack_qualification_record,
+    load_wheel_evidence_manifest,
+    supplied_pack_qualification_inspection,
+    verify_supplied_wheel_pack,
+    wheel_evidence_pack_spec,
+    write_supplied_pack_qualification_record,
+)
 from localinferencelab.ollama import (
     build_prospective_package,
     create_authorization_nonce,
@@ -342,6 +351,35 @@ def _parser() -> argparse.ArgumentParser:
         help="replay one closed qualification fixture without imports or processes",
     )
     runtime_qualification_replay.add_argument("bundle", type=Path)
+    mlx_commands.add_parser(
+        "runtime-wheel-pack-spec",
+        help="emit the offline caller-supplied exact-wheel custody specification",
+    )
+    runtime_wheel_pack_verify = mlx_commands.add_parser(
+        "runtime-wheel-pack-verify",
+        help="verify an exact supplied wheel pack against a separately trusted manifest ID",
+    )
+    runtime_wheel_pack_verify.add_argument("manifest", type=Path)
+    runtime_wheel_pack_verify.add_argument("pack_root", type=Path)
+    runtime_wheel_pack_verify.add_argument("--expected-manifest-id", required=True)
+    runtime_qualification_pack_create = mlx_commands.add_parser(
+        "runtime-qualification-pack-create",
+        help="derive a static qualification after exact supplied-wheel verification",
+    )
+    runtime_qualification_pack_create.add_argument("candidate", type=Path)
+    runtime_qualification_pack_create.add_argument("manifest", type=Path)
+    runtime_qualification_pack_create.add_argument("pack_root", type=Path)
+    runtime_qualification_pack_create.add_argument("output", type=Path)
+    runtime_qualification_pack_create.add_argument("--expected-manifest-id", required=True)
+    runtime_qualification_pack_verify = mlx_commands.add_parser(
+        "runtime-qualification-pack-verify",
+        help="reconstruct a supplied-pack qualification with the exact pack present",
+    )
+    runtime_qualification_pack_verify.add_argument("candidate", type=Path)
+    runtime_qualification_pack_verify.add_argument("manifest", type=Path)
+    runtime_qualification_pack_verify.add_argument("pack_root", type=Path)
+    runtime_qualification_pack_verify.add_argument("record", type=Path)
+    runtime_qualification_pack_verify.add_argument("--expected-manifest-id", required=True)
     mlx_commands.add_parser(
         "runtime-preflight-1-1-capability-report",
         help="report the prospective model-free schema-1.1 contract with execution unreachable",
@@ -819,6 +857,63 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
             qualification_replay = replay_qualification_fixture(args.bundle)
             output = qualification_replay.to_dict()
             output["status"] = "replayed"
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-wheel-pack-spec":
+            _emit_document(wheel_evidence_pack_spec())
+            return 0
+        if args.mlx_command == "runtime-wheel-pack-verify":
+            manifest = load_wheel_evidence_manifest(
+                args.manifest,
+                args.expected_manifest_id,
+            )
+            receipt = verify_supplied_wheel_pack(
+                manifest,
+                args.pack_root,
+                args.expected_manifest_id,
+            ).receipt()
+            receipt["status"] = "verified"
+            _emit(receipt)
+            return 0
+        if args.mlx_command == "runtime-qualification-pack-create":
+            candidate = load_qualification_package(args.candidate)
+            manifest = load_wheel_evidence_manifest(
+                args.manifest,
+                args.expected_manifest_id,
+            )
+            supplied_pack_record = build_supplied_pack_qualification_record(
+                candidate,
+                manifest,
+                args.pack_root,
+                args.expected_manifest_id,
+            )
+            write_supplied_pack_qualification_record(
+                args.output,
+                supplied_pack_record,
+                candidate,
+                manifest,
+                args.pack_root,
+                args.expected_manifest_id,
+            )
+            output = supplied_pack_qualification_inspection(supplied_pack_record)
+            output["status"] = "created"
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-qualification-pack-verify":
+            candidate = load_qualification_package(args.candidate)
+            manifest = load_wheel_evidence_manifest(
+                args.manifest,
+                args.expected_manifest_id,
+            )
+            supplied_pack_record = load_supplied_pack_qualification_record(
+                args.record,
+                candidate,
+                manifest,
+                args.pack_root,
+                args.expected_manifest_id,
+            )
+            output = supplied_pack_qualification_inspection(supplied_pack_record)
+            output["status"] = "valid"
             _emit(output)
             return 0
         if args.mlx_command == "runtime-preflight-1-1-capability-report":

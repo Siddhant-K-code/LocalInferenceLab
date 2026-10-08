@@ -22,6 +22,7 @@ Every trust transition is represented by immutable canonical data.
 | `mlx_runtime_preflight.py` | Separate exact-runtime lock/receipt validation, schema-1.0 execution gate, synthetic one-shot runtime-preflight custody, strict result/import-closure validation, closed publication, and offline replay | Public `runtime-preflight` validates then rejects the dependency-incompatible observed receipt before physical action; only exact internal synthetic fixtures may start one child/socketpair |
 | `mlx_runtime_preflight_worker.py` | Standalone sealed FD-3 runtime-only synthetic worker | After synthetic authorization only, imports bound fake `mlx.core` and `mlx_lm`, queries model-free backend/device/stream facts, and synchronizes; no model action or network/command surface |
 | `mlx_qualification.py` | Canonical static candidate package, dependency/marker/wheel assessment, immutable source-only worker-API evidence verification, sole deterministic decision, and two-outcome closed fixture replay | Explicit record/fixture writes only; no install, network, process, socket, authorization, runtime import, backend, model, or spend action |
+| `mlx_wheel_custody.py` | Content-addressed exact-wheel closure manifests, bounded no-follow supplied-pack verification, and pack-required qualification reconstruction | Reads caller-supplied wheel ZIP bytes and may write a record only; no install, network, package import, wheel-content execution, process, socket, MLX/Metal, model, or spend action |
 | `mlx_preflight_contract.py` | Prospective schema-1.1 model-free protocol/spec, prerequisite/refusal record, bounded inspection, and deterministic closed-fixture replay | Explicit record/fixture writes only; no authorization creation/consumption, install, import, worker, process, socket, backend/device/Metal, synchronization, model, or spend action |
 | `mlx_determinism_canary.py` | Prospective operation matrix, exact embedded byte vectors, IEEE comparison metrics, strict synthetic result schema, synthetic atlas, and closed replay | Explicit fixture-bundle writes only; no MLX import, process, authorization, backend/device/Metal query, hardware synchronization, MLX tensor/model action, timing, network, cloud, or spend |
 | `ollama.py` | Prospective package, direct numeric-loopback transport, one-shot authorization, bounded execution, terminal custody/replay | Explicit output-root writes; loopback calls only after authorization |
@@ -59,6 +60,16 @@ METADATA bytes (or canonical synthetic/projection bytes), bounded `Requires-Dist
 closure, and immutable source-byte evidence for the future preflight API set. It derives one of
 two decisions and cannot construct authorization. Importing the module does not import MLX or
 MLX-LM.
+
+The additive wheel-custody module removes the Git-size assumption from real closure evidence. Its
+manifest commits exact official artifact URL, filename, size and SHA-256; raw wheel-embedded
+METADATA and WHEEL bytes and hashes; dist-info identity; WHEEL tags; selection provenance; source
+repository/tag/revision where independently bound; and the complete applicable dependency graph.
+The 34 third-party wheel files remain caller supplied and uncommitted. Pack verification opens a
+directory and every basename without following links, requires regular single-link members,
+rejects missing/extras and ZIP ambiguity, and reconstructs the closure offline. A trusted expected
+manifest ID is an independent input. The manifest and any committed qualification record
+explicitly do not attest that a pack was present; reconstruction requires the same supplied pack.
 
 The determinism canary is a separate pure comparison layer. It decodes only bounded supplied IEEE
 payload bytes with Python's standard library. It has no runtime adapter, worker, execution command,
