@@ -373,9 +373,17 @@ package/network/process/socket/authorization/import/backend/model/cloud/spend co
 Reviewed candidates without an independently committed derived evidence anchor remain ineligible.
 
 The committed real-candidate evidence package
-`evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json` supplies one such immutable
-anchor for CPython 3.13.0 on macOS 15.0 arm64:
+`evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json` derives pending review anchor
+`sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`
+for exact CPython 3.13.15 on macOS 27.0.1 build 26A434 arm64. It is deliberately absent from the
+allowlist, which retains previously merged anchor
 `sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`.
+The package is additionally bound to target anchor
+`sha256:008f7c3ac60614bc6909822180a4bc0b9be17eaf0aa3abc23829eb2842c4fdc0`,
+which fixes executable bytes, publishable realpath, CPython implementation/full version,
+cache/ABI/SOABI, macOS product/build, interpreter deployment 11.0, runtime-wheel deployment 15.0,
+and arm64. `Requires-Python` uses the full 3.13.15 value while native wheels remain
+`cp313`-compatible.
 It embeds only the exact MLX `0.30.4` and MLX-LM `0.30.6` wheels and their raw Core Metadata.
 Those 952,038 wheel bytes are small enough to preserve the existing exact-byte verification
 contract without a network replay. The 38,255,657-byte `mlx-metal` wheel and the other transitive
@@ -390,11 +398,25 @@ All seven source/API blockers are removed. The remaining blockers are exactly th
 `mlx-metal`, `numpy`, `transformers`, `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2`
 distributions. Source evidence does not prove runtime executability, native loading, backend or
 device availability, Metal availability, or synchronization success.
+The same record also carries the exact pending-anchor blocker
+`reviewed_candidate_not_committed_in_spec:sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`.
 
 The pair edge `mlx>=0.30.4; platform_system == "Darwin"` selects and accepts `mlx==0.30.4`.
 That fact does not establish complete dependency closure. No accepted or ineligible qualification
-record is committed beside the newly reviewed candidate; a later record change must reconstruct
-the decision from the immutable package.
+record is committed beside the target-mutated candidate; a later separate review may promote its
+exact derived anchor without mutating the package.
+
+The target record separates a bounded development-host observation from future runtime evidence.
+The former establishes only that the selected 3.13.15 interpreter/host envelope was locally
+available; it omits the absolute private path and cannot satisfy preflight. The historical failed
+receipt's 3.13.15 field is not accepted as evidence and no historical ID is changed. Future
+runtime evidence requires observer identity and custody-bound executable/platform measurement that
+this change does not implement. Caller-supplied envelopes remain structure-only refusal claims;
+self-attestation, provenance relabeling, ambiguous promotion, and coordinated rehashing cannot
+make them accepted evidence.
+The `mlx runtime-target-observation-claim-replay` command reports
+`structure_valid_runtime_evidence_refused` for an exact canonical claim; authoritative provenance
+and custody cannot be supplied by caller-selected labels.
 
 ## Prospective schema-1.1 model-free contract
 

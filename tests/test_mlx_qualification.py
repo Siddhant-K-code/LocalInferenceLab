@@ -43,6 +43,10 @@ from localinferencelab.mlx_runtime_preflight import (
     OBSERVED_CONSUMPTION_ID,
     OBSERVED_FAILURE_ID,
 )
+from localinferencelab.mlx_runtime_target import (
+    EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
+    target_environment_binding,
+)
 
 
 def _dict(value: JsonValue) -> dict[str, JsonValue]:
@@ -204,6 +208,7 @@ def _set_metadata_and_wheel_bytes(
 
 def _as_reviewed_candidate(package: dict[str, JsonValue]) -> None:
     package["candidate_kind"] = "reviewed_candidate"
+    package["target_environment"] = target_environment_binding()
     for item in _list(package["distributions"]):
         distribution = _dict(item)
         name = cast("str", distribution["name"])
@@ -325,6 +330,7 @@ def test_spec_and_decisions_are_static_bounded_and_exact() -> None:
         "sha256:10ab50cbfb94890bae1dd8c57180645d5781e454b1a8171b158c4d932121d9dd"
     ]
     assert api_spec["claim_scope"] == "source_surface_availability_only"
+    assert spec["runtime_target_anchor_id"] == EXPECTED_RUNTIME_TARGET_ANCHOR_ID
 
     historical = build_qualification_record(historical_incompatible_qualification_package())
     eligible = build_qualification_record(synthetic_eligible_qualification_package())
@@ -351,10 +357,10 @@ def test_spec_and_decisions_are_static_bounded_and_exact() -> None:
 def test_committed_real_candidate_anchor_is_exact_and_ineligible() -> None:
     package = verify_qualification_package(_committed_candidate_package())
     assert package["qualification_spec_id"] == (
-        "sha256:69bc8ad04e7eda3f091ed16524e97413081dd4fe385c7ca9262a304420534a6a"
+        "sha256:17d2f62fd4832a224f3bf61c7aa5b9668d05077ed36d56d1bf873fd63f2ac826"
     )
     assert package["package_id"] == (
-        "sha256:c4bb9a295b15a9085ee3014c006cfc307ab63d650d3b1109d9bc348c915833f8"
+        "sha256:4f87b4678c31c0cd08534c58485e2b242c74936737b8f9c6c96319454ada358d"
     )
     assert package["worker_api_evidence_spec_id"] == (
         "sha256:6c83f627032a2c3db38eee34f804469a42e227a3af0a84ed5c0052a192d29e97"
@@ -362,6 +368,18 @@ def test_committed_real_candidate_anchor_is_exact_and_ineligible() -> None:
     assert package["worker_api_evidence_anchor_id"] == (
         "sha256:10ab50cbfb94890bae1dd8c57180645d5781e454b1a8171b158c4d932121d9dd"
     )
+    assert package["target_environment"] == {
+        "implementation_name": "cpython",
+        "macos_version": "27.0.1",
+        "os_name": "posix",
+        "platform_machine": "arm64",
+        "platform_system": "Darwin",
+        "python_abi": "cp313",
+        "python_full_version": "3.13.15",
+        "python_version": "3.13",
+        "runtime_target_anchor_id": EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
+        "sys_platform": "darwin",
+    }
     assert package["top_level_requirements"] == ["mlx==0.30.4", "mlx-lm==0.30.6"]
     evidence_ids = {
         cast("str", _dict(item)["probe"]): _dict(item)["evidence_id"]
@@ -437,10 +455,10 @@ def test_committed_real_candidate_anchor_is_exact_and_ineligible() -> None:
     record = build_qualification_record(package)
     assessment = _dict(record["assessment"])
     assert assessment["review_anchor_id"] == (
-        "sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c"
+        "sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f"
     )
     assert record["record_id"] == (
-        "sha256:60a8e63505dea047f8db765effd80df29372d2d94d27193143610911ecaeace6"
+        "sha256:968f4bf20c15f97503ad5f7d3a95025bc40f0f787bf63b4c59d16e0d7d25ded3"
     )
     assert record["decision"] == INELIGIBLE
     assert record["blockers"] == [
@@ -451,6 +469,10 @@ def test_committed_real_candidate_anchor_is_exact_and_ineligible() -> None:
         "dependency_missing:mlx-lm:sentencepiece",
         "dependency_missing:mlx-lm:transformers>=5.0.0",
         'dependency_missing:mlx:mlx-metal==0.30.4; platform_system == "Darwin"',
+        (
+            "reviewed_candidate_not_committed_in_spec:"
+            "sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f"
+        ),
     ]
     api_assessments = [_dict(item) for item in _list(assessment["worker_api_assessments"])]
     assert len(api_assessments) == 7
@@ -474,6 +496,28 @@ def test_committed_real_candidate_anchor_is_exact_and_ineligible() -> None:
     )
     assert one_component_extra["applicable"] is False
     assert all(_dict(item)["compatible"] is True for item in _list(assessment["wheel_assessments"]))
+
+
+def test_target_migration_cannot_self_promote_review_anchor() -> None:
+    candidate_path = (
+        Path(qualification_module.__file__).resolve(strict=True).parents[2]
+        / "evidence"
+        / "mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json"
+    )
+    package = verify_qualification_package(
+        load_canonical_json_file(candidate_path, "target-migrated candidate")
+    )
+    record = build_qualification_record(package)
+    assessment = _dict(record["assessment"])
+    migrated_anchor = cast("str", assessment["review_anchor_id"])
+    assert migrated_anchor == (
+        "sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f"
+    )
+    assert migrated_anchor not in _list(qualification_spec()["reviewed_candidate_anchors"])
+    assert f"reviewed_candidate_not_committed_in_spec:{migrated_anchor}" in _list(
+        record["blockers"]
+    )
+    assert record["decision"] == INELIGIBLE
     assert set(_dict(record["static_action_counters"]).values()) == {0}
 
 
@@ -986,6 +1030,48 @@ def test_requires_python_is_assessed_and_fails_closed() -> None:
     _set_requires_python(unsupported, "mlx", ">=3.11, <4.0")
     with pytest.raises(ContractError, match="unsupported version specifier grammar"):
         verify_qualification_package(unsupported)
+
+
+def test_requires_python_uses_exact_full_version_while_abi_remains_cp313() -> None:
+    exact = _copy(synthetic_eligible_qualification_package())
+    exact["target_environment"] = {
+        "implementation_name": "cpython",
+        "macos_version": "27.0.1",
+        "os_name": "posix",
+        "platform_machine": "arm64",
+        "platform_system": "Darwin",
+        "python_abi": "cp313",
+        "python_full_version": "3.13.15",
+        "python_version": "3.13",
+        "sys_platform": "darwin",
+    }
+    _set_requires_python(exact, "mlx-lm", "==3.13.15")
+    exact_record = build_qualification_record(exact)
+    exact_assessment = next(
+        _dict(item)
+        for item in _list(_dict(exact_record["assessment"])["requires_python_assessments"])
+        if _dict(item)["distribution"] == "mlx-lm"
+    )
+    assert exact_assessment["selected_python"] == "3.13.15"
+    assert exact_assessment["satisfied"] is True
+
+    patch_drift = _copy(exact)
+    _dict(patch_drift["target_environment"])["python_full_version"] = "3.13.0"
+    _rehash_package(patch_drift)
+    drift_record = build_qualification_record(patch_drift)
+    assert "requires_python_unsatisfied:mlx-lm:==3.13.15:selected=3.13.0" in _list(
+        drift_record["blockers"]
+    )
+
+
+def test_reviewed_candidate_rejects_target_drift_even_after_rehashing() -> None:
+    package = _copy(synthetic_eligible_qualification_package())
+    _as_reviewed_candidate(package)
+    target = _dict(package["target_environment"])
+    target["python_full_version"] = "3.13.0"
+    _rehash_package(package)
+    with pytest.raises(ContractError, match="target environment drift"):
+        verify_qualification_package(package)
 
 
 @pytest.mark.parametrize(

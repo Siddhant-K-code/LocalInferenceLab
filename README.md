@@ -379,18 +379,44 @@ metadata, never the Python standard library or native loader. The fixture proves
 the frozen MLX `0.29.3` / MLX-LM `0.30.6` projection remains `ineligible`, while a clearly labeled
 synthetic complete closure yields `eligible_for_new_observed_authorization` without claiming a
 real coherent pair. The repository now contains one independently reviewable real evidence package,
-`evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json`, for CPython 3.13.0 on
-macOS 15.0 arm64. It embeds the exact reviewed PyPI wheels and raw METADATA for MLX `0.30.4` and
-MLX-LM `0.30.6`, binds their immutable upstream tags/revisions, and commits review anchor
-`sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`.
+`evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json`, for the exact prospective
+CPython 3.13.15 target on macOS 27.0.1 build 26A434 arm64, with a macOS 15.0 runtime-wheel
+deployment floor. It embeds the exact reviewed PyPI wheels and raw METADATA for MLX `0.30.4` and
+MLX-LM `0.30.6`, binds their immutable upstream tags/revisions, target anchor
+`sha256:008f7c3ac60614bc6909822180a4bc0b9be17eaf0aa3abc23829eb2842c4fdc0`,
+and derives pending review anchor
+`sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`.
 Its worker-evidence spec and independently reviewed source-evidence anchor are
 `sha256:6c83f627032a2c3db38eee34f804469a42e227a3af0a84ed5c0052a192d29e97`
 and `sha256:10ab50cbfb94890bae1dd8c57180645d5781e454b1a8171b158c4d932121d9dd`.
-The MLX-LM-to-MLX dependency and all seven source/API surfaces are satisfied, but the candidate
-remains deterministically `ineligible`: the applicable `mlx-metal`, `numpy`, `transformers`,
-`sentencepiece`, `protobuf`, `pyyaml`, and `jinja2` distributions are not supplied. No
-qualification record is committed with the anchor. Candidate-controlled digests therefore cannot
-create an accepted record in this change. Every future record still binds
+`Requires-Python` is evaluated against exact `python_full_version=3.13.15`; native wheel
+compatibility remains scoped to `cp313`.
+
+The canonical target record is
+`runtime/mlx-runtime-target-macos-arm64-cpython-3.13.15.json`. It binds CPython implementation
+and full version, `cpython-313` cache tag, `cp313`, `cpython-313-darwin`, publishable
+installation-root-relative executable realpath, exact executable and ad-hoc code-signature
+digests, macOS product/build, interpreter and wheel deployment constraints, and arm64. Its bounded
+development-host observation is
+`sha256:76ec73bb91e2436375de474be23458e61b4b6fba27de9b365112a0a31a42ff54`;
+it is explicitly not observed runtime evidence. The previous candidate's 3.13.0 value is
+superseded. The failed historical receipt's 3.13.15 value is recorded only to resolve the
+ambiguity, is not accepted as target or runtime evidence, and none of its frozen IDs are rewritten.
+`mlx runtime-target-anchor` emits the trust root and `mlx runtime-target-replay <anchor>` verifies
+it offline without probing the host. A supplied envelope may only be replayed as
+`caller_supplied_structure_only` with `mlx runtime-target-observation-claim-replay`; even an exact
+identity match plus claimed independent provenance is refused as runtime evidence because
+authoritative observer identity and custody-bound executable/platform measurement are unavailable.
+
+The MLX-LM-to-MLX dependency and all seven reviewed source/API surfaces are satisfied, but the
+candidate remains deterministically `ineligible`: its seven applicable transitive distributions
+are not supplied, and the target-derived review anchor is not in the committed allowlist. That
+allowlist retains only previously merged anchor
+`sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`;
+this change cannot promote its own candidate mutation. The exact blocker is
+`reviewed_candidate_not_committed_in_spec:sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`.
+No qualification record is committed. Candidate-controlled digests therefore cannot create an
+accepted record in this change. Every future record still binds
 the unchanged schema-1.0 negative projection, lock, terminal failure, authorization, consumption,
 historical protocol, and historical worker IDs.
 

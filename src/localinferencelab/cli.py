@@ -79,6 +79,12 @@ from localinferencelab.mlx_runtime_preflight import (
     runtime_preflight_capability_report,
     runtime_preflight_spec,
 )
+from localinferencelab.mlx_runtime_target import (
+    load_runtime_target_anchor,
+    runtime_target_anchor,
+    runtime_target_replay,
+    verify_runtime_target_observation_claim,
+)
 from localinferencelab.ollama import (
     build_prospective_package,
     create_authorization_nonce,
@@ -282,6 +288,21 @@ def _parser() -> argparse.ArgumentParser:
         help="replay the pinned failed observed-attempt projection without imports or processes",
     )
     runtime_preflight_negative_replay.add_argument("projection", type=Path)
+    mlx_commands.add_parser(
+        "runtime-target-anchor",
+        help="emit the exact prospective runtime target without probing MLX or the host",
+    )
+    runtime_target_replay_command = mlx_commands.add_parser(
+        "runtime-target-replay",
+        help="replay one committed target anchor without imports, processes, or host probes",
+    )
+    runtime_target_replay_command.add_argument("anchor", type=Path)
+    runtime_target_observation_claim_replay = mlx_commands.add_parser(
+        "runtime-target-observation-claim-replay",
+        help="validate a supplied claim structure and refuse runtime-evidence promotion",
+    )
+    runtime_target_observation_claim_replay.add_argument("anchor", type=Path)
+    runtime_target_observation_claim_replay.add_argument("claim", type=Path)
     mlx_commands.add_parser(
         "runtime-qualification-spec",
         help="emit the process-free schema-1.0 static qualification specification",
@@ -731,6 +752,24 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
             output["mlx_imports_during_replay"] = 0
             output["process_actions_during_replay"] = 0
             output["socket_actions_during_replay"] = 0
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-target-anchor":
+            _emit_document(runtime_target_anchor())
+            return 0
+        if args.mlx_command == "runtime-target-replay":
+            output = runtime_target_replay(load_runtime_target_anchor(args.anchor))
+            output["status"] = "replayed"
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-target-observation-claim-replay":
+            anchor = load_runtime_target_anchor(args.anchor)
+            claim = load_json_bytes(args.claim.read_bytes())
+            output = verify_runtime_target_observation_claim(
+                anchor,
+                claim,
+            )
+            output["status"] = "structure_valid_runtime_evidence_refused"
             _emit(output)
             return 0
         if args.mlx_command == "runtime-qualification-spec":

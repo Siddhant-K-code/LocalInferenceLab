@@ -39,14 +39,38 @@ METADATA entry and that the filename tag occurs in the embedded WHEEL control re
 Darwin requirement `mlx>=0.30.4` selects and accepts the pinned MLX `0.30.4`, correcting the
 historical `0.29.3` / `0.30.6` incompatibility.
 
+The package now binds exact prospective runtime target
+`sha256:008f7c3ac60614bc6909822180a4bc0b9be17eaf0aa3abc23829eb2842c4fdc0`:
+CPython 3.13.15 (`cpython-313`, `cp313`, `cpython-313-darwin`) on macOS 27.0.1 build 26A434
+arm64, with interpreter deployment target 11.0 and runtime-wheel deployment target 15.0. The
+already available interpreter's exact bytes and code-signature digests were collected using
+bounded local OS commands and Python standard-library facts only. Its absolute private path is not
+committed.
+
+The previous 3.13.0 candidate value is superseded. The historical failed receipt's 3.13.15 value
+is not accepted as target/runtime evidence and none of its IDs are rewritten. The target anchor's
+development-host observation
+`sha256:76ec73bb91e2436375de474be23458e61b4b6fba27de9b365112a0a31a42ff54`
+is likewise not runtime evidence; it only establishes the prospective target was locally
+available. `Requires-Python` is evaluated against exact full version 3.13.15, independently of
+`cp313` wheel-tag compatibility.
+
 The package ID is
-`sha256:c4bb9a295b15a9085ee3014c006cfc307ab63d650d3b1109d9bc348c915833f8`;
-its independently committed review anchor is
+`sha256:4f87b4678c31c0cd08534c58485e2b242c74936737b8f9c6c96319454ada358d`;
+its target-derived pending review anchor is
+`sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`.
+The allowlist retains previously merged anchor
 `sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`.
 The reconstructed, deliberately uncommitted qualification record is
-`sha256:60a8e63505dea047f8db765effd80df29372d2d94d27193143610911ecaeace6`
+`sha256:968f4bf20c15f97503ad5f7d3a95025bc40f0f787bf63b4c59d16e0d7d25ded3`
 and remains `ineligible`. Exact blockers are the absent applicable distributions `mlx-metal`,
-`numpy`, `transformers`, `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2`.
+`numpy`, `transformers`, `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2`, plus
+`reviewed_candidate_not_committed_in_spec:sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`.
+
+Caller-supplied observation claims are not independent evidence. Canonical identity and exact
+target-field equality may be replayed offline, but claimed provenance remains self-asserted.
+Authoritative observer identity and custody-bound executable/platform measurement are
+unimplemented blockers, so no supplied envelope can satisfy qualification or preflight.
 
 Only the two top-level wheels are embedded (952,038 bytes total). The 38,255,657-byte
 `mlx_metal-0.30.4-py3-none-macosx_15_0_arm64.whl` and unrelated transitive wheels are not committed.
