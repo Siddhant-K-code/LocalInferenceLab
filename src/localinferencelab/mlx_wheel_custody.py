@@ -28,6 +28,7 @@ from localinferencelab.canonical import (
     load_canonical_json_file,
     load_json_bytes,
 )
+from localinferencelab.mlx_review_registry import committed_pack_review_approval
 
 SCHEMA_VERSION = "1.0"
 _DIGEST_LENGTH = 71
@@ -43,6 +44,31 @@ _MAX_REQUIREMENTS = 1024
 _MAX_METADATA_HEADERS = 8192
 _MAX_MARKER_TOKENS = 128
 _MAX_EXPANDED_TAGS = 64
+_LEGACY_MANIFEST_ANCHOR_SPEC_ID = (
+    "sha256:099dbdf8190330224262ccd352066d49341c30b9a18d1dc0936a7f44c2161386"
+)
+_LEGACY_SUPPLIED_PACK_RECORD_FIELDS = {
+    "assessment",
+    "blockers",
+    "candidate_anchor",
+    "committed_record_alone_proves_supplied_bytes_present",
+    "decision",
+    "pack_verification",
+    "qualification_spec_id",
+    "record_id",
+    "record_type",
+    "record_verification_requires_supplied_pack",
+    "schema_1_0_remains_permanently_disabled",
+    "schema_version",
+    "static_action_counters",
+    "wheel_evidence_manifest_anchor_spec_id",
+    "wheel_evidence_manifest_id",
+    "wheel_evidence_pack_spec_id",
+}
+_CURRENT_SUPPLIED_PACK_RECORD_FIELDS = _LEGACY_SUPPLIED_PACK_RECORD_FIELDS | {
+    "review_approval_id",
+    "review_registry_id",
+}
 _MIN_COMPATIBLE_RELEASE_COMPONENTS = 2
 _TARGET_VERSION_COMPONENTS = 2
 _READ_BLOCK_BYTES = 1024 * 1024
@@ -1763,6 +1789,51 @@ def verify_supplied_wheel_pack_files(
 
 
 def _pack_record_blockers(
+    candidate: dict[str, JsonValue],
+    candidate_record: dict[str, JsonValue],
+    manifest: dict[str, JsonValue],
+    receipt: dict[str, JsonValue],
+) -> tuple[list[str], str, str | None]:
+    original = [
+        cast("str", item)
+        for item in cast("list[JsonValue]", candidate_record["blockers"])
+        if not cast("str", item).startswith(_DISTRIBUTION_BLOCKER_PREFIXES)
+    ]
+    closure = _mapping(manifest["closure"], "wheel evidence closure")
+    assessment = _mapping(candidate_record["assessment"], "candidate assessment")
+    manifest_id = cast("str", manifest["manifest_id"])
+    target = _mapping(candidate["target_environment"], "candidate target")
+    registry, approval = committed_pack_review_approval(
+        candidate_package_id=cast("str", candidate["package_id"]),
+        candidate_review_anchor_id=cast("str", assessment["review_anchor_id"]),
+        predecessor_manifest_anchor_spec_id=cast(
+            "str",
+            wheel_evidence_manifest_anchor_spec()["spec_id"],
+        ),
+        qualification_spec_id=cast("str", candidate["qualification_spec_id"]),
+        runtime_target_anchor_id=cast("str", target["runtime_target_anchor_id"]),
+        wheel_evidence_manifest_id=manifest_id,
+        wheel_evidence_pack_receipt_id=cast("str", receipt["receipt_id"]),
+        wheel_evidence_pack_spec_id=cast("str", manifest["pack_spec_id"]),
+        worker_api_evidence_anchor_id=cast(
+            "str",
+            candidate["worker_api_evidence_anchor_id"],
+        ),
+    )
+    if candidate["candidate_kind"] != "reviewed_candidate":
+        approval = None
+        original.append(f"candidate_kind_not_reviewable_by_registry:{candidate['candidate_kind']}")
+    if approval is None:
+        original.append(f"wheel_evidence_manifest_anchor_not_independently_reviewed:{manifest_id}")
+    blockers = sorted(set(original + cast("list[str]", closure["blockers"])))
+    return (
+        blockers,
+        cast("str", registry["registry_id"]),
+        None if approval is None else cast("str", approval["approval_id"]),
+    )
+
+
+def _legacy_pack_record_blockers(
     candidate_record: dict[str, JsonValue],
     manifest: dict[str, JsonValue],
 ) -> list[str]:
@@ -1772,11 +1843,8 @@ def _pack_record_blockers(
         if not cast("str", item).startswith(_DISTRIBUTION_BLOCKER_PREFIXES)
     ]
     closure = _mapping(manifest["closure"], "wheel evidence closure")
-    anchor_spec = wheel_evidence_manifest_anchor_spec()
-    reviewed = cast("list[str]", anchor_spec["reviewed_manifest_ids"])
     manifest_id = cast("str", manifest["manifest_id"])
-    if manifest_id not in reviewed:
-        original.append(f"wheel_evidence_manifest_anchor_not_independently_reviewed:{manifest_id}")
+    original.append(f"wheel_evidence_manifest_anchor_not_independently_reviewed:{manifest_id}")
     return sorted(set(original + cast("list[str]", closure["blockers"])))
 
 
@@ -1894,7 +1962,85 @@ def build_supplied_pack_qualification_record(
     if candidate_assessment["review_anchor_id"] != candidate_binding["review_anchor_id"]:
         raise ContractError("wheel evidence manifest review anchor mismatch")
     verified_pack = verify_supplied_wheel_pack(manifest, pack_root, expected_manifest_id)
-    blockers = _pack_record_blockers(candidate_record, manifest)
+    receipt = verified_pack.receipt()
+    blockers, review_registry_id, review_approval_id = _pack_record_blockers(
+        candidate,
+        candidate_record,
+        manifest,
+        receipt,
+    )
+    decision = ELIGIBLE if not blockers else INELIGIBLE
+    record: dict[str, JsonValue] = {
+        "record_type": "mlx_runtime_supplied_pack_qualification_record",
+        "schema_version": SCHEMA_VERSION,
+        "qualification_spec_id": candidate["qualification_spec_id"],
+        "candidate_anchor": dict(candidate_binding),
+        "wheel_evidence_manifest_id": manifest["manifest_id"],
+        "wheel_evidence_manifest_anchor_spec_id": _LEGACY_MANIFEST_ANCHOR_SPEC_ID,
+        "wheel_evidence_pack_spec_id": manifest["pack_spec_id"],
+        "pack_verification": receipt,
+        "review_registry_id": review_registry_id,
+        "review_approval_id": review_approval_id,
+        "assessment": {
+            "closure": manifest["closure"],
+            "decision": decision,
+            "blockers": cast("list[JsonValue]", blockers),
+            "review_anchor_id": candidate_assessment["review_anchor_id"],
+            "review_registry_id": review_registry_id,
+            "review_approval_id": review_approval_id,
+            "eligibility_scope": (
+                "human_review_for_new_schema_1_1_observed_authorization_only"
+                if decision == ELIGIBLE
+                else "not_eligible_for_new_observed_authorization"
+            ),
+        },
+        "decision": decision,
+        "blockers": cast("list[JsonValue]", blockers),
+        "committed_record_alone_proves_supplied_bytes_present": False,
+        "record_verification_requires_supplied_pack": True,
+        "schema_1_0_remains_permanently_disabled": True,
+        "static_action_counters": {
+            "package_installations": 0,
+            "package_network_requests": 0,
+            "process_starts": 0,
+            "runtime_imports": 0,
+        },
+    }
+    record["record_id"] = canonical_identity(record)
+    return record
+
+
+def _build_legacy_supplied_pack_qualification_record(
+    candidate_anchor_value: JsonValue,
+    manifest_value: JsonValue,
+    pack_root: Path,
+    expected_manifest_id: str,
+) -> dict[str, JsonValue]:
+    from localinferencelab.mlx_qualification import (  # noqa: PLC0415
+        ELIGIBLE,
+        INELIGIBLE,
+        _build_legacy_qualification_record,
+        qualification_spec,
+        verify_qualification_package,
+    )
+
+    candidate = verify_qualification_package(candidate_anchor_value)
+    manifest = verify_wheel_evidence_manifest(manifest_value, expected_manifest_id)
+    candidate_binding = _mapping(manifest["candidate_anchor"], "manifest.candidate_anchor")
+    if (
+        candidate["package_id"] != candidate_binding["package_id"]
+        or candidate["candidate_name"] != candidate_binding["candidate_name"]
+        or candidate["qualification_spec_id"] != candidate_binding["qualification_spec_id"]
+        or candidate["qualification_spec_id"] != qualification_spec()["spec_id"]
+    ):
+        raise ContractError("wheel evidence manifest candidate anchor mismatch")
+    _verify_candidate_manifest_binding(candidate, manifest)
+    candidate_record = _build_legacy_qualification_record(candidate)
+    candidate_assessment = _mapping(candidate_record["assessment"], "candidate assessment")
+    if candidate_assessment["review_anchor_id"] != candidate_binding["review_anchor_id"]:
+        raise ContractError("wheel evidence manifest review anchor mismatch")
+    verified_pack = verify_supplied_wheel_pack(manifest, pack_root, expected_manifest_id)
+    blockers = _legacy_pack_record_blockers(candidate_record, manifest)
     decision = ELIGIBLE if not blockers else INELIGIBLE
     record: dict[str, JsonValue] = {
         "record_type": "mlx_runtime_supplied_pack_qualification_record",
@@ -1941,25 +2087,19 @@ def verify_supplied_pack_qualification_record(
 ) -> dict[str, JsonValue]:
     """Reconstruct a supplied-pack qualification record with the pack present."""
     record = _mapping(value, "mlx_runtime_supplied_pack_qualification_record")
-    fields = {
-        "assessment",
-        "blockers",
-        "candidate_anchor",
-        "committed_record_alone_proves_supplied_bytes_present",
-        "decision",
-        "pack_verification",
-        "qualification_spec_id",
-        "record_id",
-        "record_type",
-        "record_verification_requires_supplied_pack",
-        "schema_1_0_remains_permanently_disabled",
-        "schema_version",
-        "static_action_counters",
-        "wheel_evidence_manifest_id",
-        "wheel_evidence_manifest_anchor_spec_id",
-        "wheel_evidence_pack_spec_id",
-    }
-    _keys(record, fields, "mlx_runtime_supplied_pack_qualification_record")
+    record_fields = set(record)
+    if record_fields == _CURRENT_SUPPLIED_PACK_RECORD_FIELDS:
+        legacy_replay = False
+    elif record_fields == _LEGACY_SUPPLIED_PACK_RECORD_FIELDS:
+        legacy_replay = True
+    else:
+        expected = (
+            _CURRENT_SUPPLIED_PACK_RECORD_FIELDS
+            if {"review_approval_id", "review_registry_id"} & record_fields
+            else _LEGACY_SUPPLIED_PACK_RECORD_FIELDS
+        )
+        _keys(record, expected, "mlx_runtime_supplied_pack_qualification_record")
+        raise ContractError("unsupported supplied-pack qualification record shape")
     if (
         record["record_type"] != "mlx_runtime_supplied_pack_qualification_record"
         or record["schema_version"] != SCHEMA_VERSION
@@ -1969,16 +2109,20 @@ def verify_supplied_pack_qualification_record(
     ):
         raise ContractError("unsupported supplied-pack qualification record")
     identity = _sha256(record["record_id"], "supplied_pack_record.record_id")
+    if not legacy_replay:
+        _sha256(record["review_registry_id"], "supplied_pack_record.review_registry_id")
+        if record["review_approval_id"] is not None:
+            _sha256(record["review_approval_id"], "supplied_pack_record.review_approval_id")
     content = dict(record)
     del content["record_id"]
     if canonical_identity(content) != identity:
         raise ContractError("supplied-pack qualification record identity mismatch")
-    rebuilt = build_supplied_pack_qualification_record(
-        candidate_anchor_value,
-        manifest_value,
-        pack_root,
-        expected_manifest_id,
+    rebuild = (
+        _build_legacy_supplied_pack_qualification_record
+        if legacy_replay
+        else build_supplied_pack_qualification_record
     )
+    rebuilt = rebuild(candidate_anchor_value, manifest_value, pack_root, expected_manifest_id)
     if canonical_json(record) != canonical_json(rebuilt):
         raise ContractError("supplied-pack qualification semantic reconstruction mismatch")
     return dict(record)
@@ -2026,6 +2170,13 @@ def load_supplied_pack_qualification_record(
 def supplied_pack_qualification_inspection(value: JsonValue) -> dict[str, JsonValue]:
     """Return a bounded non-verifying projection of an already verified record."""
     record = _mapping(value, "mlx_runtime_supplied_pack_qualification_record")
+    record_fields = set(record)
+    if record_fields == _LEGACY_SUPPLIED_PACK_RECORD_FIELDS:
+        legacy_replay = True
+    elif record_fields == _CURRENT_SUPPLIED_PACK_RECORD_FIELDS:
+        legacy_replay = False
+    else:
+        raise ContractError("unsupported supplied-pack qualification record shape")
     return {
         "record_id": record["record_id"],
         "candidate_package_id": _mapping(
@@ -2033,8 +2184,16 @@ def supplied_pack_qualification_inspection(value: JsonValue) -> dict[str, JsonVa
             "supplied pack candidate anchor",
         )["package_id"],
         "manifest_id": record["wheel_evidence_manifest_id"],
+        "review_registry_id": record.get("review_registry_id"),
+        "review_approval_id": record.get("review_approval_id"),
         "decision": record["decision"],
         "blockers": record["blockers"],
+        "verification_scope": (
+            "verified_historical_replay_non_promotable"
+            if legacy_replay
+            else "current_registry_policy"
+        ),
+        "current_registry_policy_bound": not legacy_replay,
         "record_verification_requires_supplied_pack": True,
         "committed_record_alone_proves_supplied_bytes_present": False,
     }

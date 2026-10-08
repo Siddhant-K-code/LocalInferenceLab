@@ -287,8 +287,9 @@ def test_synthetic_positive_and_historical_records_cannot_satisfy_prerequisites(
     assert "qualification_runtime_target_anchor_is_not_exact" in _list(
         synthetic_inspection["blockers"]
     )
+    assert "qualification_review_registry_is_not_exact" in _list(synthetic_inspection["blockers"])
     assert any(
-        cast("str", blocker).startswith("qualification_review_anchor_not_committed:")
+        cast("str", blocker).startswith("qualification_review_anchor_not_approved:")
         for blocker in _list(synthetic_inspection["blockers"])
     )
 
@@ -321,7 +322,8 @@ def test_synthetic_positive_and_historical_records_cannot_satisfy_prerequisites(
     reviewed_blockers = set(_list(reviewed_inspection["blockers"]))
     assert reviewed_inspection["prerequisites_satisfied"] is False
     assert "qualification_decision_is_not_eligible" in reviewed_blockers
-    assert f"qualification_review_anchor_not_committed:{migrated_anchor}" in reviewed_blockers
+    assert "qualification_review_registry_is_not_exact" not in reviewed_blockers
+    assert f"qualification_review_anchor_not_approved:{migrated_anchor}" not in reviewed_blockers
     assert "qualification_runtime_target_anchor_is_not_exact" not in reviewed_blockers
     assert reviewed_blockers >= _UNRESOLVED_AUTHORIZATION_BLOCKERS
     assert reviewed_blockers >= _UNRESOLVED_TARGET_OBSERVATION_BLOCKERS
@@ -503,6 +505,91 @@ def test_fixture_is_deterministic_process_free_and_contains_no_private_path(
         "utf-8",
         errors="ignore",
     )
+
+
+def test_exact_base_schema_1_1_fixture_double_compiles_and_replays(
+    tmp_path: Path,
+) -> None:
+    first_root = tmp_path / "legacy-first"
+    second_root = tmp_path / "legacy-second"
+    first_root.mkdir()
+    second_root.mkdir()
+    first, first_replay = contract_module._compile_legacy_runtime_preflight_fixture_1_1(  # noqa: SLF001
+        first_root
+    )
+    second, second_replay = contract_module._compile_legacy_runtime_preflight_fixture_1_1(  # noqa: SLF001
+        second_root
+    )
+    assert first.name == second.name
+    assert first_replay.to_dict() == second_replay.to_dict()
+    assert first_replay.bundle_root == (
+        "sha256:75b6d2f0fedf8a18bf4e0b6fd2d915252be3c3192c028c0d726a7e8174873dcb"
+    )
+    assert first_replay.spec_id == (
+        "sha256:23add482023ba3a97ab35dd2b78a6302ef5ae98abd3f5dccaaa341e242d4bf07"
+    )
+    assert first_replay.synthetic_record_id == (
+        "sha256:25dc8a79388cfd9826e80ac2a5b74b3a36b23db78a182bd7a55a931ebfe8871f"
+    )
+    assert first_replay.historical_record_id == (
+        "sha256:e719c377b83a423cdb9f8224e2c83f89834f233681b03465e63bf0153b445971"
+    )
+    _root, files = read_closed_bundle(first)
+    synthetic = verify_runtime_preflight_record_1_1(
+        load_json_bytes(files["records/synthetic-refusal-record.json"])
+    )
+    inspection = inspect_runtime_preflight_record_1_1(synthetic)
+    assert inspection["verification_scope"] == "verified_historical_replay_non_promotable"
+    assert inspection["current_registry_policy_bound"] is False
+    assert inspection["prerequisites_satisfied"] is False
+    assert replay_runtime_preflight_fixture_1_1(first).to_dict() == first_replay.to_dict()
+
+
+def test_schema_1_1_version_confusion_and_malformed_fallback_fail_closed(
+    tmp_path: Path,
+) -> None:
+    current = build_runtime_preflight_record_1_1(_qualification())
+
+    relabeled = _copy(current)
+    relabeled["spec_id"] = "sha256:23add482023ba3a97ab35dd2b78a6302ef5ae98abd3f5dccaaa341e242d4bf07"
+    _rehash(relabeled, "record_id")
+    with pytest.raises(ContractError, match="reconstruction mismatch"):
+        verify_runtime_preflight_record_1_1(relabeled)
+
+    stripped = _copy(current)
+    stripped.pop("authorization_claim_id")
+    _rehash(stripped, "record_id")
+    with pytest.raises(ContractError, match="missing keys"):
+        verify_runtime_preflight_record_1_1(stripped)
+
+    extra = _copy(current)
+    extra["legacy_policy_version"] = "deb58ee"
+    _rehash(extra, "record_id")
+    with pytest.raises(ContractError, match="unknown keys"):
+        verify_runtime_preflight_record_1_1(extra)
+
+    with pytest.raises(ContractError, match="rejects registry-bound"):
+        contract_module._build_legacy_runtime_preflight_record_1_1(  # noqa: SLF001
+            _qualification("reviewed")
+        )
+
+    current_root = tmp_path / "current"
+    current_root.mkdir()
+    current_bundle, _result = compile_runtime_preflight_fixture_1_1(current_root)
+    _root, files = read_closed_bundle(current_bundle)
+    content = {
+        name: data for name, data in files.items() if name not in {"index.json", "receipt.json"}
+    }
+    content["source/spec.json"] = canonical_json(
+        contract_module._runtime_preflight_spec_1_1(  # noqa: SLF001
+            legacy_review_policy=True
+        )
+    )
+    mixed_root = tmp_path / "mixed"
+    mixed_root.mkdir()
+    mixed = publish_bundle(content, mixed_root, name_prefix="mixed-schema-1-1")
+    with pytest.raises(ContractError, match="fixture record reconstruction mismatch"):
+        replay_runtime_preflight_fixture_1_1(mixed)
 
 
 def test_validation_and_replay_touch_no_physical_boundary(

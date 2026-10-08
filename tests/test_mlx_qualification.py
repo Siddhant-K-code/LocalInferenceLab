@@ -457,8 +457,14 @@ def test_committed_real_candidate_anchor_is_exact_and_ineligible() -> None:
     assert assessment["review_anchor_id"] == (
         "sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f"
     )
+    assert record["review_registry_id"] == (
+        "sha256:dd1a6f0710a38cdb5757a81c749a2b9005b2c0371e5c1f4900bf6d6c41c7d9ff"
+    )
+    assert record["review_approval_id"] == (
+        "sha256:03897777a7460b2000b808504268f7654176793181467d2b391468a432837f42"
+    )
     assert record["record_id"] == (
-        "sha256:968f4bf20c15f97503ad5f7d3a95025bc40f0f787bf63b4c59d16e0d7d25ded3"
+        "sha256:fc0c60b3458a184a09dc79fee6778995121f8732f7ecab4c51b61ab683d491ac"
     )
     assert record["decision"] == INELIGIBLE
     assert record["blockers"] == [
@@ -469,10 +475,6 @@ def test_committed_real_candidate_anchor_is_exact_and_ineligible() -> None:
         "dependency_missing:mlx-lm:sentencepiece",
         "dependency_missing:mlx-lm:transformers>=5.0.0",
         'dependency_missing:mlx:mlx-metal==0.30.4; platform_system == "Darwin"',
-        (
-            "reviewed_candidate_not_committed_in_spec:"
-            "sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f"
-        ),
     ]
     api_assessments = [_dict(item) for item in _list(assessment["worker_api_assessments"])]
     assert len(api_assessments) == 7
@@ -498,7 +500,7 @@ def test_committed_real_candidate_anchor_is_exact_and_ineligible() -> None:
     assert all(_dict(item)["compatible"] is True for item in _list(assessment["wheel_assessments"]))
 
 
-def test_target_migration_cannot_self_promote_review_anchor() -> None:
+def test_registry_promotes_anchor_without_mutating_candidate_bound_spec() -> None:
     candidate_path = (
         Path(qualification_module.__file__).resolve(strict=True).parents[2]
         / "evidence"
@@ -514,8 +516,11 @@ def test_target_migration_cannot_self_promote_review_anchor() -> None:
         "sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f"
     )
     assert migrated_anchor not in _list(qualification_spec()["reviewed_candidate_anchors"])
-    assert f"reviewed_candidate_not_committed_in_spec:{migrated_anchor}" in _list(
-        record["blockers"]
+    assert f"reviewed_candidate_not_approved_by_registry:{migrated_anchor}" not in _list(
+        record["blockers"],
+    )
+    assert record["review_registry_id"] == (
+        "sha256:dd1a6f0710a38cdb5757a81c749a2b9005b2c0371e5c1f4900bf6d6c41c7d9ff"
     )
     assert record["decision"] == INELIGIBLE
     assert set(_dict(record["static_action_counters"]).values()) == {0}

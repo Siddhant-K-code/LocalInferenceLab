@@ -316,15 +316,17 @@ bounded AST/text checks; missing or duplicate definitions, dynamic generation or
 signature or provenance drift, malformed boolean/integer fields, overclaims, self-attested
 anchors, and coordinated rehashing are rejected. CPython `v3.13.0` commit
 `60403a5409ff2c3f3b07dd2ca91a7a3e096839c7` separately binds
-`importlib.metadata.version` and its `METADATA["Version"]` access. A real
-reviewed candidate additionally needs an independently committed evidence anchor in the
-qualification specification. The allowlist retains previously merged anchor
-`sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`
-from before the target mutation. The target-bound MLX `0.30.4` / MLX-LM `0.30.6` package now
-derives pending review anchor
+`importlib.metadata.version` and its `METADATA["Version"]` access. A real reviewed candidate
+additionally needs an exact approval in the repository-pinned review registry. The candidate-bound
+qualification specification remains unchanged, so its historical allowlist is replay data rather
+than current eligibility policy. The target-bound MLX `0.30.4` / MLX-LM `0.30.6` package derives
+review anchor
 `sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`,
-which is intentionally not allowlisted in this change. Both exact wheel byte streams and exact raw
-METADATA are embedded, so verification and reconstruction are offline. The worker-evidence spec
+which registry
+`sha256:dd1a6f0710a38cdb5757a81c749a2b9005b2c0371e5c1f4900bf6d6c41c7d9ff`
+binds to the exact candidate package, qualification spec, target, worker evidence, closure
+manifest, pack spec, and verified receipt. Both exact wheel byte streams and exact raw METADATA
+are embedded, so verification and reconstruction are offline. The worker-evidence spec
 and source anchor remain
 `sha256:6c83f627032a2c3db38eee34f804469a42e227a3af0a84ed5c0052a192d29e97`
 and `sha256:10ab50cbfb94890bae1dd8c57180645d5781e454b1a8171b158c4d932121d9dd`.
@@ -336,11 +338,10 @@ The target is exact CPython 3.13.15 (`cpython-313`, `cp313`,
 METADATA are embedded, so verification and reconstruction are offline. `Requires-Python` uses the
 full 3.13.15 value; wheel compatibility remains `cp313`-scoped. The pair dependency and all seven
 source/API surfaces are satisfied, while the absent `mlx-metal`, `numpy`, `transformers`,
-`sentencepiece`, `protobuf`, `pyyaml`, and `jinja2` distributions plus unreviewed-anchor blocker
-keep the result deterministically ineligible. The exact anchor blocker is
-`reviewed_candidate_not_committed_in_spec:sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`.
-No qualification record is committed in the target change. Historical projections are always
-ineligible.
+`sentencepiece`, `protobuf`, `pyyaml`, and `jinja2` distributions keep the candidate-only result
+deterministically ineligible. The candidate review blocker is cleared only by the exact pinned
+registry. No eligible qualification record is committed with that registry. Historical and
+synthetic projections remain non-promotable.
 
 The prior prospective value 3.13.0 is superseded. A bounded development-host observation of an
 already available 3.13.15 interpreter is retained in the target anchor without its private
@@ -381,9 +382,10 @@ with manifest ID
 `sha256:0c28cc713fe9baabdda8c075f148f23b4d2ebd4525160212d0f538cc907db6b4`
 and pack-spec ID
 `sha256:969783ae80daffae5451d0009e77d3618ba92756d8adbfdf0cf6aa9c13453761`.
-The separate manifest-anchor specification is
+The predecessor manifest-anchor specification remains
 `sha256:099dbdf8190330224262ccd352066d49341c30b9a18d1dc0936a7f44c2161386`
-and contains no reviewed manifest IDs in this change.
+and contains no reviewed manifest IDs. It is retained for replay and bound by the registry
+approval, but is no longer an eligibility input.
 
 The generic verifier requires that manifest ID as a caller-supplied content address and an exact local
 directory containing all 34 named wheels and nothing else. It uses bounded no-follow descriptor
@@ -395,13 +397,19 @@ verification or record reconstruction.
 
 A successful pack receipt proves only that those exact supplied bytes were present for that
 verification. A committed manifest does not. A later record may remove distribution blockers only
-by reconstructing with the pack present. Qualification separately requires membership in a
-committed reviewed-manifest allowlist. This PR introduces the manifest but leaves that allowlist
-empty, so
-`wheel_evidence_manifest_anchor_not_independently_reviewed:sha256:0c28cc713fe9baabdda8c075f148f23b4d2ebd4525160212d0f538cc907db6b4`
-keeps the real reconstruction ineligible alongside the candidate's existing unreviewed-anchor
-blocker even after the distribution and worker-API blockers close. No real qualification record is
-committed here, and no runtime action is authorized.
+by reconstructing with the pack present. The pinned registry clears both independent-review
+blockers only when every exact identity matches, including verified receipt
+`sha256:6eb636208a880f49b7ece6571dd20a5b3465996692683bfa9b8e873a0f68b07c`.
+Generic registry and manifest verification remain caller-addressable, but qualification consumes
+neither caller-supplied allowlists nor caller-supplied expected registry IDs. Missing, altered,
+substituted, duplicate, ambiguous, or nonmatching registry state fails closed. No real eligible
+qualification record is committed here, and no runtime action is authorized.
+
+Exact records created before registry binding remain replayable without changing their bytes or
+identities. Their old field sets select immutable legacy reconstruction; no caller-provided version
+or downgrade flag is accepted. Legacy reviewed qualification and supplied-pack records are always
+reported as `verified_historical_replay_non_promotable` and cannot clear either current review
+blocker. Current reviewed records are the only forms that bind the pinned registry and approval.
 
 ## Prospective schema-1.1 model-free runtime-preflight protocol
 
@@ -415,11 +423,18 @@ disabled/unreachable contract record -> process-free inspection or closed-fixtur
 ```
 
 The qualification prerequisite must be an eligible `reviewed_candidate` record derived from the
-active schema-1.0 qualification spec, and its independently derived evidence anchor must be in that
-spec's committed anchor set. The synthetic-positive fixture is rejected by candidate kind and
-anchor membership even though it exercises the schema-1.0 positive decision. Historical
-schema-1.0 records are rejected by candidate kind, decision, and anchor membership. Their frozen
+active schema-1.0 qualification spec and bound to the exact pinned review registry and approval
+used by reconstruction. The synthetic-positive fixture is rejected by candidate kind and missing
+registry binding even though it exercises the schema-1.0 positive decision. Historical schema-1.0
+records are rejected by candidate kind, decision, and missing registry binding. Their frozen
 records and identities are never rewritten.
+
+The exact predecessor schema-1.1 spec ID
+`sha256:23add482023ba3a97ab35dd2b78a6302ef5ae98abd3f5dccaaa341e242d4bf07`
+remains accepted only to reconstruct its historical refusal records and closed fixture root
+`sha256:75b6d2f0fedf8a18bf4e0b6fd2d915252be3c3192c028c0d726a7e8174873dcb`.
+The active registry-bound spec has a distinct identity. Replay rejects unknown identities, mixed
+old/new bundles, extra or stripped fields, and malformed current records relabeled as legacy.
 
 The authorization prerequisite cannot be satisfied in this milestone. Authoritative acquisition,
 current-expiry observation, exclusive consumption/non-reuse, and independently verified

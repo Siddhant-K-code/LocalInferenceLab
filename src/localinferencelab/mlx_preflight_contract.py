@@ -24,6 +24,7 @@ from localinferencelab.mlx_qualification import (
     synthetic_eligible_qualification_package,
     verify_qualification_record,
 )
+from localinferencelab.mlx_review_registry import EXPECTED_REVIEW_REGISTRY_ID
 from localinferencelab.mlx_runtime_target import (
     EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
     RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS,
@@ -34,6 +35,37 @@ ACTION = "mlx_runtime_preflight_model_free"
 AUTHORIZATION_LIFETIME_NS = 30_000_000_000
 _CONTROL_LIMIT = 32
 _DIGEST_LENGTH = 71
+_LEGACY_SCHEMA_1_1_SPEC_ID = (
+    "sha256:23add482023ba3a97ab35dd2b78a6302ef5ae98abd3f5dccaaa341e242d4bf07"
+)
+_LEGACY_QUALIFICATION_SPEC_ID = (
+    "sha256:17d2f62fd4832a224f3bf61c7aa5b9668d05077ed36d56d1bf873fd63f2ac826"
+)
+_LEGACY_REVIEWED_QUALIFICATION_ANCHORS = (
+    "sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c",
+)
+_LEGACY_SCHEMA_1_1_FIXTURE_ROOT = (
+    "sha256:75b6d2f0fedf8a18bf4e0b6fd2d915252be3c3192c028c0d726a7e8174873dcb"
+)
+_SCHEMA_1_1_RECORD_FIELDS = {
+    "authorization_claim",
+    "authorization_claim_id",
+    "evidence_ledgers",
+    "execution_disposition",
+    "historical_records_rewritten",
+    "prerequisite_assessment",
+    "private_raw_evidence_published",
+    "protocol_id",
+    "qualification_record",
+    "qualification_record_id",
+    "qualification_review_anchor_id",
+    "record_id",
+    "record_type",
+    "schema_1_0_state",
+    "schema_version",
+    "spec_id",
+    "static_action_counters",
+}
 _ATTEMPTED_ACTIONS = (
     "default_device_metadata_query",
     "default_stream_metadata_query",
@@ -290,30 +322,39 @@ def runtime_preflight_protocol_1_1() -> dict[str, JsonValue]:
     return content
 
 
-def runtime_preflight_spec_1_1() -> dict[str, JsonValue]:
-    """Return the canonical schema-1.1 model-free preflight contract."""
+def _runtime_preflight_spec_1_1(
+    *,
+    legacy_review_policy: bool,
+) -> dict[str, JsonValue]:
     protocol = runtime_preflight_protocol_1_1()
     qualification = qualification_spec()
+    qualification_prerequisite: dict[str, JsonValue] = {
+        "record_type": "mlx_runtime_qualification_record",
+        "schema_version": "1.0",
+        "candidate_kind": "reviewed_candidate",
+        "decision": ELIGIBLE,
+        "separate_reviewed_anchor_required": True,
+        "synthetic_fixture_accepted": False,
+        "historical_schema_1_0_record_accepted": False,
+        "runtime_target_anchor_id": EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
+        "exact_runtime_target_identity_required": True,
+    }
+    if legacy_review_policy:
+        qualification_prerequisite["review_anchor_must_be_committed_in_qualification_spec"] = True
+    else:
+        qualification_prerequisite["review_anchor_must_be_approved_by_committed_registry"] = True
+        qualification_prerequisite["review_registry_id"] = EXPECTED_REVIEW_REGISTRY_ID
     content: dict[str, JsonValue] = {
         "record_type": "mlx_runtime_preflight_spec",
         "schema_version": SCHEMA_VERSION,
         "action": ACTION,
         "protocol_id": protocol["protocol_id"],
-        "qualification_spec_id": qualification["spec_id"],
+        "qualification_spec_id": (
+            _LEGACY_QUALIFICATION_SPEC_ID if legacy_review_policy else qualification["spec_id"]
+        ),
         "runtime_target_anchor_id": EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
         "prerequisites": {
-            "qualification": {
-                "record_type": "mlx_runtime_qualification_record",
-                "schema_version": "1.0",
-                "candidate_kind": "reviewed_candidate",
-                "decision": ELIGIBLE,
-                "review_anchor_must_be_committed_in_qualification_spec": True,
-                "separate_reviewed_anchor_required": True,
-                "synthetic_fixture_accepted": False,
-                "historical_schema_1_0_record_accepted": False,
-                "runtime_target_anchor_id": EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
-                "exact_runtime_target_identity_required": True,
-            },
+            "qualification": qualification_prerequisite,
             "runtime_target_observation": {
                 "authoritative_observer_identity_custody_supported": False,
                 "caller_supplied_claim_can_satisfy_prerequisite": False,
@@ -377,11 +418,21 @@ def runtime_preflight_spec_1_1() -> dict[str, JsonValue]:
         "static_action_counters": dict(_ZERO_ACTION_COUNTERS),
     }
     content["spec_id"] = canonical_identity(content)
+    if legacy_review_policy and content["spec_id"] != _LEGACY_SCHEMA_1_1_SPEC_ID:
+        raise ContractError("legacy schema-1.1 specification identity drift")
     return content
 
 
-def verify_authorization_claim_1_1(value: JsonValue) -> dict[str, JsonValue]:
-    """Validate a caller-supplied structure that is not authoritative authorization evidence."""
+def runtime_preflight_spec_1_1() -> dict[str, JsonValue]:
+    """Return the canonical schema-1.1 model-free preflight contract."""
+    return _runtime_preflight_spec_1_1(legacy_review_policy=False)
+
+
+def _verify_authorization_claim_1_1(
+    value: JsonValue,
+    *,
+    legacy_review_policy: bool,
+) -> dict[str, JsonValue]:
     claim = _mapping(value, "schema_1_1_authorization_claim")
     fields = {
         "action",
@@ -404,7 +455,7 @@ def verify_authorization_claim_1_1(value: JsonValue) -> dict[str, JsonValue]:
         "synchronization_canary_claimed_authorized",
     }
     _keys(claim, fields, "schema_1_1_authorization_claim")
-    spec = runtime_preflight_spec_1_1()
+    spec = _runtime_preflight_spec_1_1(legacy_review_policy=legacy_review_policy)
     if (
         claim["record_type"] != "mlx_runtime_preflight_authorization_claim"
         or claim["schema_version"] != SCHEMA_VERSION
@@ -462,6 +513,11 @@ def verify_authorization_claim_1_1(value: JsonValue) -> dict[str, JsonValue]:
     return dict(claim)
 
 
+def verify_authorization_claim_1_1(value: JsonValue) -> dict[str, JsonValue]:
+    """Validate a caller-supplied structure that is not authoritative authorization evidence."""
+    return _verify_authorization_claim_1_1(value, legacy_review_policy=False)
+
+
 def load_authorization_claim_1_1(path: Path) -> dict[str, JsonValue]:
     """Load a canonical caller-supplied authorization claim."""
     return verify_authorization_claim_1_1(
@@ -488,9 +544,69 @@ def _qualification_prerequisite_assessment(
         assessment["review_anchor_id"],
         "schema-1.1 qualification review anchor",
     )
-    reviewed_anchors = cast(
-        "list[JsonValue]",
-        qualification_spec()["reviewed_candidate_anchors"],
+    review_registry_id = qualification_record.get("review_registry_id")
+    review_approval_id = qualification_record.get("review_approval_id")
+    checks: list[JsonValue] = []
+    blockers: list[str] = []
+    predicates = [
+        (
+            "qualification_candidate_is_reviewed_real_candidate",
+            package["candidate_kind"] == "reviewed_candidate",
+            "qualification_candidate_is_not_reviewed_real_candidate",
+        ),
+        (
+            "qualification_decision_is_eligible",
+            qualification_record["decision"] == ELIGIBLE,
+            "qualification_decision_is_not_eligible",
+        ),
+        (
+            "qualification_review_registry_is_exact",
+            review_registry_id == EXPECTED_REVIEW_REGISTRY_ID,
+            "qualification_review_registry_is_not_exact",
+        ),
+        (
+            "qualification_review_approval_is_bound",
+            isinstance(review_approval_id, str)
+            and assessment.get("review_approval_id") == review_approval_id
+            and assessment.get("review_registry_id") == review_registry_id,
+            f"qualification_review_anchor_not_approved:{review_anchor_id}",
+        ),
+        (
+            "qualification_runtime_target_anchor_is_exact",
+            target.get("runtime_target_anchor_id") == EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
+            "qualification_runtime_target_anchor_is_not_exact",
+        ),
+        (
+            "qualification_schema_1_0_remains_disabled",
+            qualification_record["schema_1_0_remains_permanently_disabled"] is True,
+            "qualification_does_not_preserve_schema_1_0_disablement",
+        ),
+    ]
+    for name, satisfied, blocker in predicates:
+        checks.append({"name": name, "satisfied": satisfied})
+        if not satisfied:
+            blockers.append(blocker)
+    return checks, blockers, review_anchor_id
+
+
+def _legacy_qualification_prerequisite_assessment(
+    qualification_record: dict[str, JsonValue],
+) -> tuple[list[JsonValue], list[str], str]:
+    package = _mapping(
+        qualification_record["qualification_package"],
+        "schema-1.1 qualification package",
+    )
+    assessment = _mapping(
+        qualification_record["assessment"],
+        "schema-1.1 qualification assessment",
+    )
+    target = _mapping(
+        package["target_environment"],
+        "schema-1.1 qualification target environment",
+    )
+    review_anchor_id = _sha256(
+        assessment["review_anchor_id"],
+        "schema-1.1 qualification review anchor",
     )
     checks: list[JsonValue] = []
     blockers: list[str] = []
@@ -507,7 +623,7 @@ def _qualification_prerequisite_assessment(
         ),
         (
             "qualification_review_anchor_is_committed",
-            review_anchor_id in reviewed_anchors,
+            review_anchor_id in _LEGACY_REVIEWED_QUALIFICATION_ANCHORS,
             f"qualification_review_anchor_not_committed:{review_anchor_id}",
         ),
         (
@@ -528,15 +644,28 @@ def _qualification_prerequisite_assessment(
     return checks, blockers, review_anchor_id
 
 
-def build_runtime_preflight_record_1_1(
+def _build_runtime_preflight_record_1_1(
     qualification_value: JsonValue,
     authorization_claim_value: JsonValue | None = None,
+    *,
+    legacy_review_policy: bool,
 ) -> dict[str, JsonValue]:
-    """Build a deterministic contract/refusal record without physical runtime action."""
     qualification_record = verify_qualification_record(qualification_value)
-    qualification_checks, blockers, review_anchor_id = _qualification_prerequisite_assessment(
-        qualification_record
+    if (
+        legacy_review_policy
+        and {
+            "review_approval_id",
+            "review_registry_id",
+        }
+        & qualification_record.keys()
+    ):
+        raise ContractError("legacy schema-1.1 replay rejects registry-bound qualification records")
+    assessment = (
+        _legacy_qualification_prerequisite_assessment
+        if legacy_review_policy
+        else _qualification_prerequisite_assessment
     )
+    qualification_checks, blockers, review_anchor_id = assessment(qualification_record)
     authorization_claim: dict[str, JsonValue] | None
     authorization_claim_checks: list[JsonValue]
     if authorization_claim_value is None:
@@ -549,7 +678,10 @@ def build_runtime_preflight_record_1_1(
         ]
         blockers.append("authorization_claim_structure_missing")
     else:
-        authorization_claim = verify_authorization_claim_1_1(authorization_claim_value)
+        authorization_claim = _verify_authorization_claim_1_1(
+            authorization_claim_value,
+            legacy_review_policy=legacy_review_policy,
+        )
         bindings = [
             (
                 "authorization_claim_names_qualification_record",
@@ -575,7 +707,7 @@ def build_runtime_preflight_record_1_1(
     blockers.extend(RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS)
     blockers.extend(_UNRESOLVED_AUTHORIZATION_BLOCKERS)
     sorted_blockers = sorted(set(blockers))
-    spec = runtime_preflight_spec_1_1()
+    spec = _runtime_preflight_spec_1_1(legacy_review_policy=legacy_review_policy)
     record: dict[str, JsonValue] = {
         "record_type": "mlx_runtime_preflight_contract_record",
         "schema_version": SCHEMA_VERSION,
@@ -622,30 +754,43 @@ def build_runtime_preflight_record_1_1(
     return record
 
 
+def _build_legacy_runtime_preflight_record_1_1(
+    qualification_value: JsonValue,
+    authorization_claim_value: JsonValue | None = None,
+) -> dict[str, JsonValue]:
+    return _build_runtime_preflight_record_1_1(
+        qualification_value,
+        authorization_claim_value,
+        legacy_review_policy=True,
+    )
+
+
+def build_runtime_preflight_record_1_1(
+    qualification_value: JsonValue,
+    authorization_claim_value: JsonValue | None = None,
+) -> dict[str, JsonValue]:
+    """Build a deterministic contract/refusal record without physical runtime action."""
+    return _build_runtime_preflight_record_1_1(
+        qualification_value,
+        authorization_claim_value,
+        legacy_review_policy=False,
+    )
+
+
 def verify_runtime_preflight_record_1_1(value: JsonValue) -> dict[str, JsonValue]:
     """Reconstruct a schema-1.1 contract record and reject forged readiness claims."""
     record = _mapping(value, "schema_1_1_runtime_preflight_record")
-    fields = {
-        "authorization_claim",
-        "authorization_claim_id",
-        "evidence_ledgers",
-        "execution_disposition",
-        "historical_records_rewritten",
-        "prerequisite_assessment",
-        "private_raw_evidence_published",
-        "protocol_id",
-        "qualification_record",
-        "qualification_record_id",
-        "qualification_review_anchor_id",
-        "record_id",
-        "record_type",
-        "schema_1_0_state",
-        "schema_version",
-        "spec_id",
-        "static_action_counters",
-    }
-    _keys(record, fields, "schema_1_1_runtime_preflight_record")
-    spec = runtime_preflight_spec_1_1()
+    _keys(record, _SCHEMA_1_1_RECORD_FIELDS, "schema_1_1_runtime_preflight_record")
+    spec_id = _sha256(record["spec_id"], "schema_1_1_runtime_preflight_record.spec_id")
+    current_spec = runtime_preflight_spec_1_1()
+    if spec_id == current_spec["spec_id"]:
+        legacy_replay = False
+        spec = current_spec
+    elif spec_id == _LEGACY_SCHEMA_1_1_SPEC_ID:
+        legacy_replay = True
+        spec = _runtime_preflight_spec_1_1(legacy_review_policy=True)
+    else:
+        raise ContractError("unsupported schema-1.1 runtime preflight specification identity")
     if (
         record["record_type"] != "mlx_runtime_preflight_contract_record"
         or record["schema_version"] != SCHEMA_VERSION
@@ -693,10 +838,12 @@ def verify_runtime_preflight_record_1_1(value: JsonValue) -> dict[str, JsonValue
     if identity != canonical_identity(content):
         raise ContractError("schema-1.1 runtime preflight record identity mismatch")
     authorization_claim = record["authorization_claim"]
-    rebuilt = build_runtime_preflight_record_1_1(
-        record["qualification_record"],
-        authorization_claim,
+    rebuild = (
+        _build_legacy_runtime_preflight_record_1_1
+        if legacy_replay
+        else build_runtime_preflight_record_1_1
     )
+    rebuilt = rebuild(record["qualification_record"], authorization_claim)
     if canonical_json(rebuilt) != canonical_json(record):
         raise ContractError("schema-1.1 runtime preflight record reconstruction mismatch")
     return dict(record)
@@ -732,6 +879,7 @@ def inspect_runtime_preflight_record_1_1(value: JsonValue) -> dict[str, JsonValu
     """Return a bounded process-free readiness/refusal projection."""
     record = verify_runtime_preflight_record_1_1(value)
     assessment = _mapping(record["prerequisite_assessment"], "schema-1.1 assessment")
+    legacy_replay = record["spec_id"] == _LEGACY_SCHEMA_1_1_SPEC_ID
     return {
         "record_id": record["record_id"],
         "spec_id": record["spec_id"],
@@ -739,6 +887,12 @@ def inspect_runtime_preflight_record_1_1(value: JsonValue) -> dict[str, JsonValu
         "qualification_record_id": record["qualification_record_id"],
         "qualification_review_anchor_id": record["qualification_review_anchor_id"],
         "authorization_claim_id": record["authorization_claim_id"],
+        "verification_scope": (
+            "verified_historical_replay_non_promotable"
+            if legacy_replay
+            else "current_registry_policy"
+        ),
+        "current_registry_policy_bound": not legacy_replay,
         "prerequisites_satisfied": assessment["prerequisites_satisfied"],
         "blockers": assessment["blockers"],
         "authoritative_runtime_observer_identity_supported": False,
@@ -839,6 +993,38 @@ def compile_runtime_preflight_fixture_1_1(
     return destination, replay_runtime_preflight_fixture_1_1(destination)
 
 
+def _compile_legacy_runtime_preflight_fixture_1_1(
+    output_root: Path,
+) -> tuple[Path, Schema11ReplayResult]:
+    synthetic_qualification = build_qualification_record(synthetic_eligible_qualification_package())
+    historical_qualification = build_qualification_record(
+        historical_incompatible_qualification_package()
+    )
+    synthetic_record = _build_legacy_runtime_preflight_record_1_1(synthetic_qualification)
+    historical_record = _build_legacy_runtime_preflight_record_1_1(historical_qualification)
+    destination = publish_bundle(
+        {
+            "source/fixture.json": canonical_json(_fixture_source()),
+            "source/protocol.json": canonical_json(runtime_preflight_protocol_1_1()),
+            "source/spec.json": canonical_json(
+                _runtime_preflight_spec_1_1(legacy_review_policy=True)
+            ),
+            "qualification/synthetic-eligible-record.json": canonical_json(synthetic_qualification),
+            "qualification/historical-incompatible-record.json": canonical_json(
+                historical_qualification
+            ),
+            "records/synthetic-refusal-record.json": canonical_json(synthetic_record),
+            "records/historical-refusal-record.json": canonical_json(historical_record),
+        },
+        output_root,
+        name_prefix="localinferencelab-mlx-runtime-preflight-contract-synthetic-v1-1",
+    )
+    replay = replay_runtime_preflight_fixture_1_1(destination)
+    if replay.bundle_root != _LEGACY_SCHEMA_1_1_FIXTURE_ROOT:
+        raise ContractError("legacy schema-1.1 fixture root identity drift")
+    return destination, replay
+
+
 def _canonical_value(data: bytes, label: str) -> JsonValue:
     value = load_json_bytes(data)
     if canonical_json(value) != data:
@@ -873,9 +1059,15 @@ def replay_runtime_preflight_fixture_1_1(bundle: Path) -> Schema11ReplayResult:
         _canonical_value(files["source/spec.json"], "schema-1.1 spec"),
         "schema-1.1 spec",
     )
-    if canonical_json(protocol) != canonical_json(
-        runtime_preflight_protocol_1_1()
-    ) or canonical_json(spec) != canonical_json(runtime_preflight_spec_1_1()):
+    if canonical_json(protocol) != canonical_json(runtime_preflight_protocol_1_1()):
+        raise ContractError("schema-1.1 fixture protocol or specification drift")
+    current_spec = runtime_preflight_spec_1_1()
+    legacy_spec = _runtime_preflight_spec_1_1(legacy_review_policy=True)
+    if canonical_json(spec) == canonical_json(current_spec):
+        legacy_replay = False
+    elif canonical_json(spec) == canonical_json(legacy_spec):
+        legacy_replay = True
+    else:
         raise ContractError("schema-1.1 fixture protocol or specification drift")
     synthetic_qualification = verify_qualification_record(
         _canonical_value(
@@ -901,8 +1093,13 @@ def replay_runtime_preflight_fixture_1_1(bundle: Path) -> Schema11ReplayResult:
             "historical schema-1.1 refusal record",
         )
     )
-    expected_synthetic = build_runtime_preflight_record_1_1(synthetic_qualification)
-    expected_historical = build_runtime_preflight_record_1_1(historical_qualification)
+    rebuild = (
+        _build_legacy_runtime_preflight_record_1_1
+        if legacy_replay
+        else build_runtime_preflight_record_1_1
+    )
+    expected_synthetic = rebuild(synthetic_qualification)
+    expected_historical = rebuild(historical_qualification)
     if canonical_json(synthetic_record) != canonical_json(expected_synthetic) or canonical_json(
         historical_record
     ) != canonical_json(expected_historical):

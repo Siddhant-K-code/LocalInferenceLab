@@ -68,11 +68,17 @@ repository/tag/revision where independently bound; and the complete applicable d
 The 34 third-party wheel files remain caller supplied and uncommitted. Pack verification opens a
 directory and every basename without following links, requires regular single-link members,
 rejects missing/extras and ZIP ambiguity, and reconstructs the closure offline. A caller-supplied
-content address is sufficient only for generic pack verification. Qualification checks a separate
-committed reviewed-manifest allowlist, which is empty in this change; a later review may add the
-unchanged manifest ID without mutating the manifest. The manifest and any committed qualification
-record explicitly do not attest that a pack was present; reconstruction requires the same supplied
-pack.
+content address is sufficient only for generic pack verification. Qualification instead consumes
+the exact repository-pinned review registry, which binds the unchanged manifest and candidate to
+the exact pack spec and verified receipt. The manifest and any committed qualification record
+explicitly do not attest that a pack was present; reconstruction requires the same supplied pack.
+Publishing the final eligible record remains a separate later change.
+
+Qualification and supplied-pack verification dispatch by exact canonical field set. Original
+pre-registry forms are reconstructed with the frozen policy that produced them and are exposed
+only as verified historical replay, never as current-policy eligibility. Current reviewed forms
+require both registry and approval IDs. Missing one current field, adding a downgrade selector, or
+relabeling and rehashing a current record does not invoke the legacy path.
 
 The determinism canary is a separate pure comparison layer. It decodes only bounded supplied IEEE
 payload bytes with Python's standard library. It has no runtime adapter, worker, execution command,
@@ -174,15 +180,17 @@ installation, import, runtime/native-loader/stdlib completeness, Metal/device/ba
 synchronization, model support, or permission. The negative decision carries sorted exact blockers
 without fallback.
 
-Candidate-supplied hashes are integrity bindings, not independent review. A real
-`reviewed_candidate` is therefore ineligible unless its derived source/wheel/METADATA evidence
-anchor is also present in the committed qualification specification. The allowlist retains the
-previously merged anchor
-`sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`,
-which predates the target mutation. The exact CPython 3.13.15 target plus all seven merged worker
-source bindings derive pending anchor
-`sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`;
-it is intentionally absent from the allowlist pending a later independent review. The package
+Candidate-supplied hashes are integrity bindings, not independent review. The immutable candidate
+and its qualification specification remain unchanged. Review policy is separated into canonical
+registry
+`sha256:dd1a6f0710a38cdb5757a81c749a2b9005b2c0371e5c1f4900bf6d6c41c7d9ff`
+under registry spec
+`sha256:41b3586faa73ddc1d739d300bfd8ff82bfb7219f83e0c24660ed645d59bd9da0`.
+Its approval binds candidate anchor
+`sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`
+to the exact candidate package, qualification spec, target, worker evidence, closure manifest,
+pack spec, and verified pack receipt. Eligibility reads only that pinned registry; historical
+allowlists embedded in candidate-bound specs remain replay data. The package
 embeds both exact PyPI wheel byte streams; the validator rechecks their sizes, hashes, dist-info
 identities, raw METADATA equality, and WHEEL tags offline. It binds source tags `v0.30.4` and
 `v0.30.6` to their exact Git revisions. Its worker-evidence specification and source-evidence
@@ -191,7 +199,6 @@ anchor are
 and `sha256:10ab50cbfb94890bae1dd8c57180645d5781e454b1a8171b158c4d932121d9dd`.
 The package is also bound to runtime target anchor
 `sha256:008f7c3ac60614bc6909822180a4bc0b9be17eaf0aa3abc23829eb2842c4fdc0`.
-The pending anchor is intentionally absent from the allowlist until a later separate review.
 That target pins CPython 3.13.15, `cp313`, macOS 27.0.1 build 26A434, the 15.0 runtime-wheel
 deployment floor, and arm64.
 
@@ -232,9 +239,10 @@ schema-1.0 qualification, runtime-preflight, authorization, consumption, termina
 negative-projection records. The schema-1.0 state remains permanently disabled.
 
 The protocol and spec are candidate-agnostic. Exact runtime versions and bytes must come from an
-eligible schema-1.0 `reviewed_candidate` qualification record whose derived review anchor is in the
-committed qualification spec. Strict reconstruction rejects the synthetic-positive fixture,
-historical projections, forged decisions, uncommitted anchors, and coordinated rehashing. The
+eligible schema-1.0 `reviewed_candidate` qualification record whose derived review anchor and
+evidence identities match an exact approval in the pinned review registry. Strict reconstruction
+rejects the synthetic-positive fixture, historical projections, forged decisions, unapproved
+anchors, registry drift, and coordinated rehashing. The
 second prerequisite is future authoritative one-shot authorization custody. Acquisition,
 current-expiry observation, exclusive consumption/non-reuse, and independently verified
 output-root and nonce facts are all unimplemented. A caller may supply an
@@ -249,6 +257,13 @@ execute entrypoint. Current construction and replay leave `attempted_actions`,
 replay deterministically reconstructs refusals for the synthetic eligible qualification and the
 historical incompatible qualification; it includes no real candidate, authoritative
 authorization, private raw evidence, or private path.
+
+The predecessor schema-1.1 spec
+`sha256:23add482023ba3a97ab35dd2b78a6302ef5ae98abd3f5dccaaa341e242d4bf07`
+and its exact refusal records remain verifiable solely for historical replay. The active spec is
+selected by exact `spec_id`; unknown or mixed spec/record bundles fail closed. Legacy qualification
+state cannot satisfy the active registry-bound prerequisite, and every legacy inspection reports
+non-promotable scope.
 
 The future physical action contract is deliberately narrower than model execution: exact isolated
 runtime-closure verification; imports only of pinned `mlx.core` and `mlx_lm` plus transitive files
