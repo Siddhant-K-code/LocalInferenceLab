@@ -125,10 +125,11 @@ The pinned registry binds that receipt and the exact manifest/pack-spec identiti
 registry matching clears both independent-review blockers only for all exact identities; any
 wrong package, spec, target, worker, manifest, pack, or receipt identity remains unapproved. The
 canonical publication record
-`sha256:419c6db9924a1da7ef815b445cc1412e3a0c19b9040cae3a26ef583f81eb8a21`
-reconstructs the reviewed receipt from manifest-bound aggregate fields and derives zero blockers.
-It does not claim current wheel presence. These identities do not authorize installation, import,
-execution, MLX/Metal access, or model action.
+`sha256:3d789caf4e65581265dc686aed30df0d4612388710b20a2dabc36e2d906711df`
+was compiled only after direct verification of all 34 exact supplied wheels and derives zero
+blockers. Offline replay consumes its immutable receipt as prior reviewed attestation, reports that
+pack bytes were not reverified, and does not claim current wheel presence. These identities do not
+authorize installation, import, execution, MLX/Metal access, or model action.
 
 ## Candidate worker API source evidence
 

@@ -397,16 +397,17 @@ recursive gaps, and coordinated rehashing against the trusted ID. No network is 
 verification or record reconstruction.
 
 A successful pack receipt proves only that those exact supplied bytes were present for that
-verification. A committed manifest does not. Publication reconstructs the exact independently
-reviewed receipt from its manifest-bound deterministic fields without claiming current pack
-presence. The pinned registry clears both independent-review blockers only when every exact
-identity matches, including verified receipt
+verification. A committed manifest does not. Publication compilation requires the exact supplied
+pack and may obtain the approved receipt only from direct bounded verification of every wheel byte
+stream. Offline replay consumes the exact immutable receipt as prior reviewed attestation, reports
+that pack bytes were not reverified, and does not claim current pack presence. The pinned registry
+clears both independent-review blockers only when every exact identity matches, including verified receipt
 `sha256:6eb636208a880f49b7ece6571dd20a5b3465996692683bfa9b8e873a0f68b07c`.
 Generic registry and manifest verification remain caller-addressable, but qualification consumes
 neither caller-supplied allowlists nor caller-supplied expected registry IDs. Missing, altered,
 substituted, duplicate, ambiguous, or nonmatching registry state fails closed. The canonical
 publication record
-`sha256:419c6db9924a1da7ef815b445cc1412e3a0c19b9040cae3a26ef583f81eb8a21`
+`sha256:3d789caf4e65581265dc686aed30df0d4612388710b20a2dabc36e2d906711df`
 derives `eligible_for_new_observed_authorization` with zero blockers. This is static coherence only;
 it proves no install, import, execution, Metal/device/synchronization/model fact, authorization, or
 permission to run.

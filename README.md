@@ -282,7 +282,7 @@ localinferencelab mlx runtime-qualification-verify RECORD.json
 localinferencelab mlx runtime-qualification-inspect RECORD.json
 localinferencelab mlx runtime-qualification-fixture-compile OUTPUT_ROOT
 localinferencelab mlx runtime-qualification-replay CLOSED-QUALIFICATION-BUNDLE
-localinferencelab mlx runtime-qualification-publication-compile RECORD.json
+localinferencelab mlx runtime-qualification-publication-compile EXACT-WHEEL-PACK RECORD.json
 localinferencelab mlx runtime-qualification-publication-replay RECORD.json
 localinferencelab mlx runtime-qualification-publication-inspect RECORD.json
 localinferencelab mlx runtime-preflight-1-1-capability-report
@@ -436,10 +436,11 @@ and approval ID
 The approval binds the exact candidate anchor/package/spec/target/worker identities, closure
 manifest, pack spec, and verified receipt. New reviewed-candidate records bind the exact registry
 and approval IDs used by reconstruction. The separately committed canonical publication record is
-`sha256:419c6db9924a1da7ef815b445cc1412e3a0c19b9040cae3a26ef583f81eb8a21`.
-It mechanically derives `eligible_for_new_observed_authorization` with zero blockers. Offline
-replay reconstructs the exact reviewed receipt from manifest-bound aggregates; it does not claim
-that wheel bytes are currently present. Every future record still binds
+`sha256:3d789caf4e65581265dc686aed30df0d4612388710b20a2dabc36e2d906711df`.
+It mechanically derives `eligible_for_new_observed_authorization` with zero blockers. Compilation
+requires and directly verifies all 34 exact supplied wheel byte streams. Offline replay consumes
+the immutable committed receipt as prior reviewed attestation and explicitly does not reverify or
+claim that wheel bytes are currently present. Every future record still binds
 the unchanged schema-1.0 negative projection, lock, terminal failure, authorization, consumption,
 historical protocol, and historical worker IDs.
 

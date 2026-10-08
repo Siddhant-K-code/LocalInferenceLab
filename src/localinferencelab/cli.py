@@ -405,8 +405,9 @@ def _parser() -> argparse.ArgumentParser:
     runtime_qualification_pack_verify.add_argument("--expected-manifest-id", required=True)
     runtime_qualification_publication_compile = mlx_commands.add_parser(
         "runtime-qualification-publication-compile",
-        help="compile the sole registry-bound real qualification publication record",
+        help="verify the exact supplied pack and compile the sole real publication record",
     )
+    runtime_qualification_publication_compile.add_argument("pack_root", type=Path)
     runtime_qualification_publication_compile.add_argument("output", type=Path)
     runtime_qualification_publication_replay = mlx_commands.add_parser(
         "runtime-qualification-publication-replay",
@@ -968,7 +969,10 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
             _emit(output)
             return 0
         if args.mlx_command == "runtime-qualification-publication-compile":
-            publication_record = compile_qualification_publication_record(args.output)
+            publication_record = compile_qualification_publication_record(
+                args.pack_root,
+                args.output,
+            )
             output = qualification_publication_inspection(publication_record)
             output["status"] = "compiled"
             _emit(output)

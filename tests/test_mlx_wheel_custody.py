@@ -818,6 +818,13 @@ def test_supplied_pack_qualification_requires_reconstruction(
         pack,
         manifest_id,
     )
+    second_record = build_supplied_pack_qualification_record(
+        candidate,
+        manifest,
+        pack,
+        manifest_id,
+    )
+    assert canonical_json(record) == canonical_json(second_record)
     assert record["decision"] == "ineligible"
     anchor_blocker = f"wheel_evidence_manifest_anchor_not_independently_reviewed:{manifest_id}"
     assert _list(record["blockers"]) == sorted(

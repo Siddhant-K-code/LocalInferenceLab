@@ -69,21 +69,6 @@ _CURRENT_SUPPLIED_PACK_RECORD_FIELDS = _LEGACY_SUPPLIED_PACK_RECORD_FIELDS | {
     "review_approval_id",
     "review_registry_id",
 }
-_PACK_RECEIPT_FIELDS = {
-    "artifact_count",
-    "committed_manifest_alone_proves_supplied_bytes_present",
-    "manifest_id",
-    "network_actions",
-    "pack_spec_id",
-    "package_installations",
-    "process_starts",
-    "receipt_id",
-    "record_type",
-    "runtime_imports",
-    "schema_version",
-    "supplied_pack_verified",
-    "total_size_bytes",
-}
 _MIN_COMPATIBLE_RELEASE_COMPONENTS = 2
 _TARGET_VERSION_COMPONENTS = 2
 _READ_BLOCK_BYTES = 1024 * 1024
@@ -198,45 +183,19 @@ class VerifiedWheelEvidencePack:
     pack_spec_id: str
     artifacts: tuple[VerifiedWheelEvidence, ...]
     total_size_bytes: int
+    receipt_bytes: bytes
 
     def receipt(self) -> dict[str, JsonValue]:
-        return _wheel_evidence_pack_receipt(
-            manifest_id=self.manifest_id,
-            pack_spec_id=self.pack_spec_id,
-            artifact_count=len(self.artifacts),
-            total_size_bytes=self.total_size_bytes,
-        )
+        receipt = load_json_bytes(self.receipt_bytes)
+        if not isinstance(receipt, dict):
+            raise ContractError("verified wheel pack receipt must be an object")
+        return receipt
 
 
 def _mapping(value: JsonValue, label: str) -> dict[str, JsonValue]:
     if not isinstance(value, dict):
         raise ContractError(f"{label} must be an object")
     return value
-
-
-def _wheel_evidence_pack_receipt(
-    *,
-    manifest_id: str,
-    pack_spec_id: str,
-    artifact_count: int,
-    total_size_bytes: int,
-) -> dict[str, JsonValue]:
-    content: dict[str, JsonValue] = {
-        "record_type": "mlx_wheel_evidence_pack_verification_receipt",
-        "schema_version": SCHEMA_VERSION,
-        "manifest_id": manifest_id,
-        "pack_spec_id": pack_spec_id,
-        "artifact_count": artifact_count,
-        "total_size_bytes": total_size_bytes,
-        "supplied_pack_verified": True,
-        "committed_manifest_alone_proves_supplied_bytes_present": False,
-        "network_actions": 0,
-        "package_installations": 0,
-        "runtime_imports": 0,
-        "process_starts": 0,
-    }
-    content["receipt_id"] = canonical_identity(content)
-    return content
 
 
 def _array(value: JsonValue, label: str, *, maximum: int) -> list[JsonValue]:
@@ -1512,53 +1471,6 @@ def load_wheel_evidence_manifest(
     return verify_wheel_evidence_manifest(value, expected_manifest_id)
 
 
-def reconstruct_reviewed_pack_receipt(
-    manifest_value: JsonValue,
-    expected_manifest_id: str,
-    expected_receipt_id: str,
-) -> dict[str, JsonValue]:
-    """Reconstruct a reviewed receipt identity without claiming current wheel presence."""
-    manifest = verify_wheel_evidence_manifest(manifest_value, expected_manifest_id)
-    distributions = _array(
-        manifest["distributions"],
-        "manifest.distributions",
-        maximum=_MAX_DISTRIBUTIONS,
-    )
-    closure = _mapping(manifest["closure"], "manifest.closure")
-    receipt = _wheel_evidence_pack_receipt(
-        manifest_id=cast("str", manifest["manifest_id"]),
-        pack_spec_id=cast("str", manifest["pack_spec_id"]),
-        artifact_count=len(distributions),
-        total_size_bytes=_integer(
-            closure["wheel_bytes_total"],
-            "manifest.closure.wheel_bytes_total",
-        ),
-    )
-    if receipt["receipt_id"] != _sha256(expected_receipt_id, "expected_receipt_id"):
-        raise ContractError("reconstructed reviewed wheel pack receipt identity mismatch")
-    return receipt
-
-
-def verify_reviewed_pack_receipt(
-    value: JsonValue,
-    manifest_value: JsonValue,
-    expected_manifest_id: str,
-    expected_receipt_id: str,
-) -> dict[str, JsonValue]:
-    """Verify an exact reviewed receipt by deterministic manifest-bound reconstruction."""
-    receipt = _mapping(value, "reviewed wheel pack receipt")
-    _keys(receipt, _PACK_RECEIPT_FIELDS, "reviewed wheel pack receipt")
-    if canonical_json(receipt) != canonical_json(
-        reconstruct_reviewed_pack_receipt(
-            manifest_value,
-            expected_manifest_id,
-            expected_receipt_id,
-        )
-    ):
-        raise ContractError("reviewed wheel pack receipt semantic reconstruction mismatch")
-    return dict(receipt)
-
-
 def _file_flags() -> int:
     flags = os.O_RDONLY
     if hasattr(os, "O_CLOEXEC"):
@@ -1847,11 +1759,27 @@ def verify_supplied_wheel_pack(
     )
     if total_size != expected_total:
         raise ContractError("supplied wheel pack total byte size mismatch")
+    receipt: dict[str, JsonValue] = {
+        "record_type": "mlx_wheel_evidence_pack_verification_receipt",
+        "schema_version": SCHEMA_VERSION,
+        "manifest_id": manifest["manifest_id"],
+        "pack_spec_id": manifest["pack_spec_id"],
+        "artifact_count": len(artifacts),
+        "total_size_bytes": total_size,
+        "supplied_pack_verified": True,
+        "committed_manifest_alone_proves_supplied_bytes_present": False,
+        "network_actions": 0,
+        "package_installations": 0,
+        "runtime_imports": 0,
+        "process_starts": 0,
+    }
+    receipt["receipt_id"] = canonical_identity(receipt)
     return VerifiedWheelEvidencePack(
         cast("str", manifest["manifest_id"]),
         cast("str", manifest["pack_spec_id"]),
         tuple(artifacts),
         total_size,
+        canonical_json(receipt),
     )
 
 
@@ -2006,62 +1934,6 @@ def _verify_candidate_manifest_binding(
             "tag": candidate_source["tag"],
         }:
             raise ContractError(f"wheel evidence manifest root source drift: {root.name}")
-
-
-def build_reviewed_pack_qualification_assessment(
-    candidate_anchor_value: JsonValue,
-    manifest_value: JsonValue,
-    expected_manifest_id: str,
-    expected_receipt_id: str,
-) -> dict[str, JsonValue]:
-    """Reconstruct the reviewed pack assessment from committed evidence identities."""
-    from localinferencelab.mlx_qualification import (  # noqa: PLC0415
-        ELIGIBLE,
-        INELIGIBLE,
-        build_qualification_record,
-        qualification_spec,
-        verify_qualification_package,
-    )
-
-    candidate = verify_qualification_package(candidate_anchor_value)
-    manifest = verify_wheel_evidence_manifest(manifest_value, expected_manifest_id)
-    candidate_binding = _mapping(manifest["candidate_anchor"], "manifest.candidate_anchor")
-    if (
-        candidate["package_id"] != candidate_binding["package_id"]
-        or candidate["candidate_name"] != candidate_binding["candidate_name"]
-        or candidate["qualification_spec_id"] != candidate_binding["qualification_spec_id"]
-        or candidate["qualification_spec_id"] != qualification_spec()["spec_id"]
-    ):
-        raise ContractError("wheel evidence manifest candidate anchor mismatch")
-    _verify_candidate_manifest_binding(candidate, manifest)
-    candidate_record = build_qualification_record(candidate)
-    candidate_assessment = _mapping(candidate_record["assessment"], "candidate assessment")
-    if candidate_assessment["review_anchor_id"] != candidate_binding["review_anchor_id"]:
-        raise ContractError("wheel evidence manifest review anchor mismatch")
-    receipt = reconstruct_reviewed_pack_receipt(
-        manifest,
-        expected_manifest_id,
-        expected_receipt_id,
-    )
-    blockers, review_registry_id, review_approval_id = _pack_record_blockers(
-        candidate,
-        candidate_record,
-        manifest,
-        receipt,
-    )
-    decision = ELIGIBLE if not blockers else INELIGIBLE
-    return {
-        "blockers": cast("list[JsonValue]", blockers),
-        "candidate": candidate,
-        "candidate_anchor": dict(candidate_binding),
-        "candidate_assessment": candidate_assessment,
-        "closure": manifest["closure"],
-        "decision": decision,
-        "manifest": manifest,
-        "pack_verification": receipt,
-        "review_approval_id": review_approval_id,
-        "review_registry_id": review_registry_id,
-    }
 
 
 def build_supplied_pack_qualification_record(

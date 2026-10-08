@@ -435,7 +435,7 @@ verified, distribution blockers are removed. The registry clears both review blo
 the exact candidate, manifest, pack spec, and verified receipt
 `sha256:6eb636208a880f49b7ece6571dd20a5b3465996692683bfa9b8e873a0f68b07c`.
 The separately published canonical record
-`sha256:419c6db9924a1da7ef815b445cc1412e3a0c19b9040cae3a26ef583f81eb8a21`
+`sha256:3d789caf4e65581265dc686aed30df0d4612388710b20a2dabc36e2d906711df`
 derives static eligibility with zero blockers from those exact reviewed identities. It neither
 claims current wheel presence nor authorizes runtime action, preserving separate review of
 evidence, mechanism, decision, and any future authorization.
