@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import ast
 import io
 import os
 import re
+import textwrap
 import zipfile
 from dataclasses import dataclass
 from email import policy
@@ -43,6 +45,7 @@ _MAX_METADATA_HEADERS = 4096
 _MIN_RELEASE_COMPONENTS = 2
 _MAX_METADATA_BYTES = 256 * 1024
 _MAX_SOURCE_BYTES = 256 * 1024
+_MAX_SOURCE_EXCERPT_BYTES = 16 * 1024
 _MAX_WHEEL_BYTES = 64 * 1024 * 1024
 _MAX_WHEEL_ENTRIES = 20_000
 _PACKAGE_DOMAINS = {"files.pythonhosted.org"}
@@ -89,6 +92,168 @@ _EXPECTED_API_EVIDENCE: dict[str, tuple[str, str]] = {
     "metal_is_available": ("mlx", "mlx.core.metal.is_available"),
     "synchronize": ("mlx", "mlx.core.synchronize"),
 }
+_API_EVIDENCE_DOES_NOT_PROVE: list[JsonValue] = [
+    "backend_or_device_availability",
+    "installation_success",
+    "metal_availability",
+    "native_loader_success",
+    "runtime_executability",
+    "runtime_import_success",
+    "stream_synchronization_success",
+]
+_EXPECTED_API_SEMANTICS: dict[str, dict[str, JsonValue]] = {
+    "default_device": {
+        "access_form": "mlx.core.default_device()",
+        "callable": True,
+        "module": "mlx.core",
+        "static_signature": "() -> Device",
+        "surface_kind": "nanobind_callable",
+    },
+    "default_stream": {
+        "access_form": "mlx.core.default_stream(device)",
+        "callable": True,
+        "module": "mlx.core",
+        "static_signature": "(device: Device) -> Stream",
+        "surface_kind": "nanobind_callable",
+    },
+    "distribution_versions": {
+        "access_form": "importlib.metadata.version(distribution_name)",
+        "callable": True,
+        "module": "importlib.metadata",
+        "static_signature": "(distribution_name: str) -> str",
+        "surface_kind": "stdlib_callable",
+    },
+    "import_mlx": {
+        "access_form": 'importlib.import_module("mlx.core")',
+        "callable": False,
+        "module": "mlx.core",
+        "static_signature": "module mlx.core",
+        "surface_kind": "module_import_declaration",
+    },
+    "import_mlx_lm": {
+        "access_form": 'importlib.import_module("mlx_lm")',
+        "callable": False,
+        "module": "mlx_lm",
+        "static_signature": "package mlx_lm",
+        "surface_kind": "module_import_declaration",
+    },
+    "metal_is_available": {
+        "access_form": "mlx.core.metal.is_available()",
+        "callable": True,
+        "module": "mlx.core.metal",
+        "static_signature": "() -> bool",
+        "surface_kind": "nanobind_callable",
+    },
+    "synchronize": {
+        "access_form": "mlx.core.synchronize()",
+        "callable": True,
+        "module": "mlx.core",
+        "static_signature": "(stream: Stream | None = None) -> None",
+        "surface_kind": "nanobind_callable",
+    },
+}
+_MLX_REPOSITORY = "https://github.com/ml-explore/mlx"
+_MLX_TAG = "v0.30.4"
+_MLX_REVISION = "2f324cc3b200700b422db4811ae3ff8bd5bf48b4"
+_MLX_LM_REPOSITORY = "https://github.com/ml-explore/mlx-lm"
+_MLX_LM_TAG = "v0.30.6"
+_MLX_LM_REVISION = "f18526f8d66f74728072e96d55acb6c451e92e88"
+_CPYTHON_REPOSITORY = "https://github.com/python/cpython"
+_CPYTHON_TAG = "v3.13.0"
+_CPYTHON_REVISION = "60403a5409ff2c3f3b07dd2ca91a7a3e096839c7"
+_REVIEWED_API_SOURCE_FILES: dict[tuple[str, str], tuple[str, str, str]] = {
+    (_CPYTHON_REPOSITORY, "Lib/importlib/metadata/__init__.py"): (
+        _CPYTHON_TAG,
+        _CPYTHON_REVISION,
+        "sha256:5476c7c22a65f9e8b5a07b799336d87fa70e792758fd95b161b53b530e3b2654",
+    ),
+    (_MLX_REPOSITORY, "mlx/backend/metal/metal.h"): (
+        _MLX_TAG,
+        _MLX_REVISION,
+        "sha256:d945d18236b8af528bc74161f72c067cc115d49026bd4ea71b84857c95c18870",
+    ),
+    (_MLX_REPOSITORY, "mlx/device.h"): (
+        _MLX_TAG,
+        _MLX_REVISION,
+        "sha256:d00a0b67d10728666acf3b82838530471b29151a50212aec0cf960ea3d8fd814",
+    ),
+    (_MLX_REPOSITORY, "mlx/stream.h"): (
+        _MLX_TAG,
+        _MLX_REVISION,
+        "sha256:a9281c4a7301a3d1af7a817a19e95f5c1c22ce7f7f5a9e25e5113d314ed0b824",
+    ),
+    (_MLX_LM_REPOSITORY, "mlx_lm/__init__.py"): (
+        _MLX_LM_TAG,
+        _MLX_LM_REVISION,
+        "sha256:f9ffa88772d26e537a98aa39ab16488a7a0d13cc1fac5d665376132c94b49608",
+    ),
+    (_MLX_REPOSITORY, "python/src/device.cpp"): (
+        _MLX_TAG,
+        _MLX_REVISION,
+        "sha256:aea762cc90ced0d4d3274c2f3cdd48435de8219ff2b4d5e5b782982b05c362b9",
+    ),
+    (_MLX_REPOSITORY, "python/src/metal.cpp"): (
+        _MLX_TAG,
+        _MLX_REVISION,
+        "sha256:4e077805ef4db09e62479e3ff1d90b92c89caaca5d1af6245215169a4df4dce9",
+    ),
+    (_MLX_REPOSITORY, "python/src/mlx.cpp"): (
+        _MLX_TAG,
+        _MLX_REVISION,
+        "sha256:e339e58d45f679b662bb06a96b42b015c59f1590a2af9b8fb12caac85f15097b",
+    ),
+    (_MLX_REPOSITORY, "python/src/stream.cpp"): (
+        _MLX_TAG,
+        _MLX_REVISION,
+        "sha256:4d80cae66d2aa75c076ed9555e1439a41dbc2e4578d8faadefa957d567a97e63",
+    ),
+    (_MLX_REPOSITORY, "setup.py"): (
+        _MLX_TAG,
+        _MLX_REVISION,
+        "sha256:ef7f790742fbf7ec8f7760721c7684048d595f29503936021c7da3740f24c1ba",
+    ),
+    (_MLX_LM_REPOSITORY, "setup.py"): (
+        _MLX_LM_TAG,
+        _MLX_LM_REVISION,
+        "sha256:68025286dfcf40efc18aa0ca42427d1d697ba631ca3fbe7e54e0f4bbe74a36e3",
+    ),
+}
+_REVIEWED_API_SOURCE_RANGES: dict[
+    str,
+    tuple[tuple[str, str, int, int], ...],
+] = {
+    "default_device": (
+        (_MLX_REPOSITORY, "mlx/device.h", 28, 28),
+        (_MLX_REPOSITORY, "python/src/device.cpp", 54, 57),
+    ),
+    "default_stream": (
+        (_MLX_REPOSITORY, "mlx/stream.h", 16, 17),
+        (_MLX_REPOSITORY, "python/src/stream.cpp", 66, 70),
+    ),
+    "distribution_versions": (
+        (_CPYTHON_REPOSITORY, "Lib/importlib/metadata/__init__.py", 483, 486),
+        (_CPYTHON_REPOSITORY, "Lib/importlib/metadata/__init__.py", 980, 987),
+    ),
+    "import_mlx": (
+        (_MLX_REPOSITORY, "python/src/mlx.cpp", 27, 46),
+        (_MLX_REPOSITORY, "setup.py", 207, 226),
+    ),
+    "import_mlx_lm": (
+        (_MLX_LM_REPOSITORY, "mlx_lm/__init__.py", 1, 20),
+        (_MLX_LM_REPOSITORY, "setup.py", 35, 42),
+    ),
+    "metal_is_available": (
+        (_MLX_REPOSITORY, "mlx/backend/metal/metal.h", 11, 14),
+        (_MLX_REPOSITORY, "python/src/metal.cpp", 28, 35),
+    ),
+    "synchronize": (
+        (_MLX_REPOSITORY, "mlx/stream.h", 36, 40),
+        (_MLX_REPOSITORY, "python/src/stream.cpp", 133, 146),
+    ),
+}
+_REVIEWED_WORKER_API_EVIDENCE_ANCHORS = [
+    "sha256:10ab50cbfb94890bae1dd8c57180645d5781e454b1a8171b158c4d932121d9dd",
+]
 _ZERO_ACTION_COUNTERS: dict[str, int] = {
     "authorization_creations": 0,
     "authorization_consumptions": 0,
@@ -128,7 +293,7 @@ _HISTORICAL_WORKER_CODE_ID = (
     "sha256:bfd840635879dfae9a57fb11cae0e6ddef4f3f5f3b9b81f39e8e1cec51539fe3"
 )
 _REVIEWED_CANDIDATE_ANCHORS = [
-    "sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b"
+    "sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c"
 ]
 
 
@@ -227,6 +392,12 @@ def _integer(
     return value
 
 
+def _boolean(value: JsonValue, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise ContractError(f"{label} must be a boolean")
+    return value
+
+
 def _sha256(value: JsonValue, label: str) -> str:
     text = _text(value, label)
     if (
@@ -307,6 +478,54 @@ def _frozen_negative_relationship() -> dict[str, JsonValue]:
     }
 
 
+def worker_api_evidence_spec() -> dict[str, JsonValue]:
+    """Return the source-only worker API evidence contract."""
+    reviewed_sources: list[JsonValue] = []
+    for (repository_url, path), (tag, revision, file_sha256) in sorted(
+        _REVIEWED_API_SOURCE_FILES.items()
+    ):
+        reviewed_sources.append(
+            {
+                "file_sha256": file_sha256,
+                "path": path,
+                "repository_url": repository_url,
+                "revision": revision,
+                "tag": tag,
+            }
+        )
+    expected_surfaces: list[JsonValue] = []
+    for probe, (distribution, symbol) in sorted(_EXPECTED_API_EVIDENCE.items()):
+        expected_surfaces.append(
+            {
+                "distribution": distribution,
+                "probe": probe,
+                "symbol": symbol,
+                **_EXPECTED_API_SEMANTICS[probe],
+            }
+        )
+    content: dict[str, JsonValue] = {
+        "record_type": "mlx_worker_api_evidence_spec",
+        "schema_version": SCHEMA_VERSION,
+        "claim_scope": "source_surface_availability_only",
+        "does_not_prove": list(_API_EVIDENCE_DOES_NOT_PROVE),
+        "expected_surfaces": expected_surfaces,
+        "offline_verification": {
+            "ambiguous_duplicate_definitions_rejected": True,
+            "coordinated_rehashing_rejected_by_reviewed_anchor": True,
+            "dynamic_generation_or_aliasing_rejected": True,
+            "exact_bounded_source_excerpt_bytes_required": True,
+            "exact_file_hash_required": True,
+            "exact_path_revision_and_tag_required": True,
+            "self_attested_anchors_accepted": False,
+        },
+        "reviewed_evidence_anchors": list(_REVIEWED_WORKER_API_EVIDENCE_ANCHORS),
+        "reviewed_sources": reviewed_sources,
+        "static_action_counters": dict(_ZERO_ACTION_COUNTERS),
+    }
+    content["spec_id"] = canonical_identity(content)
+    return content
+
+
 def qualification_spec() -> dict[str, JsonValue]:
     """Return the canonical process-free qualification specification."""
     content: dict[str, JsonValue] = {
@@ -333,6 +552,7 @@ def qualification_spec() -> dict[str, JsonValue]:
                 "probe": probe,
                 "distribution": distribution,
                 "symbol": symbol,
+                **_EXPECTED_API_SEMANTICS[probe],
             }
             for probe, (distribution, symbol) in sorted(_EXPECTED_API_EVIDENCE.items())
         ],
@@ -340,6 +560,7 @@ def qualification_spec() -> dict[str, JsonValue]:
         "frozen_schema_1_0_negative": _frozen_negative_relationship(),
         "required_top_level_distributions": ["mlx", "mlx-lm"],
         "reviewed_candidate_anchors": list(_REVIEWED_CANDIDATE_ANCHORS),
+        "worker_api_evidence_spec_id": worker_api_evidence_spec()["spec_id"],
         "requirement_grammar": (
             "canonical_release_versions_with_comma_conjoined_specifiers_and_"
             "and_conjoined_environment_markers"
@@ -1044,7 +1265,7 @@ def _marker_environment(target: dict[str, JsonValue]) -> dict[str, str]:
     }
 
 
-def _verify_api_evidence(
+def _verify_synthetic_api_evidence(
     value: JsonValue,
     *,
     distributions: dict[str, dict[str, JsonValue]],
@@ -1103,6 +1324,447 @@ def _verify_api_evidence(
     return dict(evidence)
 
 
+def _verify_reviewed_api_source(
+    value: JsonValue,
+    *,
+    probe: str,
+    index: int,
+) -> tuple[dict[str, JsonValue], str]:
+    label = f"qualification_package.worker_api_evidence.{probe}.sources[{index}]"
+    source = _mapping(value, label)
+    fields = {
+        "excerpt_bytes_base64",
+        "excerpt_end_line",
+        "excerpt_sha256",
+        "excerpt_start_line",
+        "file_sha256",
+        "path",
+        "repository_url",
+        "revision",
+        "source_id",
+        "tag",
+    }
+    _keys(source, fields, label)
+    repository_url = _url(
+        source["repository_url"],
+        f"{label}.repository_url",
+        allowed_domains=_SOURCE_DOMAINS,
+    )
+    path = _relative_path(source["path"], f"{label}.path")
+    expected = _REVIEWED_API_SOURCE_FILES.get((repository_url, path))
+    if expected is None:
+        raise ContractError(f"{label} is not an accepted reviewed source file")
+    expected_tag, expected_revision, expected_file_sha256 = expected
+    tag = _text(source["tag"], f"{label}.tag", maximum=128)
+    revision = _text(source["revision"], f"{label}.revision", maximum=40)
+    file_sha256 = _sha256(source["file_sha256"], f"{label}.file_sha256")
+    if tag != expected_tag or revision != expected_revision or file_sha256 != expected_file_sha256:
+        raise ContractError(f"{label} tag, revision, or full-file hash drift")
+    start_line = _integer(
+        source["excerpt_start_line"],
+        f"{label}.excerpt_start_line",
+        minimum=1,
+        maximum=1_000_000,
+    )
+    end_line = _integer(
+        source["excerpt_end_line"],
+        f"{label}.excerpt_end_line",
+        minimum=start_line,
+        maximum=1_000_000,
+    )
+    encoded = _text(
+        source["excerpt_bytes_base64"],
+        f"{label}.excerpt_bytes_base64",
+        maximum=32_000,
+    )
+    try:
+        excerpt_bytes = decode_bytes(encoded)
+    except ContractError as error:
+        raise ContractError(f"{label}.excerpt_bytes_base64 is not canonical") from error
+    if not excerpt_bytes or len(excerpt_bytes) > _MAX_SOURCE_EXCERPT_BYTES:
+        raise ContractError(f"{label} excerpt has invalid byte length")
+    if digest_bytes(excerpt_bytes) != _sha256(
+        source["excerpt_sha256"],
+        f"{label}.excerpt_sha256",
+    ):
+        raise ContractError(f"{label} excerpt digest mismatch")
+    try:
+        excerpt = excerpt_bytes.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ContractError(f"{label} excerpt must be UTF-8 source text") from error
+    if len(excerpt.splitlines()) != end_line - start_line + 1:
+        raise ContractError(f"{label} excerpt line bounds do not match its bytes")
+    source_identity = _sha256(source["source_id"], f"{label}.source_id")
+    source_content = dict(source)
+    del source_content["source_id"]
+    if source_identity != canonical_identity(source_content):
+        raise ContractError(f"{label} source identity mismatch")
+    return dict(source), excerpt
+
+
+def _source_excerpt(
+    sources: dict[tuple[str, str, int, int], str],
+    *,
+    repository_url: str,
+    path: str,
+    start_line: int,
+    end_line: int,
+    probe: str,
+) -> str:
+    key = (repository_url, path, start_line, end_line)
+    try:
+        return sources[key]
+    except KeyError as error:
+        raise ContractError(f"{probe} is missing its exact reviewed source excerpt") from error
+
+
+def _require_exact_count(text: str, token: str, count: int, label: str) -> None:
+    actual = text.count(token)
+    if actual != count:
+        raise ContractError(
+            f"{label} must contain {token!r} exactly {count} time(s), found {actual}"
+        )
+
+
+def _is_name(node: ast.AST | None, identifier: str) -> bool:
+    return isinstance(node, ast.Name) and node.id == identifier
+
+
+def _verify_distribution_version_semantics(
+    sources: dict[tuple[str, str, int, int], str],
+) -> None:
+    property_text = _source_excerpt(
+        sources,
+        repository_url=_CPYTHON_REPOSITORY,
+        path="Lib/importlib/metadata/__init__.py",
+        start_line=483,
+        end_line=486,
+        probe="distribution_versions",
+    )
+    function_text = _source_excerpt(
+        sources,
+        repository_url=_CPYTHON_REPOSITORY,
+        path="Lib/importlib/metadata/__init__.py",
+        start_line=980,
+        end_line=987,
+        probe="distribution_versions",
+    )
+    try:
+        property_tree = ast.parse(textwrap.dedent(property_text))
+        function_tree = ast.parse(textwrap.dedent(function_text))
+    except SyntaxError as error:
+        raise ContractError("distribution_versions evidence is not static Python source") from error
+    property_functions = [node for node in property_tree.body if isinstance(node, ast.FunctionDef)]
+    public_functions = [node for node in function_tree.body if isinstance(node, ast.FunctionDef)]
+    if len(property_functions) != 1 or len(public_functions) != 1:
+        raise ContractError("distribution_versions evidence has ambiguous duplicate definitions")
+    property_function = property_functions[0]
+    public_function = public_functions[0]
+    if (
+        property_function.name != "version"
+        or len(property_function.decorator_list) != 1
+        or not _is_name(property_function.decorator_list[0], "property")
+        or len(property_function.args.args) != 1
+        or property_function.args.args[0].arg != "self"
+        or not _is_name(property_function.returns, "str")
+        or public_function.name != "version"
+        or len(public_function.args.args) != 1
+        or public_function.args.args[0].arg != "distribution_name"
+        or not _is_name(public_function.args.args[0].annotation, "str")
+        or not _is_name(public_function.returns, "str")
+    ):
+        raise ContractError("distribution_versions static signature drift")
+    property_returns = [
+        node for node in ast.walk(property_function) if isinstance(node, ast.Return)
+    ]
+    public_returns = [node for node in ast.walk(public_function) if isinstance(node, ast.Return)]
+    if len(property_returns) != 1 or len(public_returns) != 1:
+        raise ContractError("distribution_versions return path is ambiguous")
+    property_value = property_returns[0].value
+    if not (
+        isinstance(property_value, ast.Subscript)
+        and isinstance(property_value.value, ast.Attribute)
+        and _is_name(property_value.value.value, "self")
+        and property_value.value.attr == "metadata"
+        and isinstance(property_value.slice, ast.Constant)
+        and property_value.slice.value == "Version"
+    ):
+        raise ContractError("distribution_versions no longer reads the METADATA Version field")
+    public_value = public_returns[0].value
+    if not (
+        isinstance(public_value, ast.Attribute)
+        and public_value.attr == "version"
+        and isinstance(public_value.value, ast.Call)
+        and _is_name(public_value.value.func, "distribution")
+        and len(public_value.value.args) == 1
+        and _is_name(public_value.value.args[0], "distribution_name")
+        and not public_value.value.keywords
+    ):
+        raise ContractError("distribution_versions public lookup mechanism drift")
+
+
+def _verify_import_mlx_semantics(
+    sources: dict[tuple[str, str, int, int], str],
+) -> None:
+    setup_text = _source_excerpt(
+        sources,
+        repository_url=_MLX_REPOSITORY,
+        path="setup.py",
+        start_line=207,
+        end_line=226,
+        probe="import_mlx",
+    )
+    module_text = _source_excerpt(
+        sources,
+        repository_url=_MLX_REPOSITORY,
+        path="python/src/mlx.cpp",
+        start_line=27,
+        end_line=46,
+        probe="import_mlx",
+    )
+    try:
+        setup_tree = ast.parse(textwrap.dedent(setup_text))
+    except SyntaxError as error:
+        raise ContractError("import_mlx setup evidence is not static Python source") from error
+    ext_keywords = [
+        keyword
+        for node in ast.walk(setup_tree)
+        if isinstance(node, ast.Call)
+        for keyword in node.keywords
+        if keyword.arg == "ext_modules"
+    ]
+    if len(ext_keywords) != 1 or not isinstance(ext_keywords[0].value, ast.List):
+        raise ContractError("import_mlx extension declaration is missing or ambiguous")
+    elements = ext_keywords[0].value.elts
+    if len(elements) != 1 or not isinstance(elements[0], ast.Call):
+        raise ContractError("import_mlx extension declaration must be one literal call")
+    extension_call = elements[0]
+    if not (
+        _is_name(extension_call.func, "CMakeExtension")
+        and len(extension_call.args) == 1
+        and isinstance(extension_call.args[0], ast.Constant)
+        and extension_call.args[0].value == "mlx.core"
+        and not extension_call.keywords
+    ):
+        raise ContractError("import_mlx extension module name is dynamic or has drifted")
+    _require_exact_count(module_text, "NB_MODULE(core, m)", 1, "import_mlx module declaration")
+    if "NB_MODULE(" in module_text.replace("NB_MODULE(core, m)", ""):
+        raise ContractError("import_mlx module declaration is ambiguous")
+
+
+def _verify_import_mlx_lm_semantics(
+    sources: dict[tuple[str, str, int, int], str],
+) -> None:
+    setup_text = _source_excerpt(
+        sources,
+        repository_url=_MLX_LM_REPOSITORY,
+        path="setup.py",
+        start_line=35,
+        end_line=42,
+        probe="import_mlx_lm",
+    )
+    init_text = _source_excerpt(
+        sources,
+        repository_url=_MLX_LM_REPOSITORY,
+        path="mlx_lm/__init__.py",
+        start_line=1,
+        end_line=20,
+        probe="import_mlx_lm",
+    )
+    try:
+        setup_tree = ast.parse(f"setup(\n{textwrap.dedent(setup_text)})\n")
+        init_tree = ast.parse(init_text)
+    except SyntaxError as error:
+        raise ContractError("import_mlx_lm evidence is not static Python source") from error
+    package_keywords = [
+        keyword
+        for node in ast.walk(setup_tree)
+        if isinstance(node, ast.Call)
+        for keyword in node.keywords
+        if keyword.arg == "packages"
+    ]
+    if len(package_keywords) != 1 or not isinstance(package_keywords[0].value, ast.List):
+        raise ContractError("import_mlx_lm package declaration is missing or ambiguous")
+    package_names: list[str] = []
+    for item in package_keywords[0].value.elts:
+        if not isinstance(item, ast.Constant) or not isinstance(item.value, str):
+            raise ContractError("import_mlx_lm package declaration uses dynamic generation")
+        package_names.append(item.value)
+    if package_names.count("mlx_lm") != 1:
+        raise ContractError("import_mlx_lm package name is missing or ambiguous")
+    forbidden_dynamic_names = {"__import__", "eval", "exec"}
+    for node in ast.walk(init_tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "__getattr__":
+            raise ContractError(
+                "import_mlx_lm package uses unsupported dynamic attribute generation"
+            )
+        if isinstance(node, ast.Call) and (
+            (isinstance(node.func, ast.Name) and node.func.id in forbidden_dynamic_names)
+            or (isinstance(node.func, ast.Attribute) and node.func.attr == "import_module")
+        ):
+            raise ContractError("import_mlx_lm package uses unsupported dynamic import generation")
+
+
+def _verify_reviewed_api_semantics(
+    probe: str,
+    sources: dict[tuple[str, str, int, int], str],
+) -> None:
+    if probe == "distribution_versions":
+        _verify_distribution_version_semantics(sources)
+        return
+    if probe == "import_mlx":
+        _verify_import_mlx_semantics(sources)
+        return
+    if probe == "import_mlx_lm":
+        _verify_import_mlx_lm_semantics(sources)
+        return
+    source_text = "\n".join(sources.values())
+    if probe == "default_device":
+        _require_exact_count(source_text, '"default_device"', 1, probe)
+        _require_exact_count(source_text, "&mx::default_device", 1, probe)
+        _require_exact_count(source_text, "MLX_API const Device& default_device();", 1, probe)
+    elif probe == "default_stream":
+        _require_exact_count(source_text, '"default_stream"', 1, probe)
+        _require_exact_count(source_text, "&mx::default_stream", 1, probe)
+        _require_exact_count(source_text, '"device"_a', 1, probe)
+        _require_exact_count(source_text, "MLX_API Stream default_stream(Device d);", 1, probe)
+    elif probe == "metal_is_available":
+        _require_exact_count(source_text, 'm.def_submodule("metal"', 1, probe)
+        _require_exact_count(source_text, '"is_available"', 1, probe)
+        _require_exact_count(source_text, "&mx::metal::is_available", 1, probe)
+        _require_exact_count(source_text, "MLX_API bool is_available();", 1, probe)
+    elif probe == "synchronize":
+        _require_exact_count(source_text, '"synchronize"', 1, probe)
+        _require_exact_count(source_text, "std::optional<mx::Stream>", 1, probe)
+        _require_exact_count(source_text, '"stream"_a = nb::none()', 1, probe)
+        _require_exact_count(source_text, "MLX_API void synchronize();", 1, probe)
+        _require_exact_count(source_text, "MLX_API void synchronize(Stream);", 1, probe)
+        _require_exact_count(
+            source_text,
+            "s ? mx::synchronize(s.value()) : mx::synchronize();",
+            1,
+            probe,
+        )
+    else:
+        raise ContractError(f"unsupported reviewed API evidence probe {probe}")
+
+
+def _verify_reviewed_api_evidence(
+    value: JsonValue,
+    *,
+    distributions: dict[str, dict[str, JsonValue]],
+    index: int,
+) -> dict[str, JsonValue]:
+    label = f"qualification_package.worker_api_evidence[{index}]"
+    evidence = _mapping(value, label)
+    fields = {
+        "access_form",
+        "callable",
+        "claim_scope",
+        "distribution",
+        "does_not_prove",
+        "evidence_id",
+        "module",
+        "probe",
+        "sources",
+        "static_signature",
+        "surface_kind",
+        "symbol",
+    }
+    _keys(evidence, fields, label)
+    probe = _text(evidence["probe"], f"{label}.probe", maximum=64)
+    if probe not in _EXPECTED_API_EVIDENCE:
+        raise ContractError(f"{label}.probe is not expected by the future preflight")
+    expected_distribution, expected_symbol = _EXPECTED_API_EVIDENCE[probe]
+    distribution = _normalize_name(evidence["distribution"], f"{label}.distribution")
+    if distribution not in distributions:
+        raise ContractError(f"{label} references an unsupplied distribution")
+    if distribution != expected_distribution or evidence["symbol"] != expected_symbol:
+        raise ContractError(f"{label} probe-to-API mapping drift")
+    expected_semantics = _EXPECTED_API_SEMANTICS[probe]
+    for field in ("access_form", "module", "static_signature", "surface_kind"):
+        _text(evidence[field], f"{label}.{field}", maximum=256)
+        if evidence[field] != expected_semantics[field]:
+            raise ContractError(f"{label}.{field} semantic claim drift")
+    callable_value = _boolean(evidence["callable"], f"{label}.callable")
+    if callable_value is not expected_semantics["callable"]:
+        raise ContractError(f"{label}.callable semantic claim drift")
+    if evidence["claim_scope"] != "source_surface_availability_only":
+        raise ContractError(f"{label} claim exceeds source-surface evidence")
+    does_not_prove = _array(
+        evidence["does_not_prove"],
+        f"{label}.does_not_prove",
+        maximum=len(_API_EVIDENCE_DOES_NOT_PROVE),
+    )
+    if canonical_json(does_not_prove) != canonical_json(_API_EVIDENCE_DOES_NOT_PROVE):
+        raise ContractError(f"{label}.does_not_prove attempts to expand the evidence claim")
+    source_values = _array(evidence["sources"], f"{label}.sources", maximum=4)
+    sources: dict[tuple[str, str, int, int], str] = {}
+    actual_ranges: list[tuple[str, str, int, int]] = []
+    previous_order: tuple[str, str, int, int] | None = None
+    for source_index, source_value in enumerate(source_values):
+        source, excerpt = _verify_reviewed_api_source(
+            source_value,
+            probe=probe,
+            index=source_index,
+        )
+        key = (
+            cast("str", source["repository_url"]),
+            cast("str", source["path"]),
+            cast("int", source["excerpt_start_line"]),
+            cast("int", source["excerpt_end_line"]),
+        )
+        if previous_order is not None and key <= previous_order:
+            raise ContractError(f"{label}.sources must be unique and canonically sorted")
+        previous_order = key
+        sources[key] = excerpt
+        actual_ranges.append(key)
+    if tuple(actual_ranges) != _REVIEWED_API_SOURCE_RANGES[probe]:
+        raise ContractError(f"{label}.sources path or line-range drift")
+    distribution_source = _mapping(
+        distributions[distribution]["source"],
+        f"{label}.distribution_source",
+    )
+    candidate_source_keys = [
+        key for key in sources if key[0] == distribution_source["repository_url"]
+    ]
+    if probe != "distribution_versions" and not candidate_source_keys:
+        raise ContractError(f"{label} is not bound to the candidate distribution source")
+    if any(
+        _REVIEWED_API_SOURCE_FILES[(repository_url, path)][:2]
+        != (distribution_source["tag"], distribution_source["revision"])
+        for repository_url, path, _start_line, _end_line in candidate_source_keys
+    ):
+        raise ContractError(f"{label} differs from the candidate distribution tag or revision")
+    _verify_reviewed_api_semantics(probe, sources)
+    evidence_identity = _sha256(evidence["evidence_id"], f"{label}.evidence_id")
+    evidence_content = dict(evidence)
+    del evidence_content["evidence_id"]
+    if evidence_identity != canonical_identity(evidence_content):
+        raise ContractError(f"{label} evidence identity mismatch")
+    return dict(evidence)
+
+
+def _verify_api_evidence(
+    value: JsonValue,
+    *,
+    candidate_kind: str,
+    distributions: dict[str, dict[str, JsonValue]],
+    index: int,
+) -> dict[str, JsonValue]:
+    if candidate_kind == "reviewed_candidate":
+        return _verify_reviewed_api_evidence(
+            value,
+            distributions=distributions,
+            index=index,
+        )
+    return _verify_synthetic_api_evidence(
+        value,
+        distributions=distributions,
+        index=index,
+    )
+
+
 def _verify_fixed_claims(value: JsonValue) -> None:
     claims = _mapping(value, "qualification_package.claims")
     _keys(claims, set(_CLAIMS), "qualification_package.claims")
@@ -1136,6 +1798,8 @@ def verify_qualification_package(value: JsonValue) -> dict[str, JsonValue]:
         "target_environment",
         "top_level_requirements",
         "worker_api_evidence",
+        "worker_api_evidence_anchor_id",
+        "worker_api_evidence_spec_id",
     }
     _keys(package, fields, "mlx_runtime_qualification_package")
     candidate_kind = _text(package["candidate_kind"], "qualification_package.candidate_kind")
@@ -1198,13 +1862,32 @@ def verify_qualification_package(value: JsonValue) -> dict[str, JsonValue]:
             maximum=len(_EXPECTED_API_EVIDENCE),
         )
     ):
-        evidence = _verify_api_evidence(item, distributions=distributions, index=index)
+        evidence = _verify_api_evidence(
+            item,
+            candidate_kind=candidate_kind,
+            distributions=distributions,
+            index=index,
+        )
         probe = cast("str", evidence["probe"])
         if probe in api_evidence:
             raise ContractError("worker API evidence probes must be unique")
         api_evidence[probe] = evidence
     if list(api_evidence) != sorted(api_evidence):
         raise ContractError("worker API evidence must be sorted by probe")
+    if package["worker_api_evidence_spec_id"] != worker_api_evidence_spec()["spec_id"]:
+        raise ContractError("worker API evidence specification identity mismatch")
+    api_evidence_anchor = _sha256(
+        package["worker_api_evidence_anchor_id"],
+        "qualification_package.worker_api_evidence_anchor_id",
+    )
+    if api_evidence_anchor != canonical_identity(package["worker_api_evidence"]):
+        raise ContractError("worker API evidence anchor identity mismatch")
+    reviewed_api_anchors = cast(
+        "list[JsonValue]",
+        worker_api_evidence_spec()["reviewed_evidence_anchors"],
+    )
+    if candidate_kind == "reviewed_candidate" and api_evidence_anchor not in reviewed_api_anchors:
+        raise ContractError("worker API evidence anchor was not independently reviewed")
     if canonical_json(package["frozen_schema_1_0_negative"]) != canonical_json(
         _frozen_negative_relationship()
     ):
@@ -1393,6 +2076,8 @@ def _qualification_assessment(package: dict[str, JsonValue]) -> dict[str, JsonVa
             }
             for item in cast("list[JsonValue]", package["worker_api_evidence"])
         ],
+        "worker_api_evidence_anchor_id": package["worker_api_evidence_anchor_id"],
+        "worker_api_evidence_spec_id": package["worker_api_evidence_spec_id"],
     }
     review_anchor_id = canonical_identity(review_anchor_projection)
     reviewed_anchors = cast(
@@ -1557,14 +2242,26 @@ def _qualification_assessment(package: dict[str, JsonValue]) -> dict[str, JsonVa
     api_assessments: list[JsonValue] = []
     for probe, (api_distribution, symbol) in sorted(_EXPECTED_API_EVIDENCE.items()):
         present = probe in evidence_by_probe
-        api_assessments.append(
-            {
-                "distribution": api_distribution,
-                "evidence_present": present,
-                "probe": probe,
-                "symbol": symbol,
-            }
-        )
+        api_assessment: dict[str, JsonValue] = {
+            "distribution": api_distribution,
+            "evidence_present": present,
+            "probe": probe,
+            "symbol": symbol,
+        }
+        if present:
+            evidence = evidence_by_probe[probe]
+            api_assessment.update(
+                {
+                    "access_form": evidence.get("access_form"),
+                    "claim_scope": evidence.get(
+                        "claim_scope",
+                        "synthetic_static_contract_fixture",
+                    ),
+                    "evidence_id": evidence.get("evidence_id"),
+                    "static_signature": evidence.get("static_signature"),
+                }
+            )
+        api_assessments.append(api_assessment)
         if not present:
             blockers.append(f"missing_worker_api_evidence:{probe}:{api_distribution}:{symbol}")
     sorted_blockers = sorted(set(blockers))
@@ -1718,6 +2415,35 @@ def qualification_inspection(value: JsonValue) -> dict[str, JsonValue]:
         "eligibility_scope": assessment["eligibility_scope"],
         "schema_1_0_remains_permanently_disabled": True,
         "next_required_step": assessment["next_required_step"],
+        "worker_api_evidence_anchor_id": package["worker_api_evidence_anchor_id"],
+        "worker_api_evidence_spec_id": package["worker_api_evidence_spec_id"],
+        "static_action_counters": dict(_ZERO_ACTION_COUNTERS),
+    }
+
+
+def worker_api_evidence_inspection(value: JsonValue) -> dict[str, JsonValue]:
+    """Verify and project committed source-only worker API evidence."""
+    package = verify_qualification_package(value)
+    evidence: list[JsonValue] = [
+        {
+            "access_form": item.get("access_form"),
+            "evidence_id": item.get("evidence_id"),
+            "probe": item["probe"],
+            "static_signature": item.get("static_signature"),
+            "symbol": item["symbol"],
+        }
+        for item in (
+            _mapping(entry, "worker API evidence")
+            for entry in cast("list[JsonValue]", package["worker_api_evidence"])
+        )
+    ]
+    return {
+        "candidate_name": package["candidate_name"],
+        "claim_scope": "source_surface_availability_only",
+        "evidence": evidence,
+        "evidence_anchor_id": package["worker_api_evidence_anchor_id"],
+        "evidence_spec_id": package["worker_api_evidence_spec_id"],
+        "package_id": package["package_id"],
         "static_action_counters": dict(_ZERO_ACTION_COUNTERS),
     }
 
@@ -1848,6 +2574,7 @@ def _package(
     distributions: list[JsonValue],
     worker_api_evidence: list[JsonValue],
 ) -> dict[str, JsonValue]:
+    worker_api_evidence_anchor_id = canonical_identity(worker_api_evidence)
     package: dict[str, JsonValue] = {
         "record_type": "mlx_runtime_qualification_package",
         "schema_version": SCHEMA_VERSION,
@@ -1859,6 +2586,8 @@ def _package(
         "top_level_requirements": cast("list[JsonValue]", top_level_requirements),
         "distributions": distributions,
         "worker_api_evidence": worker_api_evidence,
+        "worker_api_evidence_anchor_id": worker_api_evidence_anchor_id,
+        "worker_api_evidence_spec_id": worker_api_evidence_spec()["spec_id"],
         "frozen_schema_1_0_negative": _frozen_negative_relationship(),
         "claims": dict(_CLAIMS),
         "static_action_counters": dict(_ZERO_ACTION_COUNTERS),

@@ -33,6 +33,8 @@ from localinferencelab.mlx_qualification import (
     synthetic_eligible_qualification_package,
     verify_qualification_package,
     verify_qualification_record,
+    worker_api_evidence_inspection,
+    worker_api_evidence_spec,
 )
 from localinferencelab.mlx_runtime_preflight import (
     EXPECTED_OBSERVED_LOCK_ID,
@@ -80,6 +82,61 @@ def _rehash_record(record: dict[str, JsonValue]) -> None:
     content = dict(record)
     content.pop("record_id", None)
     record["record_id"] = canonical_identity(content)
+
+
+def _worker_api_evidence(
+    package: dict[str, JsonValue],
+    probe: str,
+) -> dict[str, JsonValue]:
+    for item in _list(package["worker_api_evidence"]):
+        evidence = _dict(item)
+        if evidence["probe"] == probe:
+            return evidence
+    raise AssertionError(f"missing worker API evidence {probe}")
+
+
+def _worker_api_source(
+    evidence: dict[str, JsonValue],
+    path: str,
+) -> dict[str, JsonValue]:
+    for item in _list(evidence["sources"]):
+        source = _dict(item)
+        if source["path"] == path:
+            return source
+    raise AssertionError(f"missing worker API source {path}")
+
+
+def _rehash_worker_api_source(source: dict[str, JsonValue]) -> None:
+    content = dict(source)
+    content.pop("source_id", None)
+    source["source_id"] = canonical_identity(content)
+
+
+def _set_worker_api_excerpt(source: dict[str, JsonValue], text: str) -> None:
+    data = text.encode()
+    source["excerpt_bytes_base64"] = encode_bytes(data)
+    source["excerpt_sha256"] = digest_bytes(data)
+    _rehash_worker_api_source(source)
+
+
+def _rehash_worker_api_evidence(evidence: dict[str, JsonValue]) -> None:
+    content = dict(evidence)
+    content.pop("evidence_id", None)
+    evidence["evidence_id"] = canonical_identity(content)
+
+
+def _rehash_worker_api_bundle(package: dict[str, JsonValue]) -> None:
+    package["worker_api_evidence_anchor_id"] = canonical_identity(package["worker_api_evidence"])
+    _rehash_package(package)
+
+
+def _committed_candidate_package() -> dict[str, JsonValue]:
+    candidate_path = (
+        Path(qualification_module.__file__).resolve(strict=True).parents[2]
+        / "evidence"
+        / "mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json"
+    )
+    return _dict(load_canonical_json_file(candidate_path, "real MLX candidate evidence"))
 
 
 def _set_metadata_requirements(
@@ -260,8 +317,14 @@ def test_spec_and_decisions_are_static_bounded_and_exact() -> None:
     }
     assert spec["decisions"] == [ELIGIBLE, INELIGIBLE]
     assert spec["reviewed_candidate_anchors"] == [
-        "sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b"
+        "sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c"
     ]
+    api_spec = worker_api_evidence_spec()
+    assert spec["worker_api_evidence_spec_id"] == api_spec["spec_id"]
+    assert api_spec["reviewed_evidence_anchors"] == [
+        "sha256:10ab50cbfb94890bae1dd8c57180645d5781e454b1a8171b158c4d932121d9dd"
+    ]
+    assert api_spec["claim_scope"] == "source_surface_availability_only"
 
     historical = build_qualification_record(historical_incompatible_qualification_package())
     eligible = build_qualification_record(synthetic_eligible_qualification_package())
@@ -286,21 +349,62 @@ def test_spec_and_decisions_are_static_bounded_and_exact() -> None:
 
 
 def test_committed_real_candidate_anchor_is_exact_and_ineligible() -> None:
-    candidate_path = (
-        Path(qualification_module.__file__).resolve(strict=True).parents[2]
-        / "evidence"
-        / "mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json"
-    )
-    package = verify_qualification_package(
-        load_canonical_json_file(candidate_path, "real MLX candidate evidence")
-    )
+    package = verify_qualification_package(_committed_candidate_package())
     assert package["qualification_spec_id"] == (
-        "sha256:8fdc6ac8adf4c077d6c89e419801c99257b7e069c77bc94b3655f16f34f6d94e"
+        "sha256:69bc8ad04e7eda3f091ed16524e97413081dd4fe385c7ca9262a304420534a6a"
     )
     assert package["package_id"] == (
-        "sha256:e1213e86b9a09f10e48d5fd53e2a6b9c71c20a2e42e2107d12e3a2eb33d9f6a3"
+        "sha256:c4bb9a295b15a9085ee3014c006cfc307ab63d650d3b1109d9bc348c915833f8"
+    )
+    assert package["worker_api_evidence_spec_id"] == (
+        "sha256:6c83f627032a2c3db38eee34f804469a42e227a3af0a84ed5c0052a192d29e97"
+    )
+    assert package["worker_api_evidence_anchor_id"] == (
+        "sha256:10ab50cbfb94890bae1dd8c57180645d5781e454b1a8171b158c4d932121d9dd"
     )
     assert package["top_level_requirements"] == ["mlx==0.30.4", "mlx-lm==0.30.6"]
+    evidence_ids = {
+        cast("str", _dict(item)["probe"]): _dict(item)["evidence_id"]
+        for item in _list(package["worker_api_evidence"])
+    }
+    assert evidence_ids == {
+        "default_device": (
+            "sha256:6e04b78a79a8b17716b1efb25618d023049ab5e8f0c7b498df6b5b299749da11"
+        ),
+        "default_stream": (
+            "sha256:1e93a3534716244fe96e0fcfd440a5ae936b6f388e29ed1ff585c89f3dffe7fc"
+        ),
+        "distribution_versions": (
+            "sha256:57688975abdf7569e4fad5c7099d500be897ee76549fc2e8609b86731909097d"
+        ),
+        "import_mlx": ("sha256:1bd33b02a84ff9719003593526bd7ab79a06c15bfba7107e248ae17b1266a823"),
+        "import_mlx_lm": (
+            "sha256:003a14ef061dd62328bc79a5ee2e7a5acf45b112f2f7eb7051fde66418d30757"
+        ),
+        "metal_is_available": (
+            "sha256:d1d9d82a71a480a38128a6dc054eb527cb26853930591c28a809e8d82284bdff"
+        ),
+        "synchronize": ("sha256:52e2da326c71114e5cd83da341e3f88dd6d3ed57704b7cf550eff12ead2b7fb2"),
+    }
+    distribution_versions = _worker_api_evidence(package, "distribution_versions")
+    assert {
+        (
+            _dict(source)["repository_url"],
+            _dict(source)["tag"],
+            _dict(source)["revision"],
+            _dict(source)["path"],
+            _dict(source)["file_sha256"],
+        )
+        for source in _list(distribution_versions["sources"])
+    } == {
+        (
+            "https://github.com/python/cpython",
+            "v3.13.0",
+            "60403a5409ff2c3f3b07dd2ca91a7a3e096839c7",
+            "Lib/importlib/metadata/__init__.py",
+            "sha256:5476c7c22a65f9e8b5a07b799336d87fa70e792758fd95b161b53b530e3b2654",
+        )
+    }
 
     mlx = _distribution(package, "mlx")
     assert _dict(mlx["source"]) == {
@@ -333,10 +437,10 @@ def test_committed_real_candidate_anchor_is_exact_and_ineligible() -> None:
     record = build_qualification_record(package)
     assessment = _dict(record["assessment"])
     assert assessment["review_anchor_id"] == (
-        "sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b"
+        "sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c"
     )
     assert record["record_id"] == (
-        "sha256:3571b4e88a33eb803f8ea7026a497d90c33a778668587eed75ab95dbb156b930"
+        "sha256:60a8e63505dea047f8db765effd80df29372d2d94d27193143610911ecaeace6"
     )
     assert record["decision"] == INELIGIBLE
     assert record["blockers"] == [
@@ -347,14 +451,16 @@ def test_committed_real_candidate_anchor_is_exact_and_ineligible() -> None:
         "dependency_missing:mlx-lm:sentencepiece",
         "dependency_missing:mlx-lm:transformers>=5.0.0",
         'dependency_missing:mlx:mlx-metal==0.30.4; platform_system == "Darwin"',
-        "missing_worker_api_evidence:default_device:mlx:mlx.core.default_device",
-        "missing_worker_api_evidence:default_stream:mlx:mlx.core.default_stream",
-        "missing_worker_api_evidence:distribution_versions:mlx-lm:METADATA.Version",
-        "missing_worker_api_evidence:import_mlx:mlx:mlx.core",
-        "missing_worker_api_evidence:import_mlx_lm:mlx-lm:mlx_lm",
-        "missing_worker_api_evidence:metal_is_available:mlx:mlx.core.metal.is_available",
-        "missing_worker_api_evidence:synchronize:mlx:mlx.core.synchronize",
     ]
+    api_assessments = [_dict(item) for item in _list(assessment["worker_api_assessments"])]
+    assert len(api_assessments) == 7
+    assert all(item["evidence_present"] is True for item in api_assessments)
+    assert all(
+        item["claim_scope"] == "source_surface_availability_only" for item in api_assessments
+    )
+    inspection = worker_api_evidence_inspection(package)
+    assert inspection["evidence_anchor_id"] == package["worker_api_evidence_anchor_id"]
+    assert len(_list(inspection["evidence"])) == 7
     dependency_assessments = [_dict(item) for item in _list(assessment["dependency_assessments"])]
     pair_dependency = next(
         item
@@ -369,6 +475,119 @@ def test_committed_real_candidate_anchor_is_exact_and_ineligible() -> None:
     assert one_component_extra["applicable"] is False
     assert all(_dict(item)["compatible"] is True for item in _list(assessment["wheel_assessments"]))
     assert set(_dict(record["static_action_counters"]).values()) == {0}
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "message"),
+    [
+        ('"default_device"', '"renamed_device"', "must contain"),
+        (
+            "&mx::default_device",
+            "&mx::default_device /* &mx::default_device */",
+            "exactly 1 time",
+        ),
+    ],
+)
+def test_reviewed_worker_api_rejects_missing_renamed_or_duplicate_symbols(
+    old: str,
+    new: str,
+    message: str,
+) -> None:
+    package = _copy(_committed_candidate_package())
+    evidence = _worker_api_evidence(package, "default_device")
+    source = _worker_api_source(evidence, "python/src/device.cpp")
+    text = qualification_module.decode_bytes(cast("str", source["excerpt_bytes_base64"])).decode()
+    _set_worker_api_excerpt(source, text.replace(old, new))
+    _rehash_worker_api_evidence(evidence)
+    _rehash_worker_api_bundle(package)
+    with pytest.raises(ContractError, match=message):
+        verify_qualification_package(package)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("module", "mlx", "semantic claim drift"),
+        ("static_signature", "() -> object", "semantic claim drift"),
+        ("claim_scope", "runtime_import_success", "exceeds source-surface evidence"),
+        ("callable", 1, "must be a boolean"),
+    ],
+)
+def test_reviewed_worker_api_rejects_signature_type_and_overclaim_drift(
+    field: str,
+    value: JsonValue,
+    message: str,
+) -> None:
+    package = _copy(_committed_candidate_package())
+    evidence = _worker_api_evidence(package, "default_device")
+    evidence[field] = value
+    _rehash_worker_api_evidence(evidence)
+    _rehash_worker_api_bundle(package)
+    with pytest.raises(ContractError, match=message):
+        verify_qualification_package(package)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("path", "python/src/renamed-device.cpp", "not an accepted reviewed source file"),
+        ("revision", "0" * 40, "tag, revision, or full-file hash drift"),
+        ("tag", "v0.30.5", "tag, revision, or full-file hash drift"),
+        ("file_sha256", "sha256:" + "0" * 64, "tag, revision, or full-file hash drift"),
+    ],
+)
+def test_reviewed_worker_api_rejects_source_path_revision_and_tag_drift(
+    field: str,
+    value: JsonValue,
+    message: str,
+) -> None:
+    package = _copy(_committed_candidate_package())
+    evidence = _worker_api_evidence(package, "default_device")
+    source = _worker_api_source(evidence, "python/src/device.cpp")
+    source[field] = value
+    _rehash_worker_api_source(source)
+    _rehash_worker_api_evidence(evidence)
+    _rehash_worker_api_bundle(package)
+    with pytest.raises(ContractError, match=message):
+        verify_qualification_package(package)
+
+
+def test_reviewed_worker_api_rejects_dynamic_module_alias() -> None:
+    package = _copy(_committed_candidate_package())
+    evidence = _worker_api_evidence(package, "import_mlx")
+    source = _worker_api_source(evidence, "setup.py")
+    text = qualification_module.decode_bytes(cast("str", source["excerpt_bytes_base64"])).decode()
+    _set_worker_api_excerpt(source, text.replace('"mlx.core"', "module_name", 1))
+    _rehash_worker_api_evidence(evidence)
+    _rehash_worker_api_bundle(package)
+    with pytest.raises(ContractError, match="module name is dynamic or has drifted"):
+        verify_qualification_package(package)
+
+
+def test_reviewed_worker_api_rejects_boolean_as_line_number() -> None:
+    package = _copy(_committed_candidate_package())
+    evidence = _worker_api_evidence(package, "default_device")
+    source = _worker_api_source(evidence, "python/src/device.cpp")
+    source["excerpt_start_line"] = True
+    _rehash_worker_api_source(source)
+    _rehash_worker_api_evidence(evidence)
+    _rehash_worker_api_bundle(package)
+    with pytest.raises(ContractError, match="must be an integer"):
+        verify_qualification_package(package)
+
+
+def test_reviewed_worker_api_rejects_coordinated_excerpt_rehashing() -> None:
+    package = _copy(_committed_candidate_package())
+    evidence = _worker_api_evidence(package, "default_device")
+    source = _worker_api_source(evidence, "python/src/device.cpp")
+    text = qualification_module.decode_bytes(cast("str", source["excerpt_bytes_base64"])).decode()
+    _set_worker_api_excerpt(
+        source, text.replace("Get the default device.", "Get the default device. ")
+    )
+    _rehash_worker_api_evidence(evidence)
+    _rehash_worker_api_bundle(package)
+    with pytest.raises(ContractError, match="was not independently reviewed"):
+        verify_qualification_package(package)
 
 
 def test_qualification_module_has_no_runtime_action_surface() -> None:
@@ -459,6 +678,19 @@ def test_cli_create_verify_inspect_spec_and_replay_are_static(
     assert run(["mlx", "runtime-qualification-spec"]) == 0
     emitted_spec = _dict(load_json_bytes(capfd.readouterr().out.encode("utf-8")))
     assert emitted_spec == qualification_spec()
+    assert run(["mlx", "runtime-worker-api-evidence-spec"]) == 0
+    emitted_api_spec = _dict(load_json_bytes(capfd.readouterr().out.encode("utf-8")))
+    assert emitted_api_spec == worker_api_evidence_spec()
+    real_candidate = (
+        Path(qualification_module.__file__).resolve(strict=True).parents[2]
+        / "evidence"
+        / "mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json"
+    )
+    assert run(["mlx", "runtime-worker-api-evidence-verify", str(real_candidate)]) == 0
+    verified_api = _dict(load_json_bytes(capfd.readouterr().out.encode("utf-8").strip()))
+    assert verified_api["status"] == "valid"
+    assert verified_api["claim_scope"] == "source_surface_availability_only"
+    assert len(_list(verified_api["evidence"])) == 7
 
     fixture_root = tmp_path / "fixture"
     fixture_root.mkdir()
@@ -561,17 +793,16 @@ def test_duplicate_metadata_and_extras_ambiguity_fail_closed() -> None:
 
 
 def test_reviewed_metadata_accepts_realistic_headers_body_and_unsorted_requirements() -> None:
-    package = _copy(synthetic_eligible_qualification_package())
-    _as_reviewed_candidate(package)
+    package = _copy(_committed_candidate_package())
     data = (
         b"Metadata-Version: 2.3\r\n"
         b"Name: mlx\r\n"
-        b"Version: 1.0.0\r\n"
+        b"Version: 0.30.4\r\n"
         b"Summary: Realistic static wheel metadata\r\n"
-        b"Requires-Python: >=3.11\r\n"
-        b"Project-URL: Source, https://github.com/example/mlx\r\n"
+        b"Requires-Python: >=3.10\r\n"
+        b"Project-URL: Source, https://github.com/ml-explore/mlx\r\n"
         b"Requires-Dist: typing-extensions>=4.0\r\n"
-        b"Requires-Dist: mlx-metal==1.0.0\r\n"
+        b"Requires-Dist: mlx-metal==0.30.4\r\n"
         b"Description-Content-Type: text/markdown\r\n"
         b"\r\n"
         b"# MLX\r\n\r\nA realistic description body remains byte-bound.\r\n"
@@ -580,8 +811,8 @@ def test_reviewed_metadata_accepts_realistic_headers_body_and_unsorted_requireme
         package,
         "mlx",
         data=data,
-        requirements=["typing-extensions>=4.0", "mlx-metal==1.0.0"],
-        requires_python=">=3.11",
+        requirements=["typing-extensions>=4.0", "mlx-metal==0.30.4"],
+        requires_python=">=3.10",
     )
     verified = verify_qualification_package(package)
     assert verified["package_id"] == package["package_id"]
@@ -593,7 +824,7 @@ def test_reviewed_metadata_accepts_realistic_headers_body_and_unsorted_requireme
         for item in _list(assessment["dependency_assessments"])
         if _dict(item)["requesting_distribution"] == "mlx"
     ]
-    assert mlx_requirements == ["mlx-metal==1.0.0", "typing-extensions>=4.0"]
+    assert mlx_requirements == ["mlx-metal==0.30.4", "typing-extensions>=4.0"]
     assert (
         next(
             _dict(item)
@@ -922,12 +1153,8 @@ def test_arbitrary_equality_is_exact_while_standard_equality_is_normalized() -> 
 def test_reviewed_and_historical_candidates_cannot_self_attest_eligibility() -> None:
     reviewed = _copy(synthetic_eligible_qualification_package())
     _as_reviewed_candidate(reviewed)
-    reviewed_record = build_qualification_record(reviewed)
-    assert reviewed_record["decision"] == INELIGIBLE
-    assert any(
-        cast("str", blocker).startswith("reviewed_candidate_not_committed_in_spec:")
-        for blocker in _list(reviewed_record["blockers"])
-    )
+    with pytest.raises(ContractError, match="missing keys"):
+        build_qualification_record(reviewed)
 
     historical = _copy(historical_incompatible_qualification_package())
     assert "historical_negative_projection_is_never_eligible" in _list(

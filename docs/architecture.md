@@ -21,7 +21,7 @@ Every trust transition is represented by immutable canonical data.
 | `mlx_inert_worker.py` | Standalone stdlib refusal-only FD-3 worker | Reads/writes the inherited socket only; no model/backend/network/generated-result surface |
 | `mlx_runtime_preflight.py` | Separate exact-runtime lock/receipt validation, schema-1.0 execution gate, synthetic one-shot runtime-preflight custody, strict result/import-closure validation, closed publication, and offline replay | Public `runtime-preflight` validates then rejects the dependency-incompatible observed receipt before physical action; only exact internal synthetic fixtures may start one child/socketpair |
 | `mlx_runtime_preflight_worker.py` | Standalone sealed FD-3 runtime-only synthetic worker | After synthetic authorization only, imports bound fake `mlx.core` and `mlx_lm`, queries model-free backend/device/stream facts, and synchronizes; no model action or network/command surface |
-| `mlx_qualification.py` | Canonical static candidate package, dependency/marker/wheel/API-evidence assessment, sole deterministic decision, and two-outcome closed fixture replay | Explicit record/fixture writes only; no install, network, process, socket, authorization, runtime import, backend, model, or spend action |
+| `mlx_qualification.py` | Canonical static candidate package, dependency/marker/wheel assessment, immutable source-only worker-API evidence verification, sole deterministic decision, and two-outcome closed fixture replay | Explicit record/fixture writes only; no install, network, process, socket, authorization, runtime import, backend, model, or spend action |
 | `mlx_preflight_contract.py` | Prospective schema-1.1 model-free protocol/spec, prerequisite/refusal record, bounded inspection, and deterministic closed-fixture replay | Explicit record/fixture writes only; no authorization creation/consumption, install, import, worker, process, socket, backend/device/Metal, synchronization, model, or spend action |
 | `mlx_determinism_canary.py` | Prospective operation matrix, exact embedded byte vectors, IEEE comparison metrics, strict synthetic result schema, synthetic atlas, and closed replay | Explicit fixture-bundle writes only; no MLX import, process, authorization, backend/device/Metal query, hardware synchronization, MLX tensor/model action, timing, network, cloud, or spend |
 | `ollama.py` | Prospective package, direct numeric-loopback transport, one-shot authorization, bounded execution, terminal custody/replay | Explicit output-root writes; loopback calls only after authorization |
@@ -139,6 +139,17 @@ size/digest, embedded METADATA, dist-info identity, and WHEEL tag match the decl
 PyPI and GitHub domains are allowlisted for reviewed candidates; a reserved
 `.invalid` domain is accepted only for explicitly synthetic fixtures.
 
+Reviewed worker evidence has a separate canonical specification and independently reviewed anchor.
+Each surface binds its authoritative repository, tag, commit, path, full-file SHA-256, exact
+line-bounded excerpt bytes and digest, declaration identity, access form, and source-supported
+static signature. Static AST/text reconstruction rejects missing or duplicate declarations,
+dynamic module/package generation, ambiguous aliases, malformed boolean/integer fields, path or
+revision substitution, signature drift, overclaims, self-attested anchors, and coordinated
+excerpt rehashing. CPython `v3.13.0` commit
+`60403a5409ff2c3f3b07dd2ca91a7a3e096839c7` separately anchors
+`importlib.metadata.version(distribution_name) -> str` and its `METADATA["Version"]` access;
+that evidence is not attributed to MLX source.
+
 Assessment mechanically evaluates marker applicability and the supported release-version
 specifiers, evaluates `Requires-Python` against the exact target `python_full_version`, records
 selected dependency versions and exact explanations, computes wheel
@@ -151,19 +162,25 @@ without fallback.
 
 Candidate-supplied hashes are integrity bindings, not independent review. A real
 `reviewed_candidate` is therefore ineligible unless its derived source/wheel/METADATA evidence
-anchor is also present in the committed qualification specification. The first real anchor is
-`sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b`,
+anchor is also present in the committed qualification specification. The active real anchor is
+`sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`,
 derived from the canonical evidence package for MLX `0.30.4` and MLX-LM `0.30.6` targeting
 CPython 3.13.0 on macOS 15.0 arm64. The package embeds both exact PyPI wheel byte streams; the
 validator rechecks their sizes, hashes, dist-info identities, raw METADATA equality, and WHEEL
-tags offline. It binds source tags `v0.30.4` and `v0.30.6` to their exact Git revisions.
+tags offline. It binds source tags `v0.30.4` and `v0.30.6` to their exact Git revisions. Its
+worker-evidence specification and source-evidence anchor are
+`sha256:6c83f627032a2c3db38eee34f804469a42e227a3af0a84ed5c0052a192d29e97`
+and `sha256:10ab50cbfb94890bae1dd8c57180645d5781e454b1a8171b158c4d932121d9dd`.
 
 This is an evidence anchor, not an accepted qualification record. Its derived result is
-`ineligible` because the applicable transitive distribution closure and all seven worker-API
-evidence items are intentionally absent. The satisfied MLX-LM `mlx>=0.30.4` Darwin edge establishes
-only pair-level dependency coherence. No result record is committed in the same change. Synthetic
-fixtures may continue to exercise the positive contract; historical projections are categorically
-ineligible and may not relabel partial METADATA as complete.
+`ineligible` because the applicable `mlx-metal`, `numpy`, `transformers`, `sentencepiece`,
+`protobuf`, `pyyaml`, and `jinja2` distributions remain absent. All seven source/API evidence
+blockers are closed, but only at source-surface scope. The `mlx.core` and `mlx_lm` declarations do
+not prove import or native-loader success; callable declarations do not prove runtime
+executability, device or Metal availability, or synchronization completion. No result record is
+committed in the same change. Synthetic fixtures may continue to exercise the positive contract;
+historical projections are categorically ineligible and may not relabel partial METADATA as
+complete.
 
 Every package binds the frozen schema-1.0 negative projection, runtime lock, terminal failure,
 authorization, consumption, historical protocol, and historical worker IDs with

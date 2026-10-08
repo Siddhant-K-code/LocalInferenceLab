@@ -46,6 +46,11 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > authorization or executability claim: schema 1.0 stays permanently disabled, and schema 1.1
 > still requires distinct protocol/spec/worker review plus future authoritative one-shot
 > authorization custody.
+> The reviewed MLX `0.30.4` / MLX-LM `0.30.6` candidate now binds source-only evidence for all
+> seven future worker surfaces. Exact immutable upstream file hashes, bounded source excerpts,
+> declaration identities, access forms, and static signatures replay offline. Those facts remove
+> only the source/API-evidence blockers; they do not prove installation, import, native loading,
+> runtime execution, device or Metal availability, or synchronization success.
 > The prospective schema-1.1 contract now defines those prerequisite and result shapes without
 > making execution reachable. It accepts only a committed eligible `reviewed_candidate`
 > qualification record from the separate schema-1.0 anchor set. Authoritative authorization
@@ -363,7 +368,11 @@ whose embedded METADATA and WHEEL tag are verified; exact raw METADATA bytes, in
 Core Metadata headers and description bodies; every supplied `Requires-Dist`, the exact
 `Requires-Python` constraint, marker and extras policy; exact `==` pins for the `mlx` and `mlx-lm`
 roots; the supplied top-level/transitive distribution graph; and source-byte
-evidence for each future preflight API/probe. The gate derives wheel compatibility, marker
+evidence for each future preflight API/probe. Reviewed evidence pins repository, tag, commit,
+path, full-file hash, bounded excerpt bytes, declaration identity, access form, and static
+signature. `distribution_versions` is independently bound to CPython 3.13.0
+`importlib.metadata.version`; the import probes prove only the intended `mlx.core` and `mlx_lm`
+module declarations. The gate derives wheel compatibility, marker
 applicability, target-Python compatibility, selected dependency versions, exact satisfaction
 explanations, reachability, and sorted blockers. It intentionally claims semantic closure only over supplied distribution
 metadata, never the Python standard library or native loader. The fixture proves both outcomes:
@@ -373,13 +382,23 @@ real coherent pair. The repository now contains one independently reviewable rea
 `evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json`, for CPython 3.13.0 on
 macOS 15.0 arm64. It embeds the exact reviewed PyPI wheels and raw METADATA for MLX `0.30.4` and
 MLX-LM `0.30.6`, binds their immutable upstream tags/revisions, and commits review anchor
-`sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b`.
-The MLX-LM-to-MLX dependency is satisfied, but the candidate remains deterministically
-`ineligible`: its seven applicable transitive distributions and seven worker-API evidence items
-are not supplied. No qualification record is committed with the anchor. Candidate-controlled
-digests therefore cannot create an accepted record in this change. Every future record still binds
+`sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`.
+Its worker-evidence spec and independently reviewed source-evidence anchor are
+`sha256:6c83f627032a2c3db38eee34f804469a42e227a3af0a84ed5c0052a192d29e97`
+and `sha256:10ab50cbfb94890bae1dd8c57180645d5781e454b1a8171b158c4d932121d9dd`.
+The MLX-LM-to-MLX dependency and all seven source/API surfaces are satisfied, but the candidate
+remains deterministically `ineligible`: the applicable `mlx-metal`, `numpy`, `transformers`,
+`sentencepiece`, `protobuf`, `pyyaml`, and `jinja2` distributions are not supplied. No
+qualification record is committed with the anchor. Candidate-controlled digests therefore cannot
+create an accepted record in this change. Every future record still binds
 the unchanged schema-1.0 negative projection, lock, terminal failure, authorization, consumption,
 historical protocol, and historical worker IDs.
+
+`mlx runtime-worker-api-evidence-spec` emits the source-only contract, and
+`mlx runtime-worker-api-evidence-verify` strictly replays
+`evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json` offline.
+It rejects source/tag/revision/path/file-hash/signature drift, malformed types, duplicate or
+dynamic declarations, overclaims, self-attested evidence, and coordinated excerpt rehashing.
 
 The schema-1.1 runtime-preflight commands are also process-free. The spec and protocol are
 candidate-agnostic: exact runtime pins and bytes must come from a separately reviewed,

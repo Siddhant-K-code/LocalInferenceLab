@@ -349,6 +349,14 @@ the supplied top-level/transitive distribution graph; and immutable source-byte 
 `import_mlx`, `import_mlx_lm`, `distribution_versions`, `default_device`,
 `metal_is_available`, `default_stream`, and `synchronize`.
 
+Reviewed worker evidence pins authoritative repository, tag, commit, path, full-file SHA-256,
+minimal line-bounded excerpt bytes, declaration identity, callable/access form, and
+source-supported static signature. CPython `v3.13.0` commit
+`60403a5409ff2c3f3b07dd2ca91a7a3e096839c7` separately binds the exact
+`importlib.metadata.version(distribution_name) -> str` mechanism and its
+`METADATA["Version"]` property access. The MLX and MLX-LM import evidence proves only intended
+module/package declarations (`mlx.core` and `mlx_lm`), not import success.
+
 The derived record includes marker applicability, `Requires-Python` compatibility, selected
 dependency versions, exact satisfaction or failure explanations, wheel compatibility, graph
 reachability, API-evidence presence, and sorted blockers. It claims closure only over supplied
@@ -367,13 +375,21 @@ Reviewed candidates without an independently committed derived evidence anchor r
 The committed real-candidate evidence package
 `evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json` supplies one such immutable
 anchor for CPython 3.13.0 on macOS 15.0 arm64:
-`sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b`.
+`sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`.
 It embeds only the exact MLX `0.30.4` and MLX-LM `0.30.6` wheels and their raw Core Metadata.
 Those 952,038 wheel bytes are small enough to preserve the existing exact-byte verification
 contract without a network replay. The 38,255,657-byte `mlx-metal` wheel and the other transitive
 artifacts are not committed: they are outside this pair anchor, and substituting hash-only evidence
 would not prove raw METADATA equality offline. Their absence remains explicit in the deterministic
-`ineligible` blockers, together with the absent worker-API evidence.
+`ineligible` blockers.
+
+The source-evidence spec and independently reviewed anchor are
+`sha256:6c83f627032a2c3db38eee34f804469a42e227a3af0a84ed5c0052a192d29e97`
+and `sha256:10ab50cbfb94890bae1dd8c57180645d5781e454b1a8171b158c4d932121d9dd`.
+All seven source/API blockers are removed. The remaining blockers are exactly the unsupplied
+`mlx-metal`, `numpy`, `transformers`, `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2`
+distributions. Source evidence does not prove runtime executability, native loading, backend or
+device availability, Metal availability, or synchronization success.
 
 The pair edge `mlx>=0.30.4; platform_system == "Darwin"` selects and accepts `mlx==0.30.4`.
 That fact does not establish complete dependency closure. No accepted or ineligible qualification
