@@ -276,7 +276,7 @@ def test_synthetic_positive_and_historical_records_cannot_satisfy_prerequisites(
         historical_inspection["blockers"]
     )
     assert "qualification_decision_is_not_eligible" in _list(historical_inspection["blockers"])
-    committed_anchor = "sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b"
+    committed_anchor = "sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c"
     assert qualification_spec()["reviewed_candidate_anchors"] == [committed_anchor]
 
     reviewed = _qualification("reviewed")

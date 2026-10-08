@@ -298,7 +298,10 @@ distribution versions; immutable source revisions/tags; wheel filenames, hashes,
 URLs, tags, and exact supplied wheel bytes; exact raw METADATA bytes; all supplied requirements and
 markers; one `Requires-Python` specifier set for complete metadata; exact `==` pins for the
 top-level `mlx` and `mlx-lm` selections; the forbid-all-extras policy; and immutable supplied source
-bytes for the seven future preflight probes. Marker and `Requires-Python` evaluation use only the
+evidence for the seven future preflight probes. Reviewed source records bind exact authoritative
+repository/tag/commit/path/full-file hash facts plus minimal line-bounded excerpt bytes, excerpt
+hashes, declaration identities, access forms, and static signatures. Marker and
+`Requires-Python` evaluation use only the
 package's explicit environment. Dependency explanations name the selected version or exact absence.
 Closure is limited to supplied distribution metadata and never claims
 stdlib/native-loader completeness.
@@ -308,17 +311,31 @@ bounded dist-info METADATA and WHEEL control record, and bind the same metadata 
 tag. Reviewed METADATA is parsed as bounded Core Metadata without canonicalizing away unrelated
 headers or the description body; the whole payload must be valid UTF-8, identity and
 `Requires-Python` are singleton fields, dependency values may not be folded or semantically
-duplicated, and all raw bytes remain digest-bound. Probe evidence
-tokens are fixed by the specification rather than caller-selected. A real
+duplicated, and all raw bytes remain digest-bound. Reviewed probe evidence is reconstructed with
+bounded AST/text checks; missing or duplicate definitions, dynamic generation or aliases,
+signature or provenance drift, malformed boolean/integer fields, overclaims, self-attested
+anchors, and coordinated rehashing are rejected. CPython `v3.13.0` commit
+`60403a5409ff2c3f3b07dd2ca91a7a3e096839c7` separately binds
+`importlib.metadata.version` and its `METADATA["Version"]` access. A real
 reviewed candidate additionally needs an independently committed evidence anchor in the
 qualification specification. Anchor
-`sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b`
+`sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`
 binds the committed MLX `0.30.4` / MLX-LM `0.30.6` evidence package for CPython 3.13.0,
 `cp313`, macOS 15.0, and arm64. Both exact wheel byte streams and exact raw METADATA are embedded,
-so verification and reconstruction are offline. The pair dependency is satisfied, while absent
-transitive distributions and worker-API evidence keep the result deterministically ineligible.
+so verification and reconstruction are offline. The worker-evidence spec and source anchor are
+`sha256:6c83f627032a2c3db38eee34f804469a42e227a3af0a84ed5c0052a192d29e97`
+and `sha256:10ab50cbfb94890bae1dd8c57180645d5781e454b1a8171b158c4d932121d9dd`.
+The pair dependency and seven source/API surfaces are satisfied, while the absent `mlx-metal`,
+`numpy`, `transformers`, `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2` distributions keep
+the result deterministically ineligible.
 No qualification record is committed in the anchor change. Historical projections are always
 ineligible.
+
+The evidence supports only source-surface availability. The import records prove intended module
+names and declarations, not import or native-loader success. Callable declarations do not prove
+runtime executability, backend or device availability, a positive Metal result, or completed
+synchronization. `runtime-worker-api-evidence-verify` replays the committed evidence offline and
+performs none of those physical actions.
 
 The record reconstructs rather than trusts its decision and sorted blockers. Coordinated package
 and record rehashing cannot preserve a stale assessment. All install/network/process/socket,

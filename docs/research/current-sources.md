@@ -1,6 +1,7 @@
 # Current backend source research
 
-Retrieved 2026-10-04. Normative sources are official documentation and pinned upstream source.
+Retrieved 2026-10-04 and updated 2026-10-08. Normative sources are official documentation and
+pinned upstream source.
 Issue and pull request links are non-normative evidence of behavior or known limitations. They do
 not define a guarantee.
 
@@ -8,6 +9,9 @@ not define a guarantee.
 
 | Project | Revision |
 |---|---|
+| MLX-LM candidate | [`v0.30.6` / `f18526f8d66f74728072e96d55acb6c451e92e88`](https://github.com/ml-explore/mlx-lm/tree/f18526f8d66f74728072e96d55acb6c451e92e88) |
+| MLX candidate | [`v0.30.4` / `2f324cc3b200700b422db4811ae3ff8bd5bf48b4`](https://github.com/ml-explore/mlx/tree/2f324cc3b200700b422db4811ae3ff8bd5bf48b4) |
+| CPython metadata mechanism | [`v3.13.0` / `60403a5409ff2c3f3b07dd2ca91a7a3e096839c7`](https://github.com/python/cpython/tree/60403a5409ff2c3f3b07dd2ca91a7a3e096839c7) |
 | MLX-LM | [`5cfec4cb39deba54210b3ff4d86f2337c7bc10b5`](https://github.com/ml-explore/mlx-lm/tree/5cfec4cb39deba54210b3ff4d86f2337c7bc10b5) |
 | MLX | [`0e3ff3643b1c3719f78814b98e0d222afbad867c`](https://github.com/ml-explore/mlx/tree/0e3ff3643b1c3719f78814b98e0d222afbad867c) |
 | llama.cpp | [`0504396140d1c882f5f6ee34466a42db7ae90114`](https://github.com/ggml-org/llama.cpp/tree/0504396140d1c882f5f6ee34466a42db7ae90114) |
@@ -36,20 +40,51 @@ Darwin requirement `mlx>=0.30.4` selects and accepts the pinned MLX `0.30.4`, co
 historical `0.29.3` / `0.30.6` incompatibility.
 
 The package ID is
-`sha256:e1213e86b9a09f10e48d5fd53e2a6b9c71c20a2e42e2107d12e3a2eb33d9f6a3`;
+`sha256:c4bb9a295b15a9085ee3014c006cfc307ab63d650d3b1109d9bc348c915833f8`;
 its independently committed review anchor is
-`sha256:9b7732e27af36ae36ba849a0321c66ba4515f852f3c8e91cbc4abb90583ca49b`.
+`sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`.
 The reconstructed, deliberately uncommitted qualification record is
-`sha256:3571b4e88a33eb803f8ea7026a497d90c33a778668587eed75ab95dbb156b930`
+`sha256:60a8e63505dea047f8db765effd80df29372d2d94d27193143610911ecaeace6`
 and remains `ineligible`. Exact blockers are the absent applicable distributions `mlx-metal`,
-`numpy`, `transformers`, `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2`, plus absent source
-evidence for `import_mlx`, `import_mlx_lm`, `distribution_versions`, `default_device`,
-`metal_is_available`, `default_stream`, and `synchronize`.
+`numpy`, `transformers`, `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2`.
 
 Only the two top-level wheels are embedded (952,038 bytes total). The 38,255,657-byte
 `mlx_metal-0.30.4-py3-none-macosx_15_0_arm64.whl` and unrelated transitive wheels are not committed.
 Hash-only substitutes could not preserve the existing offline wheel-to-METADATA equality proof,
 so their absence is represented by exact fail-closed blockers rather than by overclaimed evidence.
+
+## Candidate worker API source evidence
+
+Retrieved 2026-10-08 using only unauthenticated immutable GitHub tag/commit archives. No package
+from the candidate closure was installed, no candidate module was imported, and no source was
+executed or compiled. The worker-evidence spec is
+`sha256:6c83f627032a2c3db38eee34f804469a42e227a3af0a84ed5c0052a192d29e97`;
+the independently reviewed seven-record anchor is
+`sha256:10ab50cbfb94890bae1dd8c57180645d5781e454b1a8171b158c4d932121d9dd`.
+
+| Project/file | Full-file SHA-256 | Bound surfaces |
+|---|---|---|
+| MLX `setup.py` | `ef7f790742fbf7ec8f7760721c7684048d595f29503936021c7da3740f24c1ba` | `import_mlx` extension name `mlx.core` |
+| MLX `python/src/mlx.cpp` | `e339e58d45f679b662bb06a96b42b015c59f1590a2af9b8fb12caac85f15097b` | `NB_MODULE(core, m)` and static initializer wiring |
+| MLX `python/src/device.cpp` | `aea762cc90ced0d4d3274c2f3cdd48435de8219ff2b4d5e5b782982b05c362b9` | `default_device` binding |
+| MLX `mlx/device.h` | `d00a0b67d10728666acf3b82838530471b29151a50212aec0cf960ea3d8fd814` | `const Device& default_device()` |
+| MLX `python/src/stream.cpp` | `4d80cae66d2aa75c076ed9555e1439a41dbc2e4578d8faadefa957d567a97e63` | `default_stream(device)` and optional-stream `synchronize` bindings |
+| MLX `mlx/stream.h` | `a9281c4a7301a3d1af7a817a19e95f5c1c22ce7f7f5a9e25e5113d314ed0b824` | `Stream default_stream(Device)`, `void synchronize()` overloads |
+| MLX `python/src/metal.cpp` | `4e077805ef4db09e62479e3ff1d90b92c89caaca5d1af6245215169a4df4dce9` | `metal.is_available` binding |
+| MLX `mlx/backend/metal/metal.h` | `d945d18236b8af528bc74161f72c067cc115d49026bd4ea71b84857c95c18870` | `bool is_available()` |
+| MLX-LM `setup.py` | `68025286dfcf40efc18aa0ca42427d1d697ba631ca3fbe7e54e0f4bbe74a36e3` | literal `mlx_lm` package declaration |
+| MLX-LM `mlx_lm/__init__.py` | `f9ffa88772d26e537a98aa39ab16488a7a0d13cc1fac5d665376132c94b49608` | intended package initializer |
+| CPython `Lib/importlib/metadata/__init__.py` | `5476c7c22a65f9e8b5a07b799336d87fa70e792758fd95b161b53b530e3b2654` | `version(distribution_name: str) -> str` and `METADATA["Version"]` |
+
+The committed evidence retains only minimal bounded excerpts, not whole upstream files or
+repositories. Static AST/text replay rejects missing or renamed symbols, duplicate definitions,
+dynamic module/package generation, wrong source/revision/path/tag/hash, signature drift,
+boolean/integer confusion, overclaims, self-attestation, and coordinated excerpt rehashing.
+
+All seven source/API-evidence blockers are removed. This establishes source-surface availability
+only. It does not establish package installation, `mlx.core` or `mlx_lm` import success, native
+loader success, runtime executability, backend/device availability, a positive Metal result,
+synchronization completion, tensor/model behavior, or any authorization.
 
 ## MLX/MLX-LM normative sources
 

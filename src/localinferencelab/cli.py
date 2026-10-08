@@ -54,6 +54,8 @@ from localinferencelab.mlx_qualification import (
     qualification_inspection,
     qualification_spec,
     replay_qualification_fixture,
+    worker_api_evidence_inspection,
+    worker_api_evidence_spec,
     write_qualification_record,
 )
 from localinferencelab.mlx_runner import (
@@ -284,6 +286,15 @@ def _parser() -> argparse.ArgumentParser:
         "runtime-qualification-spec",
         help="emit the process-free schema-1.0 static qualification specification",
     )
+    mlx_commands.add_parser(
+        "runtime-worker-api-evidence-spec",
+        help="emit the immutable source-only future worker API evidence specification",
+    )
+    runtime_worker_api_evidence_verify = mlx_commands.add_parser(
+        "runtime-worker-api-evidence-verify",
+        help="verify committed worker API source evidence without imports or runtime actions",
+    )
+    runtime_worker_api_evidence_verify.add_argument("candidate", type=Path)
     runtime_qualification_create = mlx_commands.add_parser(
         "runtime-qualification-create",
         help="derive one static decision record from explicit candidate bytes and metadata",
@@ -724,6 +735,14 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
             return 0
         if args.mlx_command == "runtime-qualification-spec":
             _emit_document(qualification_spec())
+            return 0
+        if args.mlx_command == "runtime-worker-api-evidence-spec":
+            _emit_document(worker_api_evidence_spec())
+            return 0
+        if args.mlx_command == "runtime-worker-api-evidence-verify":
+            output = worker_api_evidence_inspection(load_qualification_package(args.candidate))
+            output["status"] = "valid"
+            _emit(output)
             return 0
         if args.mlx_command == "runtime-qualification-create":
             qualification_record = build_qualification_record(
