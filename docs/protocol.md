@@ -369,6 +369,40 @@ inference/generation/benchmark/cloud/spend counters are exactly zero and reject 
 1.0 remains permanently disabled; a distinct schema-1.1 protocol/spec/worker review and fresh
 explicit authorization are mandatory before any physical action.
 
+### Scalable supplied-wheel closure custody
+
+Large or numerous third-party wheels are not embedded in Git. The additive
+`mlx_wheel_evidence_pack_manifest` binds their official PyPI identities, exact raw dist-info
+METADATA/WHEEL bytes, applicable dependency graph for an externally acquired exact selection, and
+source bindings. It contains no release inventory and does not prove global PyPI optimality,
+non-yanked status, or highest wheel ranking. The canonical real manifest is
+`evidence/mlx-wheel-closure-mlx-0.30.4-mlx-lm-0.30.6-macos-arm64-py313-v1.json`,
+with manifest ID
+`sha256:0c28cc713fe9baabdda8c075f148f23b4d2ebd4525160212d0f538cc907db6b4`
+and pack-spec ID
+`sha256:969783ae80daffae5451d0009e77d3618ba92756d8adbfdf0cf6aa9c13453761`.
+The separate manifest-anchor specification is
+`sha256:099dbdf8190330224262ccd352066d49341c30b9a18d1dc0936a7f44c2161386`
+and contains no reviewed manifest IDs in this change.
+
+The generic verifier requires that manifest ID as a caller-supplied content address and an exact local
+directory containing all 34 named wheels and nothing else. It uses bounded no-follow descriptor
+reads and inert ZIP inspection only. It rejects substituted bytes, links, unsafe basenames,
+missing/extras, duplicate/case-colliding or overlapping ZIP entries, traversal, multiple dist-info
+records, malformed UTF-8 metadata, raw METADATA/WHEEL drift, tag drift, marker-dependent omissions,
+recursive gaps, and coordinated rehashing against the trusted ID. No network is available during
+verification or record reconstruction.
+
+A successful pack receipt proves only that those exact supplied bytes were present for that
+verification. A committed manifest does not. A later record may remove distribution blockers only
+by reconstructing with the pack present. Qualification separately requires membership in a
+committed reviewed-manifest allowlist. This PR introduces the manifest but leaves that allowlist
+empty, so
+`wheel_evidence_manifest_anchor_not_independently_reviewed:sha256:0c28cc713fe9baabdda8c075f148f23b4d2ebd4525160212d0f538cc907db6b4`
+keeps the real reconstruction ineligible alongside the candidate's existing unreviewed-anchor
+blocker even after the distribution and worker-API blockers close. No real qualification record is
+committed here, and no runtime action is authorized.
+
 ## Prospective schema-1.1 model-free runtime-preflight protocol
 
 Schema 1.1 is a contract/refusal layer only. It defines no worker or execution command. Its current

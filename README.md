@@ -51,6 +51,15 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > declaration identities, access forms, and static signatures replay offline. Those facts remove
 > only the source/API-evidence blockers; they do not prove installation, import, native loading,
 > runtime execution, device or Metal availability, or synchronization success.
+> Additive supplied-wheel custody now scales this gate beyond embedded wheel bytes. The committed
+> closure manifest binds 34 official PyPI wheels for the real candidate (70,700,189 bytes total)
+> without adding wheel files or redistributing them; the existing candidate still embeds its two
+> top-level wheel byte strings. Generic verification requires a caller-supplied content address
+> and the exact local pack: the no-follow verifier rejects missing, extra, linked, substituted,
+> ambiguous, or metadata-drifting members. Qualification additionally requires the manifest ID in
+> a separately reviewed committed allowlist. This PR leaves that allowlist empty, so its new
+> manifest cannot make the real candidate eligible. A committed manifest or record alone never
+> proves that the wheel bytes were locally present.
 > The prospective schema-1.1 contract now defines those prerequisite and result shapes without
 > making execution reachable. It accepts only a committed eligible `reviewed_candidate`
 > qualification record from the separate schema-1.0 anchor set. Authoritative authorization
@@ -534,6 +543,16 @@ unsupported provenance domains, stale decisions after
 coordinated rehashing, and any attempt to make qualification create or consume authorization or
 perform execution.
 
+Supplied-wheel custody separately verifies an exact directory against a content-addressed
+manifest. It bounds member count and total, per-wheel, ZIP-entry, and expanded-byte sizes; opens
+the directory and members without following links; requires single-link regular basenames; rejects
+missing or unexpected members, case-colliding or duplicate ZIP paths, overlapping local ZIP
+entries, traversal, links/special entries, and alternate dist-info metadata; and rechecks exact
+size, SHA-256, raw METADATA, raw WHEEL, dist-info identity, filename tags, target compatibility,
+markers, recursive dependencies, and graph reachability. Verification is offline. The caller must
+provide the expected manifest ID independently, so coordinated manifest rehashing cannot silently
+replace the reviewed closure.
+
 See [Architecture](docs/architecture.md), [Protocol](docs/protocol.md), and
 [Current source research](docs/research/current-sources.md). The exact Ollama boundary is specified
 in [Ollama runner contract](docs/ollama-runner-contract.md); prospective preparation is described in
@@ -556,9 +575,12 @@ The project does not claim that:
 
 1. Use the static MLX runtime qualification gate to review an exact proposed runtime pair and its
    supplied metadata/source evidence without installing or importing it.
-2. Complete the missing transitive-distribution and worker-API evidence for the committed
-   real-candidate anchor until static qualification is eligible; the synthetic positive fixture
-   and historical records remain categorically insufficient.
+2. Review the supplied exact-wheel closure manifest and independently supply/verify its 34-wheel
+   pack. Together with the independently reviewed worker-API source evidence, that closes the
+   distribution and API blockers only while those exact bytes are present. This PR retains an
+   explicit unreviewed-manifest-anchor blocker; only a later independent PR may allowlist the
+   unchanged manifest ID. The synthetic positive fixture and historical records remain
+   categorically insufficient.
 3. Review the prospective schema-1.1 protocol/spec and separately design the worker plus
    authoritative acquisition, current-expiry, exclusive-consumption/non-reuse, and independent
    output-root/nonce custody; the present contract machinery cannot unlock physical action.
