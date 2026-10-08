@@ -86,9 +86,11 @@ Raw wheel-embedded METADATA and WHEEL control bytes are committed in the manifes
 A manifest is not proof of local byte presence: only verification of the exact separately supplied
 pack can produce that proof.
 
-The deterministic rule keeps the two root pins exact and selects the highest non-yanked stable
-release satisfying all currently applicable constraints, then the highest-ranked compatible
-official wheel for CPython 3.13/macOS 15/arm64. This selects `transformers==5.19.0`; its
+The two root pins remain exact. The other versions and official wheel URLs are an externally
+acquired exact selection; the manifest contains no bounded PyPI release inventory and does not
+prove that any version is globally highest, non-yanked, or optimally ranked. Offline verification
+proves target compatibility and internal closure coherence for the selected artifacts only. The
+selection includes `transformers==5.19.0`; its
 `tokenizers<0.24.0,>=0.23.1` edge constrains `huggingface-hub` to `1.33.0` instead of incompatible
 2.x. Recursive discovery closes at 34 distributions:
 
@@ -106,9 +108,12 @@ official wheel for CPython 3.13/macOS 15/arm64. This selects `transformers==5.19
 Private inert verification produced receipt
 `sha256:5401e65eb204b49318c044fd38ecaa48ac253b81bfbfc0f265dec9605431672e`.
 The deliberately uncommitted reconstructed supplied-pack qualification record is
-`sha256:852035e357fd24dbf0984048583f15fd172af8dcaafcd479a1abcaf49bb67b46`
-and remains `ineligible` only on the seven worker-API source-evidence blockers. These identities do
-not authorize installation, import, execution, MLX/Metal access, or model action.
+`sha256:fd56e61f90b63c24fa82ee70ddd55daf9ae3a2fb49817aa976096ba86b72cfba`
+under the pre-independent-anchor mechanism. The fail-closed reviewed-manifest allowlist introduced
+by this change is empty, so the final reconstruction instead retains
+`wheel_evidence_manifest_anchor_not_independently_reviewed`. A later separate PR may review and
+allowlist the unchanged manifest ID. No real record is committed, and these identities do not
+authorize installation, import, execution, MLX/Metal access, or model action.
 
 ## Candidate worker API source evidence
 

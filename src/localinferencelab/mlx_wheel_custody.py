@@ -11,7 +11,7 @@ import stat
 import struct
 import zipfile
 from dataclasses import dataclass
-from email import policy
+from email import errors, policy
 from email.message import Message
 from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
@@ -26,17 +26,16 @@ from localinferencelab.canonical import (
     decode_bytes,
     digest_bytes,
     load_canonical_json_file,
+    load_json_bytes,
 )
 
 SCHEMA_VERSION = "1.0"
-EXPECTED_REAL_MANIFEST_ID = (
-    "sha256:837deaf4265bf921e36712ee4ea7210eb7869b1487cc196e701689dd0fdd38be"
-)
 _DIGEST_LENGTH = 71
 _CONTROL_LIMIT = 32
 _MAX_DISTRIBUTIONS = 128
 _MAX_WHEEL_BYTES = 128 * 1024 * 1024
 _MAX_PACK_BYTES = 512 * 1024 * 1024
+_MAX_MANIFEST_BYTES = 2 * 1024 * 1024
 _MAX_WHEEL_ENTRIES = 40_000
 _MAX_WHEEL_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
 _MAX_METADATA_BYTES = 512 * 1024
@@ -86,6 +85,12 @@ _METADATA_POLICY = policy.default.clone(
     refold_source="none",
     raise_on_defect=False,
 )
+_WHEEL_POLICY = policy.default.clone(
+    utf8=False,
+    refold_source="none",
+    raise_on_defect=True,
+)
+_REVIEWED_WHEEL_EVIDENCE_MANIFEST_ANCHORS: tuple[str, ...] = ()
 _MARKER_VARIABLES = {
     "extra",
     "implementation_name",
@@ -613,7 +618,7 @@ def _parse_metadata(
     try:
         data.decode("utf-8", errors="strict")
         message = BytesParser(policy=_METADATA_POLICY).parsebytes(data)
-    except (UnicodeDecodeError, ValueError) as error:
+    except (UnicodeDecodeError, ValueError, errors.MessageDefect) as error:
         raise ContractError(f"{label} is not valid UTF-8 Core Metadata") from error
     if message.defects:
         names = ",".join(sorted(type(defect).__name__ for defect in message.defects))
@@ -651,6 +656,54 @@ def _parse_metadata(
     if len(requirements) > _MAX_REQUIREMENTS:
         raise ContractError(f"{label} exceeds the requirement count bound")
     return requirements, requires_python, requires_python_specifiers
+
+
+def _parse_wheel_metadata(data: bytes, label: str) -> tuple[str, ...]:
+    if b"\x00" in data:
+        raise ContractError(f"{label} contains a NUL byte")
+    if b"\r" in data.replace(b"\r\n", b""):
+        raise ContractError(f"{label} contains a bare carriage return")
+    try:
+        data.decode("ascii", errors="strict")
+    except UnicodeDecodeError as error:
+        raise ContractError(f"{label} must be ASCII") from error
+    normalized = data.replace(b"\r\n", b"\n")
+    header_bytes, separator, body = normalized.partition(b"\n\n")
+    if not separator or not header_bytes:
+        raise ContractError(f"{label} must have a complete header block")
+    if body:
+        raise ContractError(f"{label} must not contain a body")
+    if any(line.startswith((b" ", b"\t")) for line in header_bytes.split(b"\n")):
+        raise ContractError(f"{label} may not contain folded headers")
+    try:
+        message = BytesParser(policy=_WHEEL_POLICY).parsebytes(data)
+    except (UnicodeDecodeError, ValueError, errors.MessageDefect) as error:
+        raise ContractError(f"{label} is malformed wheel metadata") from error
+    if message.defects:
+        names = ",".join(sorted(type(defect).__name__ for defect in message.defects))
+        raise ContractError(f"{label} contains wheel metadata defects: {names}")
+    raw_headers = list(message.raw_items())
+    if not raw_headers or len(raw_headers) > _MAX_METADATA_HEADERS:
+        raise ContractError(f"{label} has an invalid header count")
+    if message.is_multipart() or message.get_payload() not in {"", None}:
+        raise ContractError(f"{label} must not contain a body")
+    wheel_version = _single_metadata_header(message, "Wheel-Version", label)
+    if wheel_version != "1.0":
+        raise ContractError(f"{label} has unsupported Wheel-Version")
+    root_is_purelib = _single_metadata_header(message, "Root-Is-Purelib", label)
+    if root_is_purelib not in {"true", "false"}:
+        raise ContractError(f"{label} has invalid Root-Is-Purelib")
+    tags = [
+        _text(item, f"{label}.Tag[{index}]", maximum=256)
+        for index, item in enumerate(_metadata_header_values(message, "Tag"))
+    ]
+    if not tags or len(tags) > _MAX_EXPANDED_TAGS:
+        raise ContractError(f"{label} has an invalid Tag header count")
+    if len(tags) != len(set(tags)):
+        raise ContractError(f"{label} contains duplicate Tag headers")
+    if any(_WHEEL_TAG_PATTERN.fullmatch(tag) is None for tag in tags):
+        raise ContractError(f"{label} contains a malformed Tag header")
+    return tuple(sorted(tags))
 
 
 def _parse_wheel_filename(filename: str) -> tuple[str, str, str, str, str]:
@@ -781,16 +834,32 @@ def wheel_evidence_pack_spec() -> dict[str, JsonValue]:
         "source_domain_allowlist": cast("list[JsonValue]", sorted(_SOURCE_DOMAINS)),
         "bounds": {
             "maximum_distribution_count": _MAX_DISTRIBUTIONS,
+            "maximum_manifest_bytes": _MAX_MANIFEST_BYTES,
             "maximum_pack_bytes": _MAX_PACK_BYTES,
             "maximum_wheel_bytes": _MAX_WHEEL_BYTES,
             "maximum_wheel_entries": _MAX_WHEEL_ENTRIES,
             "maximum_wheel_uncompressed_bytes": _MAX_WHEEL_UNCOMPRESSED_BYTES,
         },
-        "manifest_identity_rule": ("caller_must_supply_a_separately_trusted_expected_manifest_id"),
+        "manifest_identity_rule": ("caller_supplied_content_address_for_generic_verification_only"),
         "pack_member_policy": ("exact_manifest_basenames_only_no_follow_regular_single_link_files"),
         "verification_network_policy": "forbidden",
         "wheel_archive_policy": (
             "bounded_non_overlapping_ascii_paths_no_duplicates_no_links_exact_dist_info"
+        ),
+    }
+    content["spec_id"] = canonical_identity(content)
+    return content
+
+
+def wheel_evidence_manifest_anchor_spec() -> dict[str, JsonValue]:
+    """Return the independently mutable reviewed-manifest allowlist."""
+    content: dict[str, JsonValue] = {
+        "record_type": "mlx_wheel_evidence_manifest_anchor_spec",
+        "schema_version": SCHEMA_VERSION,
+        "qualification_rule": ("manifest_id_must_be_independently_committed_after_manifest_review"),
+        "reviewed_manifest_ids": cast(
+            "list[JsonValue]",
+            list(_REVIEWED_WHEEL_EVIDENCE_MANIFEST_ANCHORS),
         ),
     }
     content["spec_id"] = canonical_identity(content)
@@ -811,11 +880,10 @@ def _fixed_selection_policy(acquired_at_utc: str) -> dict[str, JsonValue]:
     return {
         "acquired_at_utc": acquired_at_utc,
         "offline_verifier_attests_index_completeness": False,
-        "release_rule": ("highest_non_yanked_stable_release_satisfying_all_applicable_constraints"),
+        "release_rule": ("externally_acquired_exact_manifest_version_no_index_optimality_claim"),
         "root_rule": "root_versions_remain_exactly_pinned",
         "wheel_rule": (
-            "highest_ranked_target_compatible_official_wheel_exact_cpython_then_abi3_"
-            "then_py3_exact_arm64_then_universal2_then_any_greatest_macos_floor"
+            "externally_acquired_exact_manifest_artifact_target_compatibility_verified_only"
         ),
     }
 
@@ -1009,11 +1077,7 @@ def _verify_distribution(
         extra_fields={"tags"},
     )
     wheel_binding_mapping = _mapping(wheel_binding, f"{label}.wheel_metadata")
-    try:
-        wheel_text = wheel_bytes.decode("ascii", errors="strict")
-    except UnicodeDecodeError as error:
-        raise ContractError(f"{label}.wheel_metadata must be ASCII") from error
-    parsed_tags = sorted(line[5:] for line in wheel_text.splitlines() if line.startswith("Tag: "))
+    parsed_tags = _parse_wheel_metadata(wheel_bytes, f"{label}.wheel_metadata")
     declared_tags = [
         _text(item, f"{label}.wheel_metadata.tags[{tag_index}]", maximum=256)
         for tag_index, item in enumerate(
@@ -1026,7 +1090,7 @@ def _verify_distribution(
     ]
     if (
         declared_tags != sorted(set(declared_tags))
-        or parsed_tags != declared_tags
+        or parsed_tags != tuple(declared_tags)
         or tuple(declared_tags) != _expanded_filename_tags(python_tag, abi_tag, platform_tag)
     ):
         raise ContractError(f"{label}.wheel_metadata tags do not exactly bind the filename")
@@ -1228,7 +1292,7 @@ def verify_wheel_evidence_manifest(
     value: JsonValue,
     expected_manifest_id: str,
 ) -> dict[str, JsonValue]:
-    """Verify a manifest against a separately trusted content identity."""
+    """Verify a manifest against a caller-supplied content address."""
     manifest = _mapping(value, "mlx_wheel_evidence_pack_manifest")
     fields = {
         "acquisition_policy",
@@ -1254,7 +1318,7 @@ def verify_wheel_evidence_manifest(
     trusted_identity = _sha256(expected_manifest_id, "expected_manifest_id")
     manifest_identity = _sha256(manifest["manifest_id"], "manifest.manifest_id")
     if manifest_identity != trusted_identity:
-        raise ContractError("wheel evidence manifest differs from trusted expected identity")
+        raise ContractError("wheel evidence manifest differs from expected content address")
     content = dict(manifest)
     del content["manifest_id"]
     if canonical_identity(content) != manifest_identity:
@@ -1340,11 +1404,43 @@ def load_wheel_evidence_manifest(
     path: Path,
     expected_manifest_id: str,
 ) -> dict[str, JsonValue]:
-    """Load one no-follow canonical wheel evidence manifest."""
-    return verify_wheel_evidence_manifest(
-        load_canonical_json_file(path, "MLX wheel evidence manifest"),
-        expected_manifest_id,
-    )
+    """Load one bounded, stable, no-follow canonical wheel evidence manifest."""
+    try:
+        descriptor = os.open(path, _file_flags())
+    except OSError as error:
+        raise ContractError("cannot open MLX wheel evidence manifest without following") from error
+    try:
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or before.st_size < 1
+            or before.st_size > _MAX_MANIFEST_BYTES
+        ):
+            raise ContractError("MLX wheel evidence manifest has unsafe file metadata or size")
+        captured = bytearray()
+        while block := os.read(descriptor, _READ_BLOCK_BYTES):
+            captured.extend(block)
+            if len(captured) > before.st_size or len(captured) > _MAX_MANIFEST_BYTES:
+                raise ContractError("MLX wheel evidence manifest grew during bounded read")
+        after = os.fstat(descriptor)
+        try:
+            path_after = path.stat(follow_symlinks=False)
+        except OSError as error:
+            raise ContractError("MLX wheel evidence manifest path changed during read") from error
+        if (
+            len(captured) != before.st_size
+            or _stable_file_tuple(after) != _stable_file_tuple(before)
+            or (path_after.st_dev, path_after.st_ino) != (before.st_dev, before.st_ino)
+        ):
+            raise ContractError("MLX wheel evidence manifest changed during bounded read")
+    finally:
+        os.close(descriptor)
+    data = bytes(captured)
+    value = load_json_bytes(data)
+    if canonical_json(value) != data:
+        raise ContractError("MLX wheel evidence manifest must use canonical JSON")
+    return verify_wheel_evidence_manifest(value, expected_manifest_id)
 
 
 def _file_flags() -> int:
@@ -1363,19 +1459,37 @@ def _directory_flags() -> int:
     return flags
 
 
-def _safe_zip_path(name: str, label: str) -> PurePosixPath:
-    path = PurePosixPath(name)
+def _stable_file_tuple(metadata: os.stat_result) -> tuple[int, ...]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_nlink,
+        metadata.st_uid,
+        metadata.st_gid,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def _safe_zip_path(name: str, label: str) -> tuple[str, bool]:
+    directory_marker = name.endswith("/")
+    unmarked = name[:-1] if directory_marker else name
+    path = PurePosixPath(unmarked)
     if (
         not name
+        or not unmarked
         or not name.isascii()
         or "\\" in name
         or "\x00" in name
+        or unmarked.endswith("/")
         or path.is_absolute()
         or any(part in {"", ".", ".."} for part in path.parts)
-        or path.as_posix() != name.rstrip("/")
+        or path.as_posix() != unmarked
     ):
         raise ContractError(f"{label} contains an unsafe or ambiguous path")
-    return path
+    return path.as_posix(), directory_marker
 
 
 def _local_zip_entry_range(
@@ -1439,13 +1553,25 @@ def _inspect_supplied_wheel(
             total_uncompressed = 0
             ranges: list[tuple[int, int]] = []
             offsets: set[int] = set()
+            canonical_paths: set[str] = set()
+            folded_canonical_paths: set[str] = set()
             for entry in entries:
-                _safe_zip_path(entry.filename, label)
+                canonical_path, directory_marker = _safe_zip_path(entry.filename, label)
+                folded_path = canonical_path.casefold()
+                if canonical_path in canonical_paths or folded_path in folded_canonical_paths:
+                    raise ContractError(f"{label} contains colliding canonical ZIP paths")
+                canonical_paths.add(canonical_path)
+                folded_canonical_paths.add(folded_path)
                 if entry.flag_bits & 0x1:
                     raise ContractError(f"{label} contains an encrypted ZIP entry")
                 mode = entry.external_attr >> 16
                 file_type = stat.S_IFMT(mode)
-                if file_type not in {0, stat.S_IFREG, stat.S_IFDIR}:
+                if (
+                    file_type not in {0, stat.S_IFREG, stat.S_IFDIR}
+                    or (directory_marker and file_type == stat.S_IFREG)
+                    or (not directory_marker and file_type == stat.S_IFDIR)
+                    or (directory_marker and (entry.file_size != 0 or entry.compress_size != 0))
+                ):
                     raise ContractError(f"{label} contains a link or special ZIP entry")
                 if entry.header_offset in offsets:
                     raise ContractError(f"{label} contains duplicate ZIP header offsets")
@@ -1633,6 +1759,11 @@ def _pack_record_blockers(
         if not cast("str", item).startswith(_DISTRIBUTION_BLOCKER_PREFIXES)
     ]
     closure = _mapping(manifest["closure"], "wheel evidence closure")
+    anchor_spec = wheel_evidence_manifest_anchor_spec()
+    reviewed = cast("list[str]", anchor_spec["reviewed_manifest_ids"])
+    manifest_id = cast("str", manifest["manifest_id"])
+    if manifest_id not in reviewed:
+        original.append(f"wheel_evidence_manifest_anchor_not_independently_reviewed:{manifest_id}")
     return sorted(set(original + cast("list[str]", closure["blockers"])))
 
 
@@ -1757,6 +1888,7 @@ def build_supplied_pack_qualification_record(
         "qualification_spec_id": candidate["qualification_spec_id"],
         "candidate_anchor": dict(candidate_binding),
         "wheel_evidence_manifest_id": manifest["manifest_id"],
+        "wheel_evidence_manifest_anchor_spec_id": wheel_evidence_manifest_anchor_spec()["spec_id"],
         "wheel_evidence_pack_spec_id": manifest["pack_spec_id"],
         "pack_verification": verified_pack.receipt(),
         "assessment": {
@@ -1810,6 +1942,7 @@ def verify_supplied_pack_qualification_record(
         "schema_version",
         "static_action_counters",
         "wheel_evidence_manifest_id",
+        "wheel_evidence_manifest_anchor_spec_id",
         "wheel_evidence_pack_spec_id",
     }
     _keys(record, fields, "mlx_runtime_supplied_pack_qualification_record")

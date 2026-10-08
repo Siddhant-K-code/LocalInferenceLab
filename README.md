@@ -54,10 +54,12 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > Additive supplied-wheel custody now scales this gate beyond embedded wheel bytes. The committed
 > closure manifest binds 34 official PyPI wheels for the real candidate (70,700,189 bytes total)
 > without adding wheel files or redistributing them; the prior anchor still embeds its two
-> top-level wheel byte strings. A separately trusted manifest ID and the exact caller-supplied
-> local pack are both mandatory: the no-follow verifier rejects missing, extra, linked,
-> substituted, ambiguous, or metadata-drifting members. A committed manifest or record alone
-> never proves that the wheel bytes were locally present.
+> top-level wheel byte strings. Generic verification requires a caller-supplied content address
+> and the exact local pack: the no-follow verifier rejects missing, extra, linked, substituted,
+> ambiguous, or metadata-drifting members. Qualification additionally requires the manifest ID in
+> a separately reviewed committed allowlist. This PR leaves that allowlist empty, so its new
+> manifest cannot make the real candidate eligible. A committed manifest or record alone never
+> proves that the wheel bytes were locally present.
 > The prospective schema-1.1 contract now defines those prerequisite and result shapes without
 > making execution reachable. It accepts only a committed eligible `reviewed_candidate`
 > qualification record from the separate schema-1.0 anchor set. Authoritative authorization
@@ -574,9 +576,11 @@ The project does not claim that:
 1. Use the static MLX runtime qualification gate to review an exact proposed runtime pair and its
    supplied metadata/source evidence without installing or importing it.
 2. Review the supplied exact-wheel closure manifest and independently supply/verify its 34-wheel
-   pack. That removes the distribution-closure blockers only while those bytes are present; the
-   seven worker-API evidence blockers still keep the real candidate ineligible. The synthetic
-   positive fixture and historical records remain categorically insufficient.
+   pack. Together with the independently reviewed worker-API source evidence, that closes the
+   distribution and API blockers only while those exact bytes are present. This PR retains an
+   explicit unreviewed-manifest-anchor blocker; only a later independent PR may allowlist the
+   unchanged manifest ID. The synthetic positive fixture and historical records remain
+   categorically insufficient.
 3. Review the prospective schema-1.1 protocol/spec and separately design the worker plus
    authoritative acquisition, current-expiry, exclusive-consumption/non-reuse, and independent
    output-root/nonce custody; the present contract machinery cannot unlock physical action.

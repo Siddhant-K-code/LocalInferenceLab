@@ -5,12 +5,14 @@ from __future__ import annotations
 import io
 import json
 import os
+import stat
 import zipfile
 from pathlib import Path
 from typing import cast
 
 import pytest
 
+import localinferencelab.mlx_wheel_custody as wheel_custody_module
 from localinferencelab.canonical import (
     ContractError,
     JsonValue,
@@ -30,9 +32,11 @@ from localinferencelab.mlx_wheel_custody import (
     build_supplied_pack_qualification_record,
     build_wheel_evidence_manifest,
     load_supplied_pack_qualification_record,
+    load_wheel_evidence_manifest,
     verify_supplied_pack_qualification_record,
     verify_supplied_wheel_pack,
     verify_wheel_evidence_manifest,
+    wheel_evidence_manifest_anchor_spec,
     wheel_evidence_pack_spec,
     write_supplied_pack_qualification_record,
 )
@@ -103,6 +107,7 @@ def _wheel(
     *,
     metadata: bytes | None = None,
     unsafe_path: str | None = None,
+    extra_entries: list[tuple[str, int]] | None = None,
 ) -> tuple[str, bytes, bytes, bytes]:
     filename = f"{name.replace('-', '_')}-{version}-py3-none-any.whl"
     dist_info = f"{name.replace('-', '_')}-{version}.dist-info"
@@ -128,6 +133,14 @@ def _wheel(
             entry.create_system = 3
             entry.external_attr = 0o100644 << 16
             archive.writestr(entry, b"unsafe")
+        for path, mode in extra_entries or []:
+            entry = zipfile.ZipInfo(path, date_time=(1980, 1, 1, 0, 0, 0))
+            entry.create_system = 3
+            entry.external_attr = mode << 16
+            archive.writestr(
+                entry,
+                b"" if stat.S_IFMT(mode) == stat.S_IFDIR else b"extra",
+            )
     return filename, output.getvalue(), metadata_bytes, wheel_bytes
 
 
@@ -140,12 +153,14 @@ def _distribution(
     wheel_bytes: bytes | None = None,
     manifest_metadata: bytes | None = None,
     unsafe_path: str | None = None,
+    extra_entries: list[tuple[str, int]] | None = None,
 ) -> tuple[dict[str, JsonValue], bytes]:
     filename, generated, embedded_metadata, wheel_metadata = _wheel(
         name,
         version,
         requirements,
         unsafe_path=unsafe_path,
+        extra_entries=extra_entries,
     )
     supplied = generated if wheel_bytes is None else wheel_bytes
     metadata = embedded_metadata if manifest_metadata is None else manifest_metadata
@@ -200,6 +215,7 @@ def _manifest(
     ),
     alpha_unsafe_path: str | None = None,
     alpha_manifest_metadata: bytes | None = None,
+    alpha_extra_entries: list[tuple[str, int]] | None = None,
 ) -> tuple[dict[str, JsonValue], dict[str, bytes]]:
     alpha, alpha_bytes = _distribution(
         "alpha",
@@ -208,6 +224,7 @@ def _manifest(
         role="root",
         manifest_metadata=alpha_manifest_metadata,
         unsafe_path=alpha_unsafe_path,
+        extra_entries=alpha_extra_entries,
     )
     distributions = [alpha]
     wheels = {cast("str", _dict(alpha["artifact"])["filename"]): alpha_bytes}
@@ -338,15 +355,35 @@ def _rehash_manifest(manifest: dict[str, JsonValue]) -> str:
     return identity
 
 
+def _replace_wheel_metadata(
+    manifest: dict[str, JsonValue],
+    data: bytes,
+) -> str:
+    distribution = _dict(_list(manifest["distributions"])[0])
+    binding = _dict(distribution["wheel_metadata"])
+    binding["bytes_base64"] = encode_bytes(data)
+    binding["size_bytes"] = len(data)
+    binding["sha256"] = digest_bytes(data)
+    return _rehash_manifest(manifest)
+
+
 def test_pack_spec_and_synthetic_pack_are_deterministic_and_exact(tmp_path: Path) -> None:
     spec = wheel_evidence_pack_spec()
-    assert spec["spec_id"] == (
-        "sha256:14b823fcf06c3107d76bbc41742353d6d2e57aa5683ab298533c9b7f84a714b7"
-    )
+    assert _dict(spec["bounds"])["maximum_manifest_bytes"] == 2 * 1024 * 1024
+    anchor_spec = wheel_evidence_manifest_anchor_spec()
+    assert anchor_spec["reviewed_manifest_ids"] == []
     manifest, wheels = _manifest()
     second_manifest, second_wheels = _manifest()
     assert canonical_json(manifest) == canonical_json(second_manifest)
     assert wheels == second_wheels
+    selection = _dict(manifest["selection_policy"])
+    assert selection["offline_verifier_attests_index_completeness"] is False
+    assert selection["release_rule"] == (
+        "externally_acquired_exact_manifest_version_no_index_optimality_claim"
+    )
+    assert selection["wheel_rule"] == (
+        "externally_acquired_exact_manifest_artifact_target_compatibility_verified_only"
+    )
     pack = tmp_path / "pack"
     _write_pack(pack, wheels)
     result = verify_supplied_wheel_pack(
@@ -395,6 +432,41 @@ def test_cli_emits_spec_and_verifies_supplied_pack(
     assert verified["runtime_imports"] == 0
 
 
+def test_manifest_loader_is_bounded_and_detects_path_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    oversized = tmp_path / "oversized.json"
+    oversized.write_bytes(b"x" * ((2 * 1024 * 1024) + 1))
+    with pytest.raises(ContractError, match="unsafe file metadata or size"):
+        load_wheel_evidence_manifest(oversized, "sha256:" + ("0" * 64))
+
+    manifest, _wheels = _manifest()
+    data = canonical_json(manifest)
+    path = tmp_path / "manifest.json"
+    path.write_bytes(data)
+    replacement = tmp_path / "replacement.json"
+    replacement.write_bytes(data)
+    original_read = os.read
+    replaced = False
+
+    def replace_after_read(descriptor: int, size: int) -> bytes:
+        nonlocal replaced
+        block = original_read(descriptor, size)
+        if not block and not replaced:
+            replacement.replace(path)
+            replaced = True
+        return block
+
+    monkeypatch.setattr(os, "read", replace_after_read)
+    with pytest.raises(ContractError, match=r"path changed|changed during"):
+        load_wheel_evidence_manifest(
+            path,
+            cast("str", manifest["manifest_id"]),
+        )
+    assert replaced is True
+
+
 def test_pack_rejects_tampered_bytes_and_coordinated_manifest_rehashing(
     tmp_path: Path,
 ) -> None:
@@ -412,7 +484,7 @@ def test_pack_rejects_tampered_bytes_and_coordinated_manifest_rehashing(
     artifact["sha256"] = digest_bytes(wheels[filename])
     forged = _rehash_manifest(manifest)
     assert forged != expected
-    with pytest.raises(ContractError, match="trusted expected identity"):
+    with pytest.raises(ContractError, match="expected content address"):
         verify_supplied_wheel_pack(manifest, pack, expected)
 
 
@@ -499,6 +571,56 @@ def test_manifest_rejects_url_hash_size_drift_and_booleans_as_integers(
     identity = _rehash_manifest(boolean_claim)
     with pytest.raises(ContractError, match="claims drift"):
         verify_wheel_evidence_manifest(boolean_claim, identity)
+
+
+@pytest.mark.parametrize(
+    ("wheel_metadata", "error"),
+    [
+        (b"Root-Is-Purelib: true\nTag: py3-none-any\n\n", "Wheel-Version"),
+        (
+            b"Wheel-Version: 1.0\nWheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n\n",
+            "Wheel-Version",
+        ),
+        (b"Wheel-Version: 1.0\nTag: py3-none-any\n\n", "Root-Is-Purelib"),
+        (
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\n"
+            b"Root-Is-Purelib: false\nTag: py3-none-any\n\n",
+            "Root-Is-Purelib",
+        ),
+        (
+            b"Wheel-Version: 2.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n\n",
+            "unsupported Wheel-Version",
+        ),
+        (
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: yes\nTag: py3-none-any\n\n",
+            "invalid Root-Is-Purelib",
+        ),
+        (
+            b"Wheel-Version: 1.0\n continued\nRoot-Is-Purelib: true\nTag: py3-none-any\n\n",
+            "folded headers",
+        ),
+        (
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n\nbody",
+            "must not contain a body",
+        ),
+        (
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: malformed\n\n",
+            "malformed Tag",
+        ),
+        (
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\nTag: py3-none-any\n\n",
+            "duplicate Tag",
+        ),
+    ],
+)
+def test_manifest_rejects_malformed_wheel_metadata(
+    wheel_metadata: bytes,
+    error: str,
+) -> None:
+    manifest, _wheels = _manifest()
+    identity = _replace_wheel_metadata(manifest, wheel_metadata)
+    with pytest.raises(ContractError, match=error):
+        verify_wheel_evidence_manifest(manifest, identity)
 
 
 def test_pack_rejects_raw_metadata_mismatch_and_malformed_utf8(tmp_path: Path) -> None:
@@ -616,6 +738,34 @@ def test_pack_rejects_zip_path_traversal(tmp_path: Path) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "entries",
+    [
+        [("payload", stat.S_IFREG | 0o644), ("payload/", stat.S_IFDIR | 0o755)],
+        [("payload//", stat.S_IFDIR | 0o755)],
+        [("payload/./child", stat.S_IFREG | 0o644)],
+        [("payload", stat.S_IFDIR | 0o755)],
+        [("payload/", stat.S_IFREG | 0o644)],
+    ],
+)
+def test_pack_rejects_canonical_zip_path_and_type_ambiguity(
+    tmp_path: Path,
+    entries: list[tuple[str, int]],
+) -> None:
+    manifest, wheels = _manifest(alpha_extra_entries=entries)
+    pack = tmp_path / "pack"
+    _write_pack(pack, wheels)
+    with pytest.raises(
+        ContractError,
+        match=r"unsafe or ambiguous path|colliding canonical ZIP paths|link or special",
+    ):
+        verify_supplied_wheel_pack(
+            manifest,
+            pack,
+            cast("str", manifest["manifest_id"]),
+        )
+
+
 def test_supplied_pack_qualification_requires_reconstruction(
     tmp_path: Path,
 ) -> None:
@@ -637,9 +787,14 @@ def test_supplied_pack_qualification_requires_reconstruction(
         manifest_id,
     )
     assert record["decision"] == "ineligible"
-    assert _list(record["blockers"]) == [
-        f"reviewed_candidate_not_committed_in_spec:{assessment['review_anchor_id']}"
-    ]
+    anchor_blocker = f"wheel_evidence_manifest_anchor_not_independently_reviewed:{manifest_id}"
+    assert _list(record["blockers"]) == sorted(
+        [*_list(candidate_record["blockers"]), anchor_blocker]
+    )
+    assert (
+        record["wheel_evidence_manifest_anchor_spec_id"]
+        == (wheel_evidence_manifest_anchor_spec()["spec_id"])
+    )
     verify_supplied_pack_qualification_record(
         record,
         candidate,
@@ -675,3 +830,21 @@ def test_supplied_pack_qualification_requires_reconstruction(
             pack,
             manifest_id,
         )
+
+
+def test_unreviewed_manifest_anchor_blocks_coordinated_rehash(
+    tmp_path: Path,
+) -> None:
+    manifest, wheels = _manifest()
+    pack = tmp_path / "pack"
+    _write_pack(pack, wheels)
+    forged = _copy(manifest)
+    _dict(forged["candidate_anchor"])["package_id"] = "sha256:" + ("4" * 64)
+    forged_id = _rehash_manifest(forged)
+
+    verify_supplied_wheel_pack(forged, pack, forged_id)
+    blockers = wheel_custody_module._pack_record_blockers(  # noqa: SLF001
+        {"blockers": []},
+        forged,
+    )
+    assert blockers == [f"wheel_evidence_manifest_anchor_not_independently_reviewed:{forged_id}"]

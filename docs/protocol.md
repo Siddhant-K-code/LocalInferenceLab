@@ -373,15 +373,16 @@ explicit authorization are mandatory before any physical action.
 
 Large or numerous third-party wheels are not embedded in Git. The additive
 `mlx_wheel_evidence_pack_manifest` binds their official PyPI identities, exact raw dist-info
-METADATA/WHEEL bytes, applicable dependency graph, deterministic selection rationale, and source
-bindings. The canonical real manifest is
+METADATA/WHEEL bytes, applicable dependency graph for an externally acquired exact selection, and
+source bindings. It contains no release inventory and does not prove global PyPI optimality,
+non-yanked status, or highest wheel ranking. The canonical real manifest is
 `evidence/mlx-wheel-closure-mlx-0.30.4-mlx-lm-0.30.6-macos-arm64-py313-v1.json`,
 with manifest ID
 `sha256:837deaf4265bf921e36712ee4ea7210eb7869b1487cc196e701689dd0fdd38be`
 and pack-spec ID
 `sha256:14b823fcf06c3107d76bbc41742353d6d2e57aa5683ab298533c9b7f84a714b7`.
 
-The verifier requires that manifest ID as a separately trusted caller input and an exact local
+The generic verifier requires that manifest ID as a caller-supplied content address and an exact local
 directory containing all 34 named wheels and nothing else. It uses bounded no-follow descriptor
 reads and inert ZIP inspection only. It rejects substituted bytes, links, unsafe basenames,
 missing/extras, duplicate/case-colliding or overlapping ZIP entries, traversal, multiple dist-info
@@ -391,8 +392,11 @@ verification or record reconstruction.
 
 A successful pack receipt proves only that those exact supplied bytes were present for that
 verification. A committed manifest does not. A later record may remove distribution blockers only
-by reconstructing with the pack present; it remains `ineligible` while the seven worker-API source
-evidence items are absent. No eligible real qualification record is committed here.
+by reconstructing with the pack present. Qualification separately requires membership in a
+committed reviewed-manifest allowlist. This PR introduces the manifest but leaves that allowlist
+empty, so `wheel_evidence_manifest_anchor_not_independently_reviewed` keeps the real reconstruction
+ineligible even after the distribution and worker-API blockers close. No real qualification record
+is committed here, and no runtime action is authorized.
 
 ## Prospective schema-1.1 model-free runtime-preflight protocol
 

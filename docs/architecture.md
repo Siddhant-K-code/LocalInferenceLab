@@ -67,9 +67,12 @@ METADATA and WHEEL bytes and hashes; dist-info identity; WHEEL tags; selection p
 repository/tag/revision where independently bound; and the complete applicable dependency graph.
 The 34 third-party wheel files remain caller supplied and uncommitted. Pack verification opens a
 directory and every basename without following links, requires regular single-link members,
-rejects missing/extras and ZIP ambiguity, and reconstructs the closure offline. A trusted expected
-manifest ID is an independent input. The manifest and any committed qualification record
-explicitly do not attest that a pack was present; reconstruction requires the same supplied pack.
+rejects missing/extras and ZIP ambiguity, and reconstructs the closure offline. A caller-supplied
+content address is sufficient only for generic pack verification. Qualification checks a separate
+committed reviewed-manifest allowlist, which is empty in this change; a later review may add the
+unchanged manifest ID without mutating the manifest. The manifest and any committed qualification
+record explicitly do not attest that a pack was present; reconstruction requires the same supplied
+pack.
 
 The determinism canary is a separate pure comparison layer. It decodes only bounded supplied IEEE
 payload bytes with Python's standard library. It has no runtime adapter, worker, execution command,

@@ -418,15 +418,18 @@ The `mlx runtime-target-observation-claim-replay` command reports
 `structure_valid_runtime_evidence_refused` for an exact canonical claim; authoritative provenance
 and custody cannot be supplied by caller-selected labels.
 
-The separately committed supplied-wheel manifest now resolves the applicable distribution closure
-to 34 exact wheels under a highest-compatible-stable rule. The pack is 70,700,189 bytes, including
+The separately committed supplied-wheel manifest now resolves internal coherence for an externally
+acquired exact 34-wheel selection. It contains no bounded release inventory and makes no claim that
+the versions are globally highest, non-yanked, or optimally ranked. The pack is 70,700,189 bytes, including
 the 38,255,657-byte macOS 15 MLX-Metal wheel. This change adds no wheel files or transitive wheel
 binaries and rehosts none; the original candidate still embeds its two top-level wheel byte
 strings. The manifest binds all 34 raw embedded METADATA/WHEEL records, but only the no-follow
 offline verifier can establish that the caller actually supplied the exact pack. With that pack
-verified, distribution blockers are removed and the reconstructed decision has exactly the seven
-worker-API evidence blockers. The record is deliberately not published here, preserving separate
-review of evidence, mechanism, and later decision.
+verified, distribution blockers are removed. The manifest is introduced by this PR and is not in
+the independent reviewed-manifest allowlist, so qualification retains
+`wheel_evidence_manifest_anchor_not_independently_reviewed` and remains ineligible. A later
+separate PR may review and allowlist the unchanged manifest ID. No record is published here and no
+runtime action is authorized, preserving separate review of evidence, mechanism, and decision.
 
 ## Prospective schema-1.1 model-free contract
 
