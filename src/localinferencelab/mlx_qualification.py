@@ -28,6 +28,7 @@ from localinferencelab.canonical import (
     load_json_bytes,
 )
 from localinferencelab.custody import publish_bundle, read_closed_bundle
+from localinferencelab.mlx_review_registry import committed_candidate_review_approval
 from localinferencelab.mlx_runtime_preflight import (
     EXPECTED_OBSERVED_LOCK_ID,
     EXPECTED_OBSERVED_NEGATIVE_PROJECTION_ID,
@@ -2114,12 +2115,23 @@ def _qualification_assessment(package: dict[str, JsonValue]) -> dict[str, JsonVa
         "worker_api_evidence_spec_id": package["worker_api_evidence_spec_id"],
     }
     review_anchor_id = canonical_identity(review_anchor_projection)
-    reviewed_anchors = cast(
-        "list[JsonValue]",
-        qualification_spec()["reviewed_candidate_anchors"],
-    )
-    if candidate_kind == "reviewed_candidate" and review_anchor_id not in reviewed_anchors:
-        blockers.append(f"reviewed_candidate_not_committed_in_spec:{review_anchor_id}")
+    review_registry_id: JsonValue = None
+    review_approval_id: JsonValue = None
+    if candidate_kind == "reviewed_candidate":
+        registry, approval = committed_candidate_review_approval(
+            candidate_package_id=cast("str", package["package_id"]),
+            candidate_review_anchor_id=review_anchor_id,
+            qualification_spec_id=cast("str", package["qualification_spec_id"]),
+            runtime_target_anchor_id=cast("str", target["runtime_target_anchor_id"]),
+            worker_api_evidence_anchor_id=cast(
+                "str",
+                package["worker_api_evidence_anchor_id"],
+            ),
+        )
+        review_registry_id = registry["registry_id"]
+        review_approval_id = None if approval is None else approval["approval_id"]
+        if approval is None:
+            blockers.append(f"reviewed_candidate_not_approved_by_registry:{review_anchor_id}")
     top_requirements = [
         _parse_requirement(item, "top-level requirement")
         for item in cast("list[JsonValue]", package["top_level_requirements"])
@@ -2307,7 +2319,7 @@ def _qualification_assessment(package: dict[str, JsonValue]) -> dict[str, JsonVa
         }
         for name in sorted(edges)
     ]
-    return {
+    result: dict[str, JsonValue] = {
         "authorization_state": {
             "authorization_created": False,
             "authorization_consumed": False,
@@ -2348,6 +2360,10 @@ def _qualification_assessment(package: dict[str, JsonValue]) -> dict[str, JsonVa
         "wheel_assessments": wheel_assessments,
         "worker_api_assessments": api_assessments,
     }
+    if candidate_kind == "reviewed_candidate":
+        result["review_registry_id"] = review_registry_id
+        result["review_approval_id"] = review_approval_id
+    return result
 
 
 def build_qualification_record(package_value: JsonValue) -> dict[str, JsonValue]:
@@ -2369,6 +2385,9 @@ def build_qualification_record(package_value: JsonValue) -> dict[str, JsonValue]
         "schema_1_0_remains_permanently_disabled": True,
         "static_action_counters": dict(_ZERO_ACTION_COUNTERS),
     }
+    if package["candidate_kind"] == "reviewed_candidate":
+        record["review_registry_id"] = assessment["review_registry_id"]
+        record["review_approval_id"] = assessment["review_approval_id"]
     record["record_id"] = canonical_identity(record)
     return record
 
@@ -2376,6 +2395,11 @@ def build_qualification_record(package_value: JsonValue) -> dict[str, JsonValue]
 def verify_qualification_record(value: JsonValue) -> dict[str, JsonValue]:
     """Reject forged decisions, blockers, counters, and coordinated rehashing."""
     record = _mapping(value, "mlx_runtime_qualification_record")
+    package_value = _mapping(
+        record.get("qualification_package"),
+        "qualification_record.qualification_package",
+    )
+    candidate_kind = package_value.get("candidate_kind")
     fields = {
         "assessment",
         "blockers",
@@ -2390,6 +2414,8 @@ def verify_qualification_record(value: JsonValue) -> dict[str, JsonValue]:
         "schema_version",
         "static_action_counters",
     }
+    if candidate_kind == "reviewed_candidate":
+        fields.update({"review_approval_id", "review_registry_id"})
     _keys(record, fields, "mlx_runtime_qualification_record")
     if (
         record["record_type"] != "mlx_runtime_qualification_record"
@@ -2405,6 +2431,14 @@ def verify_qualification_record(value: JsonValue) -> dict[str, JsonValue]:
         "qualification_record.static_action_counters",
     )
     package = verify_qualification_package(record["qualification_package"])
+    if package["candidate_kind"] == "reviewed_candidate":
+        _sha256(
+            record["review_registry_id"],
+            "qualification_record.review_registry_id",
+        )
+        approval_id = record["review_approval_id"]
+        if approval_id is not None:
+            _sha256(approval_id, "qualification_record.review_approval_id")
     if record["qualification_package_id"] != package["package_id"]:
         raise ContractError("qualification record package identity mismatch")
     identity = _sha256(record["record_id"], "qualification_record.record_id")
@@ -2439,7 +2473,7 @@ def qualification_inspection(value: JsonValue) -> dict[str, JsonValue]:
     record = verify_qualification_record(value)
     assessment = _mapping(record["assessment"], "qualification assessment")
     package = _mapping(record["qualification_package"], "qualification package")
-    return {
+    inspection: dict[str, JsonValue] = {
         "record_id": record["record_id"],
         "package_id": record["qualification_package_id"],
         "candidate_kind": package["candidate_kind"],
@@ -2453,6 +2487,10 @@ def qualification_inspection(value: JsonValue) -> dict[str, JsonValue]:
         "worker_api_evidence_spec_id": package["worker_api_evidence_spec_id"],
         "static_action_counters": dict(_ZERO_ACTION_COUNTERS),
     }
+    if package["candidate_kind"] == "reviewed_candidate":
+        inspection["review_registry_id"] = record["review_registry_id"]
+        inspection["review_approval_id"] = record["review_approval_id"]
+    return inspection
 
 
 def worker_api_evidence_inspection(value: JsonValue) -> dict[str, JsonValue]:

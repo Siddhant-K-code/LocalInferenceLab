@@ -56,13 +56,13 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > without adding wheel files or redistributing them; the existing candidate still embeds its two
 > top-level wheel byte strings. Generic verification requires a caller-supplied content address
 > and the exact local pack: the no-follow verifier rejects missing, extra, linked, substituted,
-> ambiguous, or metadata-drifting members. Qualification additionally requires the manifest ID in
-> a separately reviewed committed allowlist. This PR leaves that allowlist empty, so its new
-> manifest cannot make the real candidate eligible. A committed manifest or record alone never
-> proves that the wheel bytes were locally present.
+> ambiguous, or metadata-drifting members. Qualification consumes only the repository-pinned
+> review registry, whose approval binds the exact candidate, manifest, pack spec, and verified
+> receipt identities. A committed manifest or record alone never proves that the wheel bytes were
+> locally present, and the final eligible record remains a separate later publication.
 > The prospective schema-1.1 contract now defines those prerequisite and result shapes without
 > making execution reachable. It accepts only a committed eligible `reviewed_candidate`
-> qualification record from the separate schema-1.0 anchor set. Authoritative authorization
+> qualification record bound to the exact pinned review registry. Authoritative authorization
 > acquisition, current-expiry observation, exclusive consumption/non-reuse, and independent
 > output-root/nonce bindings are explicitly unavailable. A caller-supplied claim may be checked
 > only for canonical structure; it cannot satisfy those prerequisites. There is no
@@ -393,7 +393,7 @@ CPython 3.13.15 target on macOS 27.0.1 build 26A434 arm64, with a macOS 15.0 run
 deployment floor. It embeds the exact reviewed PyPI wheels and raw METADATA for MLX `0.30.4` and
 MLX-LM `0.30.6`, binds their immutable upstream tags/revisions, target anchor
 `sha256:008f7c3ac60614bc6909822180a4bc0b9be17eaf0aa3abc23829eb2842c4fdc0`,
-and derives pending review anchor
+and derives review anchor
 `sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`.
 Its worker-evidence spec and independently reviewed source-evidence anchor are
 `sha256:6c83f627032a2c3db38eee34f804469a42e227a3af0a84ed5c0052a192d29e97`
@@ -417,15 +417,22 @@ it offline without probing the host. A supplied envelope may only be replayed as
 identity match plus claimed independent provenance is refused as runtime evidence because
 authoritative observer identity and custody-bound executable/platform measurement are unavailable.
 
-The MLX-LM-to-MLX dependency and all seven reviewed source/API surfaces are satisfied, but the
-candidate remains deterministically `ineligible`: its seven applicable transitive distributions
-are not supplied, and the target-derived review anchor is not in the committed allowlist. That
-allowlist retains only previously merged anchor
-`sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`;
-this change cannot promote its own candidate mutation. The exact blocker is
-`reviewed_candidate_not_committed_in_spec:sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`.
-No qualification record is committed. Candidate-controlled digests therefore cannot create an
-accepted record in this change. Every future record still binds
+The MLX-LM-to-MLX dependency and all seven reviewed source/API surfaces are satisfied. The
+candidate remains deterministically `ineligible` only because its seven applicable transitive
+distributions are not supplied to candidate-only reconstruction. The candidate-bound
+qualification specification remains unchanged at
+`sha256:17d2f62fd4832a224f3bf61c7aa5b9668d05077ed36d56d1bf873fd63f2ac826`;
+its historical anchor list is replay data, not current eligibility policy. Independent review
+policy lives in `evidence/mlx-static-evidence-review-registry-v1.json`, with registry ID
+`sha256:dd1a6f0710a38cdb5757a81c749a2b9005b2c0371e5c1f4900bf6d6c41c7d9ff`,
+registry-spec ID
+`sha256:41b3586faa73ddc1d739d300bfd8ff82bfb7219f83e0c24660ed645d59bd9da0`,
+and approval ID
+`sha256:03897777a7460b2000b808504268f7654176793181467d2b391468a432837f42`.
+The approval binds the exact candidate anchor/package/spec/target/worker identities, closure
+manifest, pack spec, and verified receipt. New reviewed-candidate records bind the exact registry
+and approval IDs used by reconstruction. No final eligible qualification record is committed
+beside the registry. Every future record still binds
 the unchanged schema-1.0 negative projection, lock, terminal failure, authorization, consumption,
 historical protocol, and historical worker IDs.
 
@@ -439,8 +446,8 @@ The schema-1.1 runtime-preflight commands are also process-free. The spec and pr
 candidate-agnostic: exact runtime pins and bytes must come from a separately reviewed,
 independently committed real-candidate qualification anchor. Record construction reconstructs the
 schema-1.0 qualification decision and requires `candidate_kind=reviewed_candidate`,
-`eligible_for_new_observed_authorization`, and membership of its derived anchor in the committed
-qualification spec. An optional caller-supplied authorization claim can name a qualification,
+`eligible_for_new_observed_authorization`, and an exact approval bound to the pinned review
+registry. An optional caller-supplied authorization claim can name a qualification,
 review anchor, schema-1.1 spec/protocol, output-root digest, nonce digest, and internally ordered
 claimed time window. Those are self-asserted fields only: they do not prove acquisition, current
 freshness, independent root/nonce facts, exclusive consumption, or non-reuse.
@@ -575,12 +582,11 @@ The project does not claim that:
 
 1. Use the static MLX runtime qualification gate to review an exact proposed runtime pair and its
    supplied metadata/source evidence without installing or importing it.
-2. Review the supplied exact-wheel closure manifest and independently supply/verify its 34-wheel
-   pack. Together with the independently reviewed worker-API source evidence, that closes the
-   distribution and API blockers only while those exact bytes are present. This PR retains an
-   explicit unreviewed-manifest-anchor blocker; only a later independent PR may allowlist the
-   unchanged manifest ID. The synthetic positive fixture and historical records remain
-   categorically insufficient.
+2. Independently supply and verify the exact 34-wheel pack named by the reviewed closure manifest.
+   The pinned registry clears both review blockers only for the exact manifest and verified receipt;
+   distribution blockers close only while those exact bytes are present. Publishing the resulting
+   eligible qualification record remains a separate later PR. The synthetic positive fixture and
+   historical records remain categorically insufficient.
 3. Review the prospective schema-1.1 protocol/spec and separately design the worker plus
    authoritative acquisition, current-expiry, exclusive-consumption/non-reuse, and independent
    output-root/nonce custody; the present contract machinery cannot unlock physical action.

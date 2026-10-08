@@ -287,8 +287,9 @@ def test_synthetic_positive_and_historical_records_cannot_satisfy_prerequisites(
     assert "qualification_runtime_target_anchor_is_not_exact" in _list(
         synthetic_inspection["blockers"]
     )
+    assert "qualification_review_registry_is_not_exact" in _list(synthetic_inspection["blockers"])
     assert any(
-        cast("str", blocker).startswith("qualification_review_anchor_not_committed:")
+        cast("str", blocker).startswith("qualification_review_anchor_not_approved:")
         for blocker in _list(synthetic_inspection["blockers"])
     )
 
@@ -321,7 +322,8 @@ def test_synthetic_positive_and_historical_records_cannot_satisfy_prerequisites(
     reviewed_blockers = set(_list(reviewed_inspection["blockers"]))
     assert reviewed_inspection["prerequisites_satisfied"] is False
     assert "qualification_decision_is_not_eligible" in reviewed_blockers
-    assert f"qualification_review_anchor_not_committed:{migrated_anchor}" in reviewed_blockers
+    assert "qualification_review_registry_is_not_exact" not in reviewed_blockers
+    assert f"qualification_review_anchor_not_approved:{migrated_anchor}" not in reviewed_blockers
     assert "qualification_runtime_target_anchor_is_not_exact" not in reviewed_blockers
     assert reviewed_blockers >= _UNRESOLVED_AUTHORIZATION_BLOCKERS
     assert reviewed_blockers >= _UNRESOLVED_TARGET_OBSERVATION_BLOCKERS

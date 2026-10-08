@@ -58,6 +58,10 @@ from localinferencelab.mlx_qualification import (
     worker_api_evidence_spec,
     write_qualification_record,
 )
+from localinferencelab.mlx_review_registry import (
+    committed_review_registry_inspection,
+    review_registry_spec,
+)
 from localinferencelab.mlx_runner import (
     build_mlx_prospective_package,
     load_mlx_prospective_package,
@@ -319,6 +323,14 @@ def _parser() -> argparse.ArgumentParser:
     mlx_commands.add_parser(
         "runtime-worker-api-evidence-spec",
         help="emit the immutable source-only future worker API evidence specification",
+    )
+    mlx_commands.add_parser(
+        "runtime-review-registry-spec",
+        help="emit the independent static-evidence review registry specification",
+    )
+    mlx_commands.add_parser(
+        "runtime-review-registry-inspect",
+        help="verify and inspect the repository-pinned review registry",
     )
     runtime_worker_api_evidence_verify = mlx_commands.add_parser(
         "runtime-worker-api-evidence-verify",
@@ -815,6 +827,14 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
             return 0
         if args.mlx_command == "runtime-worker-api-evidence-spec":
             _emit_document(worker_api_evidence_spec())
+            return 0
+        if args.mlx_command == "runtime-review-registry-spec":
+            _emit_document(review_registry_spec())
+            return 0
+        if args.mlx_command == "runtime-review-registry-inspect":
+            output = committed_review_registry_inspection()
+            output["status"] = "valid"
+            _emit(output)
             return 0
         if args.mlx_command == "runtime-worker-api-evidence-verify":
             output = worker_api_evidence_inspection(load_qualification_package(args.candidate))

@@ -373,11 +373,15 @@ package/network/process/socket/authorization/import/backend/model/cloud/spend co
 Reviewed candidates without an independently committed derived evidence anchor remain ineligible.
 
 The committed real-candidate evidence package
-`evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json` derives pending review anchor
+`evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json` derives review anchor
 `sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`
-for exact CPython 3.13.15 on macOS 27.0.1 build 26A434 arm64. It is deliberately absent from the
-allowlist, which retains previously merged anchor
-`sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`.
+for exact CPython 3.13.15 on macOS 27.0.1 build 26A434 arm64. The candidate-bound qualification
+spec remains unchanged; independent review policy is registry
+`sha256:dd1a6f0710a38cdb5757a81c749a2b9005b2c0371e5c1f4900bf6d6c41c7d9ff`
+under registry spec
+`sha256:41b3586faa73ddc1d739d300bfd8ff82bfb7219f83e0c24660ed645d59bd9da0`.
+The registry approval is
+`sha256:03897777a7460b2000b808504268f7654176793181467d2b391468a432837f42`.
 The package is additionally bound to target anchor
 `sha256:008f7c3ac60614bc6909822180a4bc0b9be17eaf0aa3abc23829eb2842c4fdc0`,
 which fixes executable bytes, publishable realpath, CPython implementation/full version,
@@ -398,8 +402,10 @@ All seven source/API blockers are removed. The remaining blockers are exactly th
 `mlx-metal`, `numpy`, `transformers`, `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2`
 distributions. Source evidence does not prove runtime executability, native loading, backend or
 device availability, Metal availability, or synchronization success.
-The same record also carries the exact pending-anchor blocker
-`reviewed_candidate_not_committed_in_spec:sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`.
+The exact registry clears the candidate review blocker without changing candidate or spec bytes.
+The reconstructed, deliberately uncommitted candidate-only record is
+`sha256:fc0c60b3458a184a09dc79fee6778995121f8732f7ecab4c51b61ab683d491ac`
+and carries only those seven distribution blockers.
 
 The pair edge `mlx>=0.30.4; platform_system == "Darwin"` selects and accepts `mlx==0.30.4`.
 That fact does not establish complete dependency closure. No accepted or ineligible qualification
@@ -425,13 +431,11 @@ the 38,255,657-byte macOS 15 MLX-Metal wheel. This change adds no wheel files or
 binaries and rehosts none; the original candidate still embeds its two top-level wheel byte
 strings. The manifest binds all 34 raw embedded METADATA/WHEEL records, but only the no-follow
 offline verifier can establish that the caller actually supplied the exact pack. With that pack
-verified, distribution blockers are removed. The manifest is introduced by this PR and is not in
-the independent reviewed-manifest allowlist, so qualification retains
-`wheel_evidence_manifest_anchor_not_independently_reviewed:sha256:0c28cc713fe9baabdda8c075f148f23b4d2ebd4525160212d0f538cc907db6b4`
-alongside
-`reviewed_candidate_not_committed_in_spec:sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`
-and remains ineligible. A later separate PR may review and allowlist the unchanged manifest ID. No
-record is published here and no runtime action is authorized, preserving separate review of
+verified, distribution blockers are removed. The registry clears both review blockers only for
+the exact candidate, manifest, pack spec, and verified receipt
+`sha256:6eb636208a880f49b7ece6571dd20a5b3465996692683bfa9b8e873a0f68b07c`.
+No final eligible record is published here; a later separate PR must construct and publish it from
+the independently merged registry. No runtime action is authorized, preserving separate review of
 evidence, mechanism, and decision.
 
 ## Prospective schema-1.1 model-free contract
@@ -448,10 +452,9 @@ A record requires both:
 2. future authoritative one-shot authorization acquisition, current-expiry observation,
    exclusive consumption/non-reuse, and independently verified output-root and nonce facts.
 
-The current committed qualification anchor set includes the separately reviewed real-candidate
-evidence anchor described above, but no eligible qualification record exists for it. The synthetic
-positive fixture and the frozen historical record therefore deterministically refuse and cannot be
-used as substitutes.
+The pinned registry includes the separately reviewed real-candidate evidence anchor described
+above, but no eligible qualification record exists for it. The synthetic positive fixture and the
+frozen historical record therefore deterministically refuse and cannot be used as substitutes.
 The authorization prerequisite is also categorically unsatisfied: caller-supplied claim structures
 cannot establish custody or independent bindings. No current input combination can make
 `prerequisites_satisfied=true`, and execution remains disabled.

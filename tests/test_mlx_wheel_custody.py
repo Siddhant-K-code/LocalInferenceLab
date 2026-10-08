@@ -821,11 +821,12 @@ def test_supplied_pack_qualification_requires_reconstruction(
     anchor_blocker = f"wheel_evidence_manifest_anchor_not_independently_reviewed:{manifest_id}"
     assert _list(record["blockers"]) == sorted(
         [
-            f"reviewed_candidate_not_committed_in_spec:{assessment['review_anchor_id']}",
+            f"reviewed_candidate_not_approved_by_registry:{assessment['review_anchor_id']}",
             "wheel_tag_incompatible:mlx",
             anchor_blocker,
         ]
     )
+    assert record["review_approval_id"] is None
     assert (
         record["wheel_evidence_manifest_anchor_spec_id"]
         == (wheel_evidence_manifest_anchor_spec()["spec_id"])
@@ -884,16 +885,25 @@ def test_supplied_pack_qualification_requires_reconstruction(
 def test_unreviewed_manifest_anchor_blocks_coordinated_rehash(
     tmp_path: Path,
 ) -> None:
-    manifest, wheels = _manifest()
+    candidate = _reviewed_candidate()
+    candidate_record = build_qualification_record(candidate)
+    assessment = _dict(candidate_record["assessment"])
+    manifest, wheels = _candidate_manifest(
+        candidate,
+        cast("str", assessment["review_anchor_id"]),
+    )
     pack = tmp_path / "pack"
     _write_pack(pack, wheels)
     forged = _copy(manifest)
     _dict(forged["candidate_anchor"])["package_id"] = "sha256:" + ("4" * 64)
     forged_id = _rehash_manifest(forged)
 
-    verify_supplied_wheel_pack(forged, pack, forged_id)
-    blockers = wheel_custody_module._pack_record_blockers(  # noqa: SLF001
-        {"blockers": []},
+    receipt = verify_supplied_wheel_pack(forged, pack, forged_id).receipt()
+    blockers, _registry_id, approval_id = wheel_custody_module._pack_record_blockers(  # noqa: SLF001
+        candidate,
+        candidate_record,
         forged,
+        receipt,
     )
-    assert blockers == [f"wheel_evidence_manifest_anchor_not_independently_reviewed:{forged_id}"]
+    assert f"wheel_evidence_manifest_anchor_not_independently_reviewed:{forged_id}" in blockers
+    assert approval_id is None

@@ -24,6 +24,7 @@ from localinferencelab.mlx_qualification import (
     synthetic_eligible_qualification_package,
     verify_qualification_record,
 )
+from localinferencelab.mlx_review_registry import EXPECTED_REVIEW_REGISTRY_ID
 from localinferencelab.mlx_runtime_target import (
     EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
     RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS,
@@ -307,7 +308,8 @@ def runtime_preflight_spec_1_1() -> dict[str, JsonValue]:
                 "schema_version": "1.0",
                 "candidate_kind": "reviewed_candidate",
                 "decision": ELIGIBLE,
-                "review_anchor_must_be_committed_in_qualification_spec": True,
+                "review_anchor_must_be_approved_by_committed_registry": True,
+                "review_registry_id": EXPECTED_REVIEW_REGISTRY_ID,
                 "separate_reviewed_anchor_required": True,
                 "synthetic_fixture_accepted": False,
                 "historical_schema_1_0_record_accepted": False,
@@ -488,10 +490,8 @@ def _qualification_prerequisite_assessment(
         assessment["review_anchor_id"],
         "schema-1.1 qualification review anchor",
     )
-    reviewed_anchors = cast(
-        "list[JsonValue]",
-        qualification_spec()["reviewed_candidate_anchors"],
-    )
+    review_registry_id = qualification_record.get("review_registry_id")
+    review_approval_id = qualification_record.get("review_approval_id")
     checks: list[JsonValue] = []
     blockers: list[str] = []
     predicates = [
@@ -506,9 +506,16 @@ def _qualification_prerequisite_assessment(
             "qualification_decision_is_not_eligible",
         ),
         (
-            "qualification_review_anchor_is_committed",
-            review_anchor_id in reviewed_anchors,
-            f"qualification_review_anchor_not_committed:{review_anchor_id}",
+            "qualification_review_registry_is_exact",
+            review_registry_id == EXPECTED_REVIEW_REGISTRY_ID,
+            "qualification_review_registry_is_not_exact",
+        ),
+        (
+            "qualification_review_approval_is_bound",
+            isinstance(review_approval_id, str)
+            and assessment.get("review_approval_id") == review_approval_id
+            and assessment.get("review_registry_id") == review_registry_id,
+            f"qualification_review_anchor_not_approved:{review_anchor_id}",
         ),
         (
             "qualification_runtime_target_anchor_is_exact",

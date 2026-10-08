@@ -57,15 +57,18 @@ available. `Requires-Python` is evaluated against exact full version 3.13.15, in
 
 The package ID is
 `sha256:4f87b4678c31c0cd08534c58485e2b242c74936737b8f9c6c96319454ada358d`;
-its target-derived pending review anchor is
+its target-derived review anchor is
 `sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`.
-The allowlist retains previously merged anchor
-`sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`.
+Independent review policy is registry
+`sha256:dd1a6f0710a38cdb5757a81c749a2b9005b2c0371e5c1f4900bf6d6c41c7d9ff`,
+registry spec
+`sha256:41b3586faa73ddc1d739d300bfd8ff82bfb7219f83e0c24660ed645d59bd9da0`,
+and approval
+`sha256:03897777a7460b2000b808504268f7654176793181467d2b391468a432837f42`.
 The reconstructed, deliberately uncommitted qualification record is
-`sha256:968f4bf20c15f97503ad5f7d3a95025bc40f0f787bf63b4c59d16e0d7d25ded3`
-and remains `ineligible`. Exact blockers are the absent applicable distributions `mlx-metal`,
-`numpy`, `transformers`, `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2`, plus
-`reviewed_candidate_not_committed_in_spec:sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`.
+`sha256:fc0c60b3458a184a09dc79fee6778995121f8732f7ecab4c51b61ab683d491ac`
+and remains `ineligible`. Its exact blockers are only the absent applicable distributions
+`mlx-metal`, `numpy`, `transformers`, `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2`.
 
 Caller-supplied observation claims are not independent evidence. Canonical identity and exact
 target-field equality may be replayed offline, but claimed provenance remains self-asserted.
@@ -109,16 +112,12 @@ selection includes `transformers==5.19.0`; its
 
 Private inert verification produced receipt
 `sha256:6eb636208a880f49b7ece6571dd20a5b3465996692683bfa9b8e873a0f68b07c`.
-The deliberately uncommitted reconstructed supplied-pack qualification record is
-`sha256:6da80000265a8bd7188c9ccf68290c69fbb7a732a06121ff01129e28675e754a`.
-The fail-closed reviewed-manifest allowlist introduced by this change is empty, so the final
-reconstruction retains exactly
-`reviewed_candidate_not_committed_in_spec:sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`
-and
-`wheel_evidence_manifest_anchor_not_independently_reviewed:sha256:0c28cc713fe9baabdda8c075f148f23b4d2ebd4525160212d0f538cc907db6b4`.
-A later separate PR may review and allowlist the unchanged manifest ID. No real record is
-committed, and these identities do not authorize installation, import, execution, MLX/Metal
-access, or model action.
+The pinned registry binds that receipt and the exact manifest/pack-spec identities. Deterministic
+registry matching clears both independent-review blockers only for all exact identities; any
+wrong package, spec, target, worker, manifest, pack, or receipt identity remains unapproved. No
+final eligible record is committed beside the registry. A later separate PR must reconstruct and
+publish that record with the supplied pack present. These identities do not authorize
+installation, import, execution, MLX/Metal access, or model action.
 
 ## Candidate worker API source evidence
 
