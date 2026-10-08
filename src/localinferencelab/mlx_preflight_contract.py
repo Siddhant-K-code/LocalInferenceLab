@@ -24,6 +24,7 @@ from localinferencelab.mlx_qualification import (
     synthetic_eligible_qualification_package,
     verify_qualification_record,
 )
+from localinferencelab.mlx_runtime_target import EXPECTED_RUNTIME_TARGET_ANCHOR_ID
 
 SCHEMA_VERSION = "1.1"
 ACTION = "mlx_runtime_preflight_model_free"
@@ -231,7 +232,10 @@ def runtime_preflight_protocol_1_1() -> dict[str, JsonValue]:
         "retries": 0,
         "warmups": 0,
         "concurrency": 1,
-        "runtime_selection": "exact_pins_and_bytes_from_committed_qualification_anchor",
+        "runtime_selection": (
+            "exact_target_anchor_pins_and_bytes_from_committed_qualification_anchor"
+        ),
+        "runtime_target_anchor_id": EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
         "base_allowed_physical_actions": list(_ATTEMPTED_ACTIONS),
         "conditional_physical_action": {
             "action": _CONDITIONAL_SYNCHRONIZATION_ACTION,
@@ -293,6 +297,7 @@ def runtime_preflight_spec_1_1() -> dict[str, JsonValue]:
         "action": ACTION,
         "protocol_id": protocol["protocol_id"],
         "qualification_spec_id": qualification["spec_id"],
+        "runtime_target_anchor_id": EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
         "prerequisites": {
             "qualification": {
                 "record_type": "mlx_runtime_qualification_record",
@@ -303,6 +308,14 @@ def runtime_preflight_spec_1_1() -> dict[str, JsonValue]:
                 "separate_reviewed_anchor_required": True,
                 "synthetic_fixture_accepted": False,
                 "historical_schema_1_0_record_accepted": False,
+                "runtime_target_anchor_id": EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
+                "exact_runtime_target_identity_required": True,
+            },
+            "runtime_target_observation": {
+                "development_host_observation_accepted": False,
+                "future_independent_observation_required": True,
+                "self_attested_observation_accepted": False,
+                "target_drift_accepted": False,
             },
             "authorization": {
                 "authoritative_custody_state": "unimplemented_unavailable",
@@ -459,6 +472,10 @@ def _qualification_prerequisite_assessment(
         qualification_record["assessment"],
         "schema-1.1 qualification assessment",
     )
+    target = _mapping(
+        package["target_environment"],
+        "schema-1.1 qualification target environment",
+    )
     review_anchor_id = _sha256(
         assessment["review_anchor_id"],
         "schema-1.1 qualification review anchor",
@@ -484,6 +501,11 @@ def _qualification_prerequisite_assessment(
             "qualification_review_anchor_is_committed",
             review_anchor_id in reviewed_anchors,
             f"qualification_review_anchor_not_committed:{review_anchor_id}",
+        ),
+        (
+            "qualification_runtime_target_anchor_is_exact",
+            target.get("runtime_target_anchor_id") == EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
+            "qualification_runtime_target_anchor_is_not_exact",
         ),
         (
             "qualification_schema_1_0_remains_disabled",

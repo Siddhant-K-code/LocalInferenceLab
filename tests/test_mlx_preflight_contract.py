@@ -50,6 +50,7 @@ from localinferencelab.mlx_qualification import (
     synthetic_eligible_qualification_package,
     verify_qualification_package,
 )
+from localinferencelab.mlx_runtime_target import EXPECTED_RUNTIME_TARGET_ANCHOR_ID
 
 
 def _dict(value: JsonValue) -> dict[str, JsonValue]:
@@ -140,6 +141,15 @@ def test_spec_protocol_and_capability_keep_execution_unreachable() -> None:
     assert spec["schema_version"] == "1.1"
     assert spec["protocol_id"] == protocol["protocol_id"]
     assert spec["qualification_spec_id"] == qualification_spec()["spec_id"]
+    assert spec["runtime_target_anchor_id"] == EXPECTED_RUNTIME_TARGET_ANCHOR_ID
+    assert protocol["runtime_target_anchor_id"] == EXPECTED_RUNTIME_TARGET_ANCHOR_ID
+    runtime_target_prerequisite = _dict(_dict(spec["prerequisites"])["runtime_target_observation"])
+    assert runtime_target_prerequisite == {
+        "development_host_observation_accepted": False,
+        "future_independent_observation_required": True,
+        "self_attested_observation_accepted": False,
+        "target_drift_accepted": False,
+    }
     assert _dict(spec["execution"]) == {
         "authorization_consumer_present": False,
         "authorization_creator_present": False,
@@ -260,6 +270,9 @@ def test_synthetic_positive_and_historical_records_cannot_satisfy_prerequisites(
     assert "qualification_candidate_is_not_reviewed_real_candidate" in _list(
         synthetic_inspection["blockers"]
     )
+    assert "qualification_runtime_target_anchor_is_not_exact" in _list(
+        synthetic_inspection["blockers"]
+    )
     assert any(
         cast("str", blocker).startswith("qualification_review_anchor_not_committed:")
         for blocker in _list(synthetic_inspection["blockers"])
@@ -275,13 +288,17 @@ def test_synthetic_positive_and_historical_records_cannot_satisfy_prerequisites(
     assert "qualification_candidate_is_not_reviewed_real_candidate" in _list(
         historical_inspection["blockers"]
     )
+    assert "qualification_runtime_target_anchor_is_not_exact" in _list(
+        historical_inspection["blockers"]
+    )
     assert "qualification_decision_is_not_eligible" in _list(historical_inspection["blockers"])
     committed_anchor = "sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c"
     assert qualification_spec()["reviewed_candidate_anchors"] == [committed_anchor]
 
     reviewed = _qualification("reviewed")
     reviewed_assessment = _dict(reviewed["assessment"])
-    assert reviewed_assessment["review_anchor_id"] == committed_anchor
+    migrated_anchor = "sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f"
+    assert reviewed_assessment["review_anchor_id"] == migrated_anchor
     reviewed_record = build_runtime_preflight_record_1_1(
         reviewed,
         _authorization_claim(reviewed),
@@ -290,10 +307,8 @@ def test_synthetic_positive_and_historical_records_cannot_satisfy_prerequisites(
     reviewed_blockers = set(_list(reviewed_inspection["blockers"]))
     assert reviewed_inspection["prerequisites_satisfied"] is False
     assert "qualification_decision_is_not_eligible" in reviewed_blockers
-    assert not any(
-        cast("str", blocker).startswith("qualification_review_anchor_not_committed:")
-        for blocker in reviewed_blockers
-    )
+    assert f"qualification_review_anchor_not_committed:{migrated_anchor}" in reviewed_blockers
+    assert "qualification_runtime_target_anchor_is_not_exact" not in reviewed_blockers
     assert reviewed_blockers >= _UNRESOLVED_AUTHORIZATION_BLOCKERS
 
 

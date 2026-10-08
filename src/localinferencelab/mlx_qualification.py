@@ -35,6 +35,10 @@ from localinferencelab.mlx_runtime_preflight import (
     OBSERVED_CONSUMPTION_ID,
     OBSERVED_FAILURE_ID,
 )
+from localinferencelab.mlx_runtime_target import (
+    EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
+    target_environment_binding,
+)
 
 SCHEMA_VERSION = "1.0"
 ELIGIBLE = "eligible_for_new_observed_authorization"
@@ -561,6 +565,13 @@ def qualification_spec() -> dict[str, JsonValue]:
         "required_top_level_distributions": ["mlx", "mlx-lm"],
         "reviewed_candidate_anchors": list(_REVIEWED_CANDIDATE_ANCHORS),
         "worker_api_evidence_spec_id": worker_api_evidence_spec()["spec_id"],
+        "runtime_target_anchor_id": EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
+        "runtime_target_policy": {
+            "development_host_observation_is_runtime_evidence": False,
+            "exact_anchor_required_for_reviewed_candidate": True,
+            "future_independent_observation_required": True,
+            "target_drift_accepted": False,
+        },
         "requirement_grammar": (
             "canonical_release_versions_with_comma_conjoined_specifiers_and_"
             "and_conjoined_environment_markers"
@@ -991,7 +1002,11 @@ def _parse_wheel_filename(filename: str) -> tuple[str, str, str, str, str]:
     return name, parsed_version, python_tag, abi_tag, platform_tag
 
 
-def _verify_target(value: JsonValue) -> dict[str, JsonValue]:
+def _verify_target(
+    value: JsonValue,
+    *,
+    candidate_kind: str,
+) -> dict[str, JsonValue]:
     target = _mapping(value, "qualification_package.target_environment")
     fields = {
         "implementation_name",
@@ -1004,9 +1019,16 @@ def _verify_target(value: JsonValue) -> dict[str, JsonValue]:
         "python_version",
         "sys_platform",
     }
+    if candidate_kind == "reviewed_candidate":
+        fields.add("runtime_target_anchor_id")
     _keys(target, fields, "qualification_package.target_environment")
     exact_text = {
-        name: _text(target[name], f"target_environment.{name}", maximum=64) for name in fields
+        name: _text(
+            target[name],
+            f"target_environment.{name}",
+            maximum=128 if name == "runtime_target_anchor_id" else 64,
+        )
+        for name in fields
     }
     if (
         exact_text["implementation_name"] != "cpython"
@@ -1031,8 +1053,17 @@ def _verify_target(value: JsonValue) -> dict[str, JsonValue]:
     if exact_text["python_abi"] != expected_abi:
         raise ContractError("target Python ABI differs from the target Python version")
     macos_version = _version(exact_text["macos_version"], "target_environment.macos_version")
-    if len(macos_version.split(".")) != _MIN_RELEASE_COMPONENTS:
-        raise ContractError("target macOS version must contain major and minor components")
+    if len(macos_version.split(".")) < _MIN_RELEASE_COMPONENTS:
+        raise ContractError("target macOS version must contain at least major and minor components")
+    if candidate_kind == "reviewed_candidate":
+        anchor_id = _sha256(
+            target["runtime_target_anchor_id"],
+            "target_environment.runtime_target_anchor_id",
+        )
+        if anchor_id != EXPECTED_RUNTIME_TARGET_ANCHOR_ID:
+            raise ContractError("reviewed qualification target anchor identity drift")
+        if canonical_json(target) != canonical_json(target_environment_binding()):
+            raise ContractError("reviewed qualification target environment drift")
     return dict(target)
 
 
@@ -1813,7 +1844,10 @@ def verify_qualification_package(value: JsonValue) -> dict[str, JsonValue]:
     if package["qualification_spec_id"] != qualification_spec()["spec_id"]:
         raise ContractError("qualification package specification identity mismatch")
     _text(package["candidate_name"], "qualification_package.candidate_name", maximum=128)
-    target = _verify_target(package["target_environment"])
+    target = _verify_target(
+        package["target_environment"],
+        candidate_kind=candidate_kind,
+    )
     extras = _mapping(package["extras_policy"], "qualification_package.extras_policy")
     _keys(extras, {"mode", "requested"}, "qualification_package.extras_policy")
     if extras["mode"] != "forbid_all_extras" or extras["requested"] != []:

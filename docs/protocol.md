@@ -318,18 +318,37 @@ anchors, and coordinated rehashing are rejected. CPython `v3.13.0` commit
 `60403a5409ff2c3f3b07dd2ca91a7a3e096839c7` separately binds
 `importlib.metadata.version` and its `METADATA["Version"]` access. A real
 reviewed candidate additionally needs an independently committed evidence anchor in the
-qualification specification. Anchor
+qualification specification. The allowlist retains previously merged anchor
 `sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c`
-binds the committed MLX `0.30.4` / MLX-LM `0.30.6` evidence package for CPython 3.13.0,
-`cp313`, macOS 15.0, and arm64. Both exact wheel byte streams and exact raw METADATA are embedded,
-so verification and reconstruction are offline. The worker-evidence spec and source anchor are
+from before the target mutation. The target-bound MLX `0.30.4` / MLX-LM `0.30.6` package now
+derives pending review anchor
+`sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`,
+which is intentionally not allowlisted in this change. Both exact wheel byte streams and exact raw
+METADATA are embedded, so verification and reconstruction are offline. The worker-evidence spec
+and source anchor remain
 `sha256:6c83f627032a2c3db38eee34f804469a42e227a3af0a84ed5c0052a192d29e97`
 and `sha256:10ab50cbfb94890bae1dd8c57180645d5781e454b1a8171b158c4d932121d9dd`.
-The pair dependency and seven source/API surfaces are satisfied, while the absent `mlx-metal`,
-`numpy`, `transformers`, `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2` distributions keep
-the result deterministically ineligible.
-No qualification record is committed in the anchor change. Historical projections are always
-ineligible.
+The package binds prospective runtime target anchor
+`sha256:008f7c3ac60614bc6909822180a4bc0b9be17eaf0aa3abc23829eb2842c4fdc0`.
+The target is exact CPython 3.13.15 (`cpython-313`, `cp313`,
+`cpython-313-darwin`) on macOS 27.0.1 build 26A434 arm64, with the interpreter's deployment target
+11.0 and the runtime wheels' deployment target 15.0. Both exact wheel byte streams and exact raw
+METADATA are embedded, so verification and reconstruction are offline. `Requires-Python` uses the
+full 3.13.15 value; wheel compatibility remains `cp313`-scoped. The pair dependency and all seven
+source/API surfaces are satisfied, while the absent `mlx-metal`, `numpy`, `transformers`,
+`sentencepiece`, `protobuf`, `pyyaml`, and `jinja2` distributions plus unreviewed-anchor blocker
+keep the result deterministically ineligible. No qualification record is committed. Historical
+projections are always ineligible.
+
+The prior prospective value 3.13.0 is superseded. A bounded development-host observation of an
+already available 3.13.15 interpreter is retained in the target anchor without its private
+absolute path and is explicitly not future runtime evidence. The failed historical receipt also
+reported 3.13.15, but it is not accepted as target or runtime evidence and its existing evidence
+IDs remain unchanged. Caller-supplied observation envelopes remain structure-only and are always
+refused as runtime evidence because authoritative observer identity and custody-bound
+executable/platform measurement are unavailable. Validation rejects self-attestation, provenance
+relabeling, ambiguous host promotion, executable/hash/realpath, version/cache-tag/ABI/SOABI,
+macOS product/build/deployment, and architecture drift even when claim identities are recomputed.
 
 The evidence supports only source-surface availability. The import records prove intended module
 names and declarations, not import or native-loader success. Callable declarations do not prove
