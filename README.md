@@ -3,8 +3,8 @@
 **Before local AI can run, prove exactly what would run — and make refusal deterministic.**
 
 <picture>
-  <source media="(max-width: 600px)" srcset="docs/assets/readme/qualification-pipeline-mobile.svg" width="600" height="1120">
-  <img src="docs/assets/readme/qualification-pipeline.svg" width="1200" height="620" alt="System map showing the proposal, static qualification, human gate, inactive schema-1.1 execution path, and evidence; the current project stops after static qualification and routes missing authority to refusal">
+  <source media="(max-width: 600px)" srcset="docs/assets/readme/qualification-pipeline-mobile.svg" width="600">
+  <img src="docs/assets/readme/qualification-pipeline.svg" width="1200" alt="System map showing the proposal, static qualification, human gate, inactive schema-1.1 execution path, and evidence; the current project stops after static qualification and routes missing authority to refusal">
 </picture>
 
 > **Current state: static only.** The final qualification record is
@@ -14,8 +14,8 @@
 ## ELI5: Checking Ingredients Is Not Cooking
 
 <picture>
-  <source media="(max-width: 600px)" srcset="docs/assets/readme/sealed-kitchen-mobile.svg" width="600" height="1080">
-  <img src="docs/assets/readme/sealed-kitchen.svg" width="1200" height="500" alt="Sealed ingredients and an offline checklist sit outside a locked kitchen, illustrating that verifying exact bytes and metadata does not execute them">
+  <source media="(max-width: 600px)" srcset="docs/assets/readme/sealed-kitchen-mobile.svg" width="600">
+  <img src="docs/assets/readme/sealed-kitchen.svg" width="1200" alt="Sealed ingredients and an offline checklist sit outside a locked kitchen, illustrating that verifying exact bytes and metadata does not execute them">
 </picture>
 
 - **Sealed ingredients** are exact candidate bytes, metadata, source anchors, and hashes.
@@ -45,8 +45,8 @@ The project proves what it can without quietly crossing that boundary.
 ## A Map, Not a Measurement
 
 <picture>
-  <source media="(max-width: 600px)" srcset="docs/assets/readme/determinism-atlas-mobile.svg" width="600" height="900">
-  <img src="docs/assets/readme/determinism-atlas.svg" width="1200" height="520" alt="Determinism atlas preview with 48 prospective cells, eight synthetic represented cells, and zero accepted physical MLX or Metal observations">
+  <source media="(max-width: 600px)" srcset="docs/assets/readme/determinism-atlas-mobile.svg" width="600">
+  <img src="docs/assets/readme/determinism-atlas.svg" width="1200" alt="Determinism atlas preview with 48 prospective cells, eight synthetic represented cells, and zero accepted physical MLX or Metal observations">
 </picture>
 
 The canary makes future observations comparable. It does not manufacture them.
