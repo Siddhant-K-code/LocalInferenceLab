@@ -53,7 +53,7 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > runtime execution, device or Metal availability, or synchronization success.
 > Additive supplied-wheel custody now scales this gate beyond embedded wheel bytes. The committed
 > closure manifest binds 34 official PyPI wheels for the real candidate (70,700,189 bytes total)
-> without adding wheel files or redistributing them; the prior anchor still embeds its two
+> without adding wheel files or redistributing them; the existing candidate still embeds its two
 > top-level wheel byte strings. Generic verification requires a caller-supplied content address
 > and the exact local pack: the no-follow verifier rejects missing, extra, linked, substituted,
 > ambiguous, or metadata-drifting members. Qualification additionally requires the manifest ID in

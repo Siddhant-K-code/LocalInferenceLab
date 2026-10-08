@@ -77,10 +77,12 @@ additive closure manifest at
 `evidence/mlx-wheel-closure-mlx-0.30.4-mlx-lm-0.30.6-macos-arm64-py313-v1.json`
 now binds 34 exact official wheels (70,700,189 bytes total) without adding any wheel files or
 embedding the 32 transitive wheel binaries. The original candidate's two embedded roots remain
-unchanged. The manifest ID is
-`sha256:837deaf4265bf921e36712ee4ea7210eb7869b1487cc196e701689dd0fdd38be`;
+unchanged. The 535,001-byte manifest ID is
+`sha256:0c28cc713fe9baabdda8c075f148f23b4d2ebd4525160212d0f538cc907db6b4`;
 its pack-spec ID is
-`sha256:14b823fcf06c3107d76bbc41742353d6d2e57aa5683ab298533c9b7f84a714b7`.
+`sha256:969783ae80daffae5451d0009e77d3618ba92756d8adbfdf0cf6aa9c13453761`,
+and its empty reviewed-manifest-anchor spec ID is
+`sha256:099dbdf8190330224262ccd352066d49341c30b9a18d1dc0936a7f44c2161386`.
 Raw wheel-embedded METADATA and WHEEL control bytes are committed in the manifest, including the
 38,255,657-byte macOS 15 MLX-Metal wheel's metadata, but no `.whl` files are committed.
 A manifest is not proof of local byte presence: only verification of the exact separately supplied
@@ -106,14 +108,17 @@ selection includes `transformers==5.19.0`; its
 `typing-extensions==4.16.0`.
 
 Private inert verification produced receipt
-`sha256:5401e65eb204b49318c044fd38ecaa48ac253b81bfbfc0f265dec9605431672e`.
+`sha256:6eb636208a880f49b7ece6571dd20a5b3465996692683bfa9b8e873a0f68b07c`.
 The deliberately uncommitted reconstructed supplied-pack qualification record is
-`sha256:fd56e61f90b63c24fa82ee70ddd55daf9ae3a2fb49817aa976096ba86b72cfba`
-under the pre-independent-anchor mechanism. The fail-closed reviewed-manifest allowlist introduced
-by this change is empty, so the final reconstruction instead retains
-`wheel_evidence_manifest_anchor_not_independently_reviewed`. A later separate PR may review and
-allowlist the unchanged manifest ID. No real record is committed, and these identities do not
-authorize installation, import, execution, MLX/Metal access, or model action.
+`sha256:6da80000265a8bd7188c9ccf68290c69fbb7a732a06121ff01129e28675e754a`.
+The fail-closed reviewed-manifest allowlist introduced by this change is empty, so the final
+reconstruction retains exactly
+`reviewed_candidate_not_committed_in_spec:sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`
+and
+`wheel_evidence_manifest_anchor_not_independently_reviewed:sha256:0c28cc713fe9baabdda8c075f148f23b4d2ebd4525160212d0f538cc907db6b4`.
+A later separate PR may review and allowlist the unchanged manifest ID. No real record is
+committed, and these identities do not authorize installation, import, execution, MLX/Metal
+access, or model action.
 
 ## Candidate worker API source evidence
 

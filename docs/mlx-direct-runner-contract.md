@@ -427,9 +427,12 @@ strings. The manifest binds all 34 raw embedded METADATA/WHEEL records, but only
 offline verifier can establish that the caller actually supplied the exact pack. With that pack
 verified, distribution blockers are removed. The manifest is introduced by this PR and is not in
 the independent reviewed-manifest allowlist, so qualification retains
-`wheel_evidence_manifest_anchor_not_independently_reviewed` and remains ineligible. A later
-separate PR may review and allowlist the unchanged manifest ID. No record is published here and no
-runtime action is authorized, preserving separate review of evidence, mechanism, and decision.
+`wheel_evidence_manifest_anchor_not_independently_reviewed:sha256:0c28cc713fe9baabdda8c075f148f23b4d2ebd4525160212d0f538cc907db6b4`
+alongside
+`reviewed_candidate_not_committed_in_spec:sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f`
+and remains ineligible. A later separate PR may review and allowlist the unchanged manifest ID. No
+record is published here and no runtime action is authorized, preserving separate review of
+evidence, mechanism, and decision.
 
 ## Prospective schema-1.1 model-free contract
 

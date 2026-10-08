@@ -28,6 +28,7 @@ from localinferencelab.mlx_qualification import (
     build_qualification_record,
     synthetic_eligible_qualification_package,
 )
+from localinferencelab.mlx_runtime_target import target_environment_binding
 from localinferencelab.mlx_wheel_custody import (
     build_supplied_pack_qualification_record,
     build_wheel_evidence_manifest,
@@ -61,12 +62,31 @@ def _copy(value: JsonValue) -> dict[str, JsonValue]:
 def _reviewed_candidate() -> dict[str, JsonValue]:
     package = synthetic_eligible_qualification_package()
     package["candidate_kind"] = "reviewed_candidate"
+    package["target_environment"] = target_environment_binding()
+    reviewed = load_json_bytes(
+        Path("evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json").read_bytes()
+    )
+    reviewed_distributions = {
+        cast("str", _dict(item)["name"]): _dict(item)
+        for item in _list(_dict(reviewed)["distributions"])
+    }
+    package["worker_api_evidence"] = _dict(reviewed)["worker_api_evidence"]
+    package["worker_api_evidence_anchor_id"] = _dict(reviewed)["worker_api_evidence_anchor_id"]
+    package["worker_api_evidence_spec_id"] = _dict(reviewed)["worker_api_evidence_spec_id"]
+    package["distributions"] = [
+        item
+        for item in _list(package["distributions"])
+        if _dict(item)["name"] != "typing-extensions"
+    ]
     for item in _list(package["distributions"]):
         distribution = _dict(item)
         name = cast("str", distribution["name"])
-        source = _dict(distribution["source"])
-        source["provenance"] = "reviewed_git_revision_and_tag"
-        source["repository_url"] = f"https://github.com/example/{name}"
+        if name in reviewed_distributions:
+            distribution["source"] = _dict(reviewed_distributions[name]["source"])
+        else:
+            source = _dict(distribution["source"])
+            source["provenance"] = "reviewed_git_revision_and_tag"
+            source["repository_url"] = f"https://github.com/example/{name}"
         wheel = _dict(distribution["wheel"])
         wheel["provenance"] = "reviewed_pypi_artifact"
         wheel["url"] = f"https://files.pythonhosted.org/packages/reviewed/{wheel['filename']}"
@@ -254,6 +274,7 @@ def _manifest(
             "python_abi": "cp313",
             "python_full_version": "3.13.0",
             "python_version": "3.13",
+            "runtime_target_anchor_id": "sha256:" + ("9" * 64),
             "sys_platform": "darwin",
         },
         roots=["alpha==1.0.0"],
@@ -623,6 +644,16 @@ def test_manifest_rejects_malformed_wheel_metadata(
         verify_wheel_evidence_manifest(manifest, identity)
 
 
+def test_manifest_accepts_newline_terminated_wheel_header_record() -> None:
+    manifest, _wheels = _manifest()
+    identity = _replace_wheel_metadata(
+        manifest,
+        b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+    )
+    verified = verify_wheel_evidence_manifest(manifest, identity)
+    assert verified["manifest_id"] == identity
+
+
 def test_pack_rejects_raw_metadata_mismatch_and_malformed_utf8(tmp_path: Path) -> None:
     different = _metadata(
         "alpha",
@@ -789,7 +820,11 @@ def test_supplied_pack_qualification_requires_reconstruction(
     assert record["decision"] == "ineligible"
     anchor_blocker = f"wheel_evidence_manifest_anchor_not_independently_reviewed:{manifest_id}"
     assert _list(record["blockers"]) == sorted(
-        [*_list(candidate_record["blockers"]), anchor_blocker]
+        [
+            f"reviewed_candidate_not_committed_in_spec:{assessment['review_anchor_id']}",
+            "wheel_tag_incompatible:mlx",
+            anchor_blocker,
+        ]
     )
     assert (
         record["wheel_evidence_manifest_anchor_spec_id"]
@@ -820,6 +855,20 @@ def test_supplied_pack_qualification_requires_reconstruction(
         manifest_id,
     )
     assert loaded["record_id"] == record["record_id"]
+
+    target_drift = _copy(manifest)
+    _dict(target_drift["target_environment"])["runtime_target_anchor_id"] = "sha256:" + ("8" * 64)
+    target_drift_id = _rehash_manifest(target_drift)
+    with pytest.raises(
+        ContractError,
+        match="wheel evidence manifest target drift: runtime_target_anchor_id",
+    ):
+        build_supplied_pack_qualification_record(
+            candidate,
+            target_drift,
+            pack,
+            target_drift_id,
+        )
 
     (pack / sorted(wheels)[0]).unlink()
     with pytest.raises(ContractError, match="member set mismatch"):

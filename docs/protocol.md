@@ -378,9 +378,12 @@ source bindings. It contains no release inventory and does not prove global PyPI
 non-yanked status, or highest wheel ranking. The canonical real manifest is
 `evidence/mlx-wheel-closure-mlx-0.30.4-mlx-lm-0.30.6-macos-arm64-py313-v1.json`,
 with manifest ID
-`sha256:837deaf4265bf921e36712ee4ea7210eb7869b1487cc196e701689dd0fdd38be`
+`sha256:0c28cc713fe9baabdda8c075f148f23b4d2ebd4525160212d0f538cc907db6b4`
 and pack-spec ID
-`sha256:14b823fcf06c3107d76bbc41742353d6d2e57aa5683ab298533c9b7f84a714b7`.
+`sha256:969783ae80daffae5451d0009e77d3618ba92756d8adbfdf0cf6aa9c13453761`.
+The separate manifest-anchor specification is
+`sha256:099dbdf8190330224262ccd352066d49341c30b9a18d1dc0936a7f44c2161386`
+and contains no reviewed manifest IDs in this change.
 
 The generic verifier requires that manifest ID as a caller-supplied content address and an exact local
 directory containing all 34 named wheels and nothing else. It uses bounded no-follow descriptor
@@ -394,9 +397,11 @@ A successful pack receipt proves only that those exact supplied bytes were prese
 verification. A committed manifest does not. A later record may remove distribution blockers only
 by reconstructing with the pack present. Qualification separately requires membership in a
 committed reviewed-manifest allowlist. This PR introduces the manifest but leaves that allowlist
-empty, so `wheel_evidence_manifest_anchor_not_independently_reviewed` keeps the real reconstruction
-ineligible even after the distribution and worker-API blockers close. No real qualification record
-is committed here, and no runtime action is authorized.
+empty, so
+`wheel_evidence_manifest_anchor_not_independently_reviewed:sha256:0c28cc713fe9baabdda8c075f148f23b4d2ebd4525160212d0f538cc907db6b4`
+keeps the real reconstruction ineligible alongside the candidate's existing unreviewed-anchor
+blocker even after the distribution and worker-API blockers close. No real qualification record is
+committed here, and no runtime action is authorized.
 
 ## Prospective schema-1.1 model-free runtime-preflight protocol
 

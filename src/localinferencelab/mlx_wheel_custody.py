@@ -669,14 +669,14 @@ def _parse_wheel_metadata(data: bytes, label: str) -> tuple[str, ...]:
         raise ContractError(f"{label} must be ASCII") from error
     normalized = data.replace(b"\r\n", b"\n")
     header_bytes, separator, body = normalized.partition(b"\n\n")
-    if not separator or not header_bytes:
-        raise ContractError(f"{label} must have a complete header block")
-    if body:
+    if separator and body:
         raise ContractError(f"{label} must not contain a body")
+    if not header_bytes or not normalized.endswith(b"\n"):
+        raise ContractError(f"{label} must have a complete header record")
     if any(line.startswith((b" ", b"\t")) for line in header_bytes.split(b"\n")):
         raise ContractError(f"{label} may not contain folded headers")
     try:
-        message = BytesParser(policy=_WHEEL_POLICY).parsebytes(data)
+        message = BytesParser(policy=_WHEEL_POLICY).parsebytes(data if separator else data + b"\n")
     except (UnicodeDecodeError, ValueError, errors.MessageDefect) as error:
         raise ContractError(f"{label} is malformed wheel metadata") from error
     if message.defects:
@@ -789,11 +789,17 @@ def _verify_target(value: JsonValue) -> dict[str, JsonValue]:
         "python_abi",
         "python_full_version",
         "python_version",
+        "runtime_target_anchor_id",
         "sys_platform",
     }
     _keys(target, fields, "wheel_evidence_manifest.target_environment")
     values = {
-        name: _text(target[name], f"target_environment.{name}", maximum=64) for name in fields
+        name: _text(
+            target[name],
+            f"target_environment.{name}",
+            maximum=80 if name == "runtime_target_anchor_id" else 64,
+        )
+        for name in fields
     }
     if (
         values["implementation_name"] != "cpython"
@@ -815,12 +821,19 @@ def _verify_target(value: JsonValue) -> dict[str, JsonValue]:
         raise ContractError("wheel evidence target Python versions disagree")
     if values["python_abi"] != f"cp{python_version.replace('.', '')}":
         raise ContractError("wheel evidence target ABI differs from Python version")
+    _sha256(
+        values["runtime_target_anchor_id"],
+        "target_environment.runtime_target_anchor_id",
+    )
     macos_version = _release(
         values["macos_version"],
         "target_environment.macos_version",
     )
-    if len(macos_version.split(".")) != _TARGET_VERSION_COMPONENTS:
-        raise ContractError("wheel evidence target macOS version must have two components")
+    if len(macos_version.split(".")) not in {
+        _TARGET_VERSION_COMPONENTS,
+        _TARGET_VERSION_COMPONENTS + 1,
+    }:
+        raise ContractError("wheel evidence target macOS version has invalid components")
     return dict(target)
 
 
@@ -1782,6 +1795,7 @@ def _verify_candidate_manifest_binding(
         "python_abi",
         "python_full_version",
         "python_version",
+        "runtime_target_anchor_id",
         "sys_platform",
     ):
         if candidate_target[name] != manifest_target[name]:
