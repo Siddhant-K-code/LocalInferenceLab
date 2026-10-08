@@ -74,6 +74,12 @@ the exact pack spec and verified receipt. The manifest and any committed qualifi
 explicitly do not attest that a pack was present; reconstruction requires the same supplied pack.
 Publishing the final eligible record remains a separate later change.
 
+Qualification and supplied-pack verification dispatch by exact canonical field set. Original
+pre-registry forms are reconstructed with the frozen policy that produced them and are exposed
+only as verified historical replay, never as current-policy eligibility. Current reviewed forms
+require both registry and approval IDs. Missing one current field, adding a downgrade selector, or
+relabeling and rehashing a current record does not invoke the legacy path.
+
 The determinism canary is a separate pure comparison layer. It decodes only bounded supplied IEEE
 payload bytes with Python's standard library. It has no runtime adapter, worker, execution command,
 authorization constructor/consumer, model surface, timing field, or hardware-discovery path. Its
@@ -251,6 +257,13 @@ execute entrypoint. Current construction and replay leave `attempted_actions`,
 replay deterministically reconstructs refusals for the synthetic eligible qualification and the
 historical incompatible qualification; it includes no real candidate, authoritative
 authorization, private raw evidence, or private path.
+
+The predecessor schema-1.1 spec
+`sha256:23add482023ba3a97ab35dd2b78a6302ef5ae98abd3f5dccaaa341e242d4bf07`
+and its exact refusal records remain verifiable solely for historical replay. The active spec is
+selected by exact `spec_id`; unknown or mixed spec/record bundles fail closed. Legacy qualification
+state cannot satisfy the active registry-bound prerequisite, and every legacy inspection reports
+non-promotable scope.
 
 The future physical action contract is deliberately narrower than model execution: exact isolated
 runtime-closure verification; imports only of pinned `mlx.core` and `mlx_lm` plus transitive files

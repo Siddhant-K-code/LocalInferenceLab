@@ -345,7 +345,10 @@ def _parser() -> argparse.ArgumentParser:
     runtime_qualification_create.add_argument("output", type=Path)
     runtime_qualification_verify = mlx_commands.add_parser(
         "runtime-qualification-verify",
-        help="strictly verify and reconstruct one static qualification record",
+        help=(
+            "reconstruct a current registry-bound record or verify exact historical replay "
+            "as non-promotable"
+        ),
     )
     runtime_qualification_verify.add_argument("record", type=Path)
     runtime_qualification_inspect = mlx_commands.add_parser(
@@ -385,7 +388,10 @@ def _parser() -> argparse.ArgumentParser:
     runtime_qualification_pack_create.add_argument("--expected-manifest-id", required=True)
     runtime_qualification_pack_verify = mlx_commands.add_parser(
         "runtime-qualification-pack-verify",
-        help="reconstruct a supplied-pack qualification with the exact pack present",
+        help=(
+            "reconstruct a current supplied-pack record or verify exact historical replay "
+            "as non-promotable"
+        ),
     )
     runtime_qualification_pack_verify.add_argument("candidate", type=Path)
     runtime_qualification_pack_verify.add_argument("manifest", type=Path)
@@ -420,7 +426,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     runtime_preflight_1_1_verify = mlx_commands.add_parser(
         "runtime-preflight-1-1-record-verify",
-        help="strictly verify a schema-1.1 prerequisite/refusal record",
+        help=(
+            "verify current-policy schema-1.1 refusal or exact historical replay as non-promotable"
+        ),
     )
     runtime_preflight_1_1_verify.add_argument("record", type=Path)
     runtime_preflight_1_1_inspect = mlx_commands.add_parser(
@@ -435,7 +443,10 @@ def _parser() -> argparse.ArgumentParser:
     runtime_preflight_1_1_fixture.add_argument("output_root", type=Path)
     runtime_preflight_1_1_replay = mlx_commands.add_parser(
         "runtime-preflight-1-1-fixture-replay",
-        help="replay one closed schema-1.1 refusal fixture without physical runtime action",
+        help=(
+            "replay one exact current or historical closed schema-1.1 refusal fixture "
+            "without physical runtime action"
+        ),
     )
     runtime_preflight_1_1_replay.add_argument("bundle", type=Path)
     mlx_commands.add_parser(

@@ -8,6 +8,7 @@ from typing import cast
 
 import pytest
 
+import localinferencelab.mlx_qualification as qualification_module
 import localinferencelab.mlx_review_registry as registry_module
 import localinferencelab.mlx_wheel_custody as wheel_custody_module
 from localinferencelab.canonical import (
@@ -15,6 +16,7 @@ from localinferencelab.canonical import (
     JsonValue,
     canonical_identity,
     canonical_json,
+    digest_bytes,
     load_canonical_json_file,
 )
 from localinferencelab.mlx_preflight_contract import (
@@ -26,6 +28,7 @@ from localinferencelab.mlx_qualification import (
     INELIGIBLE,
     build_qualification_record,
     historical_incompatible_qualification_package,
+    qualification_inspection,
     synthetic_eligible_qualification_package,
     verify_qualification_record,
 )
@@ -368,18 +371,80 @@ def test_registry_change_after_record_construction_invalidates_record(
         verify_qualification_record(record)
 
 
-def test_old_reviewed_records_fail_and_legacy_fixtures_remain_nonpromotable() -> None:
-    reviewed = build_qualification_record(_candidate())
-    reviewed.pop("review_registry_id")
-    reviewed.pop("review_approval_id")
-    assessment = _dict(reviewed["assessment"])
+def test_exact_base_reviewed_record_replays_but_is_nonpromotable() -> None:
+    reviewed = qualification_module._build_legacy_qualification_record(  # noqa: SLF001
+        _candidate()
+    )
+    assert reviewed["record_id"] == (
+        "sha256:968f4bf20c15f97503ad5f7d3a95025bc40f0f787bf63b4c59d16e0d7d25ded3"
+    )
+    assert digest_bytes(canonical_json(reviewed)) == (
+        "sha256:a6c92d3005dfe9f92cf17ae8f0eddbab0bb680b92938d6dc59bd206ad323bc8b"
+    )
+    assert verify_qualification_record(reviewed) == reviewed
+    inspection = qualification_inspection(reviewed)
+    assert inspection["verification_scope"] == "verified_historical_replay_non_promotable"
+    assert inspection["current_registry_policy_bound"] is False
+    assert inspection["review_registry_id"] is None
+    assert inspection["review_approval_id"] is None
+    assert reviewed["decision"] == INELIGIBLE
+    assert (
+        "reviewed_candidate_not_committed_in_spec:"
+        "sha256:1382dfd5e9f5d19bfa74c8f3a7ad4db5b30d10caddfed3cd62c130242003f45f"
+    ) in _list(reviewed["blockers"])
+
+    current_preflight = inspect_runtime_preflight_record_1_1(
+        build_runtime_preflight_record_1_1(reviewed)
+    )
+    assert current_preflight["verification_scope"] == "current_registry_policy"
+    assert current_preflight["prerequisites_satisfied"] is False
+    assert "qualification_review_registry_is_not_exact" in _list(current_preflight["blockers"])
+
+
+def test_qualification_record_version_confusion_and_fallback_fail_closed() -> None:
+    current = build_qualification_record(_candidate())
+
+    stripped = _copy(current)
+    stripped.pop("review_registry_id")
+    _rehash_record_content = dict(stripped)
+    _rehash_record_content.pop("record_id")
+    stripped["record_id"] = canonical_identity(_rehash_record_content)
+    with pytest.raises(ContractError, match="missing keys"):
+        verify_qualification_record(stripped)
+
+    malformed_legacy = _copy(current)
+    malformed_legacy.pop("review_registry_id")
+    malformed_legacy.pop("review_approval_id")
+    assessment = _dict(malformed_legacy["assessment"])
     assessment.pop("review_registry_id")
     assessment.pop("review_approval_id")
-    reviewed_content = dict(reviewed)
-    reviewed_content.pop("record_id")
-    reviewed["record_id"] = canonical_identity(reviewed_content)
-    with pytest.raises(ContractError, match="missing keys"):
-        verify_qualification_record(reviewed)
+    content = dict(malformed_legacy)
+    content.pop("record_id")
+    malformed_legacy["record_id"] = canonical_identity(content)
+    with pytest.raises(ContractError, match="semantic reconstruction mismatch"):
+        verify_qualification_record(malformed_legacy)
+
+    legacy = qualification_module._build_legacy_qualification_record(  # noqa: SLF001
+        _candidate()
+    )
+    extra = _copy(legacy)
+    extra["legacy_policy_version"] = "deb58ee"
+    content = dict(extra)
+    content.pop("record_id")
+    extra["record_id"] = canonical_identity(content)
+    with pytest.raises(ContractError, match="unknown keys"):
+        verify_qualification_record(extra)
+
+    coordinated = _copy(legacy)
+    coordinated["decision"] = ELIGIBLE
+    coordinated["blockers"] = []
+    _dict(coordinated["assessment"])["decision"] = ELIGIBLE
+    _dict(coordinated["assessment"])["blockers"] = []
+    content = dict(coordinated)
+    content.pop("record_id")
+    coordinated["record_id"] = canonical_identity(content)
+    with pytest.raises(ContractError, match="semantic reconstruction mismatch"):
+        verify_qualification_record(coordinated)
 
     historical = build_qualification_record(historical_incompatible_qualification_package())
     synthetic = build_qualification_record(synthetic_eligible_qualification_package())

@@ -70,6 +70,15 @@ The reconstructed, deliberately uncommitted qualification record is
 and remains `ineligible`. Its exact blockers are only the absent applicable distributions
 `mlx-metal`, `numpy`, `transformers`, `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2`.
 
+The exact pre-registry reviewed qualification record remains byte-stable at
+`sha256:968f4bf20c15f97503ad5f7d3a95025bc40f0f787bf63b4c59d16e0d7d25ded3`,
+and predecessor schema-1.1 spec
+`sha256:23add482023ba3a97ab35dd2b78a6302ef5ae98abd3f5dccaaa341e242d4bf07`
+still reconstructs its exact refusal fixture root
+`sha256:75b6d2f0fedf8a18bf4e0b6fd2d915252be3c3192c028c0d726a7e8174873dcb`.
+These identities are accepted only for verified historical replay and are categorically
+non-promotable under the current pinned-registry policy.
+
 Caller-supplied observation claims are not independent evidence. Canonical identity and exact
 target-field equality may be replayed offline, but claimed provenance remains self-asserted.
 Authoritative observer identity and custody-bound executable/platform measurement are

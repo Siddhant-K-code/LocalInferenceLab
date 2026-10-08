@@ -436,6 +436,15 @@ beside the registry. Every future record still binds
 the unchanged schema-1.0 negative projection, lock, terminal failure, authorization, consumption,
 historical protocol, and historical worker IDs.
 
+Verification preserves deterministic replay of the exact pre-registry record shapes without
+upgrading them. Reviewed qualification and supplied-pack records without registry and approval
+bindings are accepted only through frozen legacy reconstruction and are reported as
+`verified_historical_replay_non_promotable`. Exact old schema-1.1 refusal records and closed
+fixtures likewise replay only under their original spec identity. Legacy records cannot satisfy
+current registry policy, clear current schema-1.1 prerequisites, authorize execution, or become
+current records through field stripping, version relabeling, extra fields, or coordinated
+rehashing.
+
 `mlx runtime-worker-api-evidence-spec` emits the source-only contract, and
 `mlx runtime-worker-api-evidence-verify` strictly replays
 `evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json` offline.

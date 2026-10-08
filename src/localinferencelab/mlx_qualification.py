@@ -53,6 +53,30 @@ _MAX_SOURCE_BYTES = 256 * 1024
 _MAX_SOURCE_EXCERPT_BYTES = 16 * 1024
 _MAX_WHEEL_BYTES = 64 * 1024 * 1024
 _MAX_WHEEL_ENTRIES = 20_000
+_LEGACY_QUALIFICATION_SPEC_ID = (
+    "sha256:17d2f62fd4832a224f3bf61c7aa5b9668d05077ed36d56d1bf873fd63f2ac826"
+)
+_LEGACY_REVIEWED_CANDIDATE_ANCHORS = (
+    "sha256:e4bd7b6f5ce7656d1a490a6e4b39e23e1b9a6acaee55084744a8a267f0007f2c",
+)
+_LEGACY_QUALIFICATION_RECORD_FIELDS = {
+    "assessment",
+    "blockers",
+    "decision",
+    "eligibility_meaning",
+    "qualification_package",
+    "qualification_package_id",
+    "qualification_spec_id",
+    "record_id",
+    "record_type",
+    "schema_1_0_remains_permanently_disabled",
+    "schema_version",
+    "static_action_counters",
+}
+_CURRENT_REVIEWED_QUALIFICATION_RECORD_FIELDS = _LEGACY_QUALIFICATION_RECORD_FIELDS | {
+    "review_approval_id",
+    "review_registry_id",
+}
 _PACKAGE_DOMAINS = {"files.pythonhosted.org"}
 _SOURCE_DOMAINS = {"github.com"}
 _SYNTHETIC_DOMAIN = "fixtures.localinferencelab.invalid"
@@ -2062,7 +2086,11 @@ def _requirement_assessment(
     return assessment, blocker, edge
 
 
-def _qualification_assessment(package: dict[str, JsonValue]) -> dict[str, JsonValue]:
+def _qualification_assessment(
+    package: dict[str, JsonValue],
+    *,
+    legacy_review_policy: bool = False,
+) -> dict[str, JsonValue]:
     target = _mapping(package["target_environment"], "qualification target")
     environment = _marker_environment(target)
     distributions = {
@@ -2118,20 +2146,24 @@ def _qualification_assessment(package: dict[str, JsonValue]) -> dict[str, JsonVa
     review_registry_id: JsonValue = None
     review_approval_id: JsonValue = None
     if candidate_kind == "reviewed_candidate":
-        registry, approval = committed_candidate_review_approval(
-            candidate_package_id=cast("str", package["package_id"]),
-            candidate_review_anchor_id=review_anchor_id,
-            qualification_spec_id=cast("str", package["qualification_spec_id"]),
-            runtime_target_anchor_id=cast("str", target["runtime_target_anchor_id"]),
-            worker_api_evidence_anchor_id=cast(
-                "str",
-                package["worker_api_evidence_anchor_id"],
-            ),
-        )
-        review_registry_id = registry["registry_id"]
-        review_approval_id = None if approval is None else approval["approval_id"]
-        if approval is None:
-            blockers.append(f"reviewed_candidate_not_approved_by_registry:{review_anchor_id}")
+        if legacy_review_policy:
+            if review_anchor_id not in _LEGACY_REVIEWED_CANDIDATE_ANCHORS:
+                blockers.append(f"reviewed_candidate_not_committed_in_spec:{review_anchor_id}")
+        else:
+            registry, approval = committed_candidate_review_approval(
+                candidate_package_id=cast("str", package["package_id"]),
+                candidate_review_anchor_id=review_anchor_id,
+                qualification_spec_id=cast("str", package["qualification_spec_id"]),
+                runtime_target_anchor_id=cast("str", target["runtime_target_anchor_id"]),
+                worker_api_evidence_anchor_id=cast(
+                    "str",
+                    package["worker_api_evidence_anchor_id"],
+                ),
+            )
+            review_registry_id = registry["registry_id"]
+            review_approval_id = None if approval is None else approval["approval_id"]
+            if approval is None:
+                blockers.append(f"reviewed_candidate_not_approved_by_registry:{review_anchor_id}")
     top_requirements = [
         _parse_requirement(item, "top-level requirement")
         for item in cast("list[JsonValue]", package["top_level_requirements"])
@@ -2360,20 +2392,30 @@ def _qualification_assessment(package: dict[str, JsonValue]) -> dict[str, JsonVa
         "wheel_assessments": wheel_assessments,
         "worker_api_assessments": api_assessments,
     }
-    if candidate_kind == "reviewed_candidate":
+    if candidate_kind == "reviewed_candidate" and not legacy_review_policy:
         result["review_registry_id"] = review_registry_id
         result["review_approval_id"] = review_approval_id
     return result
 
 
-def build_qualification_record(package_value: JsonValue) -> dict[str, JsonValue]:
-    """Build the sole deterministic static decision for one candidate package."""
+def _qualification_record(
+    package_value: JsonValue,
+    *,
+    legacy_review_policy: bool,
+) -> dict[str, JsonValue]:
     package = verify_qualification_package(package_value)
-    assessment = _qualification_assessment(package)
+    assessment = _qualification_assessment(
+        package,
+        legacy_review_policy=legacy_review_policy,
+    )
     record: dict[str, JsonValue] = {
         "record_type": "mlx_runtime_qualification_record",
         "schema_version": SCHEMA_VERSION,
-        "qualification_spec_id": qualification_spec()["spec_id"],
+        "qualification_spec_id": (
+            _LEGACY_QUALIFICATION_SPEC_ID
+            if legacy_review_policy
+            else qualification_spec()["spec_id"]
+        ),
         "qualification_package": package,
         "qualification_package_id": package["package_id"],
         "assessment": assessment,
@@ -2385,11 +2427,20 @@ def build_qualification_record(package_value: JsonValue) -> dict[str, JsonValue]
         "schema_1_0_remains_permanently_disabled": True,
         "static_action_counters": dict(_ZERO_ACTION_COUNTERS),
     }
-    if package["candidate_kind"] == "reviewed_candidate":
+    if package["candidate_kind"] == "reviewed_candidate" and not legacy_review_policy:
         record["review_registry_id"] = assessment["review_registry_id"]
         record["review_approval_id"] = assessment["review_approval_id"]
     record["record_id"] = canonical_identity(record)
     return record
+
+
+def _build_legacy_qualification_record(package_value: JsonValue) -> dict[str, JsonValue]:
+    return _qualification_record(package_value, legacy_review_policy=True)
+
+
+def build_qualification_record(package_value: JsonValue) -> dict[str, JsonValue]:
+    """Build the sole deterministic static decision for one candidate package."""
+    return _qualification_record(package_value, legacy_review_policy=False)
 
 
 def verify_qualification_record(value: JsonValue) -> dict[str, JsonValue]:
@@ -2400,27 +2451,28 @@ def verify_qualification_record(value: JsonValue) -> dict[str, JsonValue]:
         "qualification_record.qualification_package",
     )
     candidate_kind = package_value.get("candidate_kind")
-    fields = {
-        "assessment",
-        "blockers",
-        "decision",
-        "eligibility_meaning",
-        "qualification_package",
-        "qualification_package_id",
-        "qualification_spec_id",
-        "record_id",
-        "record_type",
-        "schema_1_0_remains_permanently_disabled",
-        "schema_version",
-        "static_action_counters",
-    }
-    if candidate_kind == "reviewed_candidate":
-        fields.update({"review_approval_id", "review_registry_id"})
-    _keys(record, fields, "mlx_runtime_qualification_record")
+    record_fields = set(record)
+    if record_fields == _CURRENT_REVIEWED_QUALIFICATION_RECORD_FIELDS:
+        if candidate_kind != "reviewed_candidate":
+            raise ContractError("registry-bound qualification records require a reviewed candidate")
+        legacy_review_policy = False
+    elif record_fields == _LEGACY_QUALIFICATION_RECORD_FIELDS:
+        legacy_review_policy = candidate_kind == "reviewed_candidate"
+    else:
+        expected = (
+            _CURRENT_REVIEWED_QUALIFICATION_RECORD_FIELDS
+            if {"review_approval_id", "review_registry_id"} & record_fields
+            else _LEGACY_QUALIFICATION_RECORD_FIELDS
+        )
+        _keys(record, expected, "mlx_runtime_qualification_record")
+        raise ContractError("unsupported MLX runtime qualification record shape")
+    expected_spec_id = (
+        _LEGACY_QUALIFICATION_SPEC_ID if legacy_review_policy else qualification_spec()["spec_id"]
+    )
     if (
         record["record_type"] != "mlx_runtime_qualification_record"
         or record["schema_version"] != SCHEMA_VERSION
-        or record["qualification_spec_id"] != qualification_spec()["spec_id"]
+        or record["qualification_spec_id"] != expected_spec_id
         or record["schema_1_0_remains_permanently_disabled"] is not True
     ):
         raise ContractError("unsupported MLX runtime qualification record")
@@ -2431,7 +2483,7 @@ def verify_qualification_record(value: JsonValue) -> dict[str, JsonValue]:
         "qualification_record.static_action_counters",
     )
     package = verify_qualification_package(record["qualification_package"])
-    if package["candidate_kind"] == "reviewed_candidate":
+    if package["candidate_kind"] == "reviewed_candidate" and not legacy_review_policy:
         _sha256(
             record["review_registry_id"],
             "qualification_record.review_registry_id",
@@ -2446,7 +2498,11 @@ def verify_qualification_record(value: JsonValue) -> dict[str, JsonValue]:
     del content["record_id"]
     if identity != canonical_identity(content):
         raise ContractError("qualification record identity mismatch")
-    rebuilt = build_qualification_record(package)
+    rebuilt = (
+        _build_legacy_qualification_record(package)
+        if legacy_review_policy
+        else build_qualification_record(package)
+    )
     if canonical_json(rebuilt) != canonical_json(record):
         raise ContractError("qualification record semantic reconstruction mismatch")
     return dict(record)
@@ -2488,8 +2544,18 @@ def qualification_inspection(value: JsonValue) -> dict[str, JsonValue]:
         "static_action_counters": dict(_ZERO_ACTION_COUNTERS),
     }
     if package["candidate_kind"] == "reviewed_candidate":
-        inspection["review_registry_id"] = record["review_registry_id"]
-        inspection["review_approval_id"] = record["review_approval_id"]
+        legacy_replay = set(record) == _LEGACY_QUALIFICATION_RECORD_FIELDS
+        inspection["review_registry_id"] = record.get("review_registry_id")
+        inspection["review_approval_id"] = record.get("review_approval_id")
+        inspection["verification_scope"] = (
+            "verified_historical_replay_non_promotable"
+            if legacy_replay
+            else "current_registry_policy"
+        )
+        inspection["current_registry_policy_bound"] = not legacy_replay
+    else:
+        inspection["verification_scope"] = "synthetic_or_historical_non_promotable"
+        inspection["current_registry_policy_bound"] = False
     return inspection
 
 

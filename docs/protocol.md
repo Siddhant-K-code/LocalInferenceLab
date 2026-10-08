@@ -405,6 +405,12 @@ neither caller-supplied allowlists nor caller-supplied expected registry IDs. Mi
 substituted, duplicate, ambiguous, or nonmatching registry state fails closed. No real eligible
 qualification record is committed here, and no runtime action is authorized.
 
+Exact records created before registry binding remain replayable without changing their bytes or
+identities. Their old field sets select immutable legacy reconstruction; no caller-provided version
+or downgrade flag is accepted. Legacy reviewed qualification and supplied-pack records are always
+reported as `verified_historical_replay_non_promotable` and cannot clear either current review
+blocker. Current reviewed records are the only forms that bind the pinned registry and approval.
+
 ## Prospective schema-1.1 model-free runtime-preflight protocol
 
 Schema 1.1 is a contract/refusal layer only. It defines no worker or execution command. Its current
@@ -422,6 +428,13 @@ used by reconstruction. The synthetic-positive fixture is rejected by candidate 
 registry binding even though it exercises the schema-1.0 positive decision. Historical schema-1.0
 records are rejected by candidate kind, decision, and missing registry binding. Their frozen
 records and identities are never rewritten.
+
+The exact predecessor schema-1.1 spec ID
+`sha256:23add482023ba3a97ab35dd2b78a6302ef5ae98abd3f5dccaaa341e242d4bf07`
+remains accepted only to reconstruct its historical refusal records and closed fixture root
+`sha256:75b6d2f0fedf8a18bf4e0b6fd2d915252be3c3192c028c0d726a7e8174873dcb`.
+The active registry-bound spec has a distinct identity. Replay rejects unknown identities, mixed
+old/new bundles, extra or stripped fields, and malformed current records relabeled as legacy.
 
 The authorization prerequisite cannot be satisfied in this milestone. Authoritative acquisition,
 current-expiry observation, exclusive consumption/non-reuse, and independently verified

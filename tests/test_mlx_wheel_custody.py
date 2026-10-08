@@ -34,6 +34,7 @@ from localinferencelab.mlx_wheel_custody import (
     build_wheel_evidence_manifest,
     load_supplied_pack_qualification_record,
     load_wheel_evidence_manifest,
+    supplied_pack_qualification_inspection,
     verify_supplied_pack_qualification_record,
     verify_supplied_wheel_pack,
     verify_wheel_evidence_manifest,
@@ -875,6 +876,119 @@ def test_supplied_pack_qualification_requires_reconstruction(
     with pytest.raises(ContractError, match="member set mismatch"):
         verify_supplied_pack_qualification_record(
             record,
+            candidate,
+            manifest,
+            pack,
+            manifest_id,
+        )
+
+
+def test_exact_base_supplied_pack_record_replays_without_promotion(
+    tmp_path: Path,
+) -> None:
+    candidate = _reviewed_candidate()
+    current_candidate_record = build_qualification_record(candidate)
+    assessment = _dict(current_candidate_record["assessment"])
+    manifest, wheels = _candidate_manifest(
+        candidate,
+        cast("str", assessment["review_anchor_id"]),
+    )
+    pack = tmp_path / "pack"
+    _write_pack(pack, wheels)
+    manifest_id = cast("str", manifest["manifest_id"])
+
+    legacy = wheel_custody_module._build_legacy_supplied_pack_qualification_record(  # noqa: SLF001
+        candidate,
+        manifest,
+        pack,
+        manifest_id,
+    )
+    assert legacy["record_id"] == (
+        "sha256:f7feb79a72fd8bf812983e8235a0dcb0462caf322b501f7001ea9766b7b1154f"
+    )
+    assert digest_bytes(canonical_json(legacy)) == (
+        "sha256:e2e979896e61e8062ac868279561f9e4c995c92583217184118bd9f3c0410acd"
+    )
+    assert (
+        verify_supplied_pack_qualification_record(
+            legacy,
+            candidate,
+            manifest,
+            pack,
+            manifest_id,
+        )
+        == legacy
+    )
+    inspection = supplied_pack_qualification_inspection(legacy)
+    assert inspection["verification_scope"] == "verified_historical_replay_non_promotable"
+    assert inspection["current_registry_policy_bound"] is False
+    assert inspection["review_registry_id"] is None
+    assert inspection["review_approval_id"] is None
+    assert legacy["decision"] == "ineligible"
+
+    current = build_supplied_pack_qualification_record(
+        candidate,
+        manifest,
+        pack,
+        manifest_id,
+    )
+    stripped = _copy(current)
+    stripped.pop("review_approval_id")
+    content = dict(stripped)
+    content.pop("record_id")
+    stripped["record_id"] = canonical_identity(content)
+    with pytest.raises(ContractError, match="missing keys"):
+        verify_supplied_pack_qualification_record(
+            stripped,
+            candidate,
+            manifest,
+            pack,
+            manifest_id,
+        )
+
+    malformed_legacy = _copy(current)
+    malformed_legacy.pop("review_registry_id")
+    malformed_legacy.pop("review_approval_id")
+    malformed_assessment = _dict(malformed_legacy["assessment"])
+    malformed_assessment.pop("review_registry_id")
+    malformed_assessment.pop("review_approval_id")
+    content = dict(malformed_legacy)
+    content.pop("record_id")
+    malformed_legacy["record_id"] = canonical_identity(content)
+    with pytest.raises(ContractError, match="semantic reconstruction mismatch"):
+        verify_supplied_pack_qualification_record(
+            malformed_legacy,
+            candidate,
+            manifest,
+            pack,
+            manifest_id,
+        )
+
+    extra = _copy(legacy)
+    extra["legacy_policy_version"] = "deb58ee"
+    content = dict(extra)
+    content.pop("record_id")
+    extra["record_id"] = canonical_identity(content)
+    with pytest.raises(ContractError, match="unknown keys"):
+        verify_supplied_pack_qualification_record(
+            extra,
+            candidate,
+            manifest,
+            pack,
+            manifest_id,
+        )
+
+    coordinated = _copy(legacy)
+    coordinated["decision"] = "eligible_for_new_observed_authorization"
+    coordinated["blockers"] = []
+    _dict(coordinated["assessment"])["decision"] = "eligible_for_new_observed_authorization"
+    _dict(coordinated["assessment"])["blockers"] = []
+    content = dict(coordinated)
+    content.pop("record_id")
+    coordinated["record_id"] = canonical_identity(content)
+    with pytest.raises(ContractError, match="semantic reconstruction mismatch"):
+        verify_supplied_pack_qualification_record(
+            coordinated,
             candidate,
             manifest,
             pack,

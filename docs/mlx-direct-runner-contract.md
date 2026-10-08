@@ -455,6 +455,11 @@ A record requires both:
 The pinned registry includes the separately reviewed real-candidate evidence anchor described
 above, but no eligible qualification record exists for it. The synthetic positive fixture and the
 frozen historical record therefore deterministically refuse and cannot be used as substitutes.
+Exact pre-registry qualification, supplied-pack, and schema-1.1 refusal records remain
+deterministically verifiable under frozen reconstruction solely as historical, non-promotable
+replay. They do not acquire registry bindings, cannot satisfy the active schema-1.1 prerequisite,
+and cannot authorize execution. Current records never fall back to legacy verification after
+missing fields, added fields, spec relabeling, or semantic reconstruction failure.
 The authorization prerequisite is also categorically unsatisfied: caller-supplied claim structures
 cannot establish custody or independent bindings. No current input combination can make
 `prerequisites_satisfied=true`, and execution remains disabled.
