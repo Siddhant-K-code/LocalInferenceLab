@@ -64,6 +64,17 @@ binds bytes; it does not create authority.
 | [Current sources](docs/research/current-sources.md) | Immutable upstream revisions and claim boundaries |
 | [MLX static runbook](docs/runbooks/mlx-prospective-study.md) | Offline commands and refusal-only custody checks |
 
+<details>
+<summary>Synthetic refusal-fixture anchors</summary>
+
+- Runtime manifest: `sha256:226617353dc742bda9efa02f6083b3733832659f77add8fb20c4da0e953c31b0`
+- Model manifest: `sha256:b29d33d9fba77c827dc62c4b5b83536f65b5b78ad24d3bf5b84cf7379a08ebcf`
+- Package: `sha256:7710436299a426d07cb235084a1891db87ed4c810b65a5e5215fba69b6797ddb`
+- Bundle: `sha256:fd99954d8c0643719510a8f3b9f3ed15e342bc1f775a3e0d6d2cd37b5e489454`
+
+These identify synthetic contract evidence, not observed runtime behavior.
+</details>
+
 Explore the command surface without running a model:
 
 ```bash
