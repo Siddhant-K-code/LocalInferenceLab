@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" viewBox="0 0 1200 520">
+  <title id="title">Determinism atlas preview</title>
+  <desc id="desc">A schematic grid counts 48 prospective operation cells. Eight are represented by synthetic fixtures. No cell contains an accepted physical MLX or Metal observation.</desc>
+
+  <rect width="1200" height="520" fill="#0b1020"/>
+  <text x="60" y="62" fill="#f7f9ff" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="700">A future atlas, not a benchmark</text>
+  <text x="60" y="96" fill="#b9c6e4" font-family="Arial, Helvetica, sans-serif" font-size="19">The grid defines comparison slots before any physical observation is accepted.</text>
+
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="60" y="146" fill="#9eb0d5" font-size="14" font-weight="700" letter-spacing="1.4">48 PROSPECTIVE CELLS</text>
+
+    <g fill="#25314d" stroke="#53617f" stroke-width="2">
+      <rect x="60" y="168" width="42" height="42" rx="6"/><rect x="112" y="168" width="42" height="42" rx="6"/><rect x="164" y="168" width="42" height="42" rx="6"/><rect x="216" y="168" width="42" height="42" rx="6"/><rect x="268" y="168" width="42" height="42" rx="6"/><rect x="320" y="168" width="42" height="42" rx="6"/><rect x="372" y="168" width="42" height="42" rx="6"/><rect x="424" y="168" width="42" height="42" rx="6"/>
+      <rect x="60" y="220" width="42" height="42" rx="6"/><rect x="112" y="220" width="42" height="42" rx="6"/><rect x="164" y="220" width="42" height="42" rx="6"/><rect x="216" y="220" width="42" height="42" rx="6"/><rect x="268" y="220" width="42" height="42" rx="6"/><rect x="320" y="220" width="42" height="42" rx="6"/><rect x="372" y="220" width="42" height="42" rx="6"/><rect x="424" y="220" width="42" height="42" rx="6"/>
+      <rect x="60" y="272" width="42" height="42" rx="6"/><rect x="112" y="272" width="42" height="42" rx="6"/><rect x="164" y="272" width="42" height="42" rx="6"/><rect x="216" y="272" width="42" height="42" rx="6"/><rect x="268" y="272" width="42" height="42" rx="6"/><rect x="320" y="272" width="42" height="42" rx="6"/><rect x="372" y="272" width="42" height="42" rx="6"/><rect x="424" y="272" width="42" height="42" rx="6"/>
+      <rect x="60" y="324" width="42" height="42" rx="6"/><rect x="112" y="324" width="42" height="42" rx="6"/><rect x="164" y="324" width="42" height="42" rx="6"/><rect x="216" y="324" width="42" height="42" rx="6"/><rect x="268" y="324" width="42" height="42" rx="6"/><rect x="320" y="324" width="42" height="42" rx="6"/><rect x="372" y="324" width="42" height="42" rx="6"/><rect x="424" y="324" width="42" height="42" rx="6"/>
+      <rect x="60" y="376" width="42" height="42" rx="6"/><rect x="112" y="376" width="42" height="42" rx="6"/><rect x="164" y="376" width="42" height="42" rx="6"/><rect x="216" y="376" width="42" height="42" rx="6"/><rect x="268" y="376" width="42" height="42" rx="6"/><rect x="320" y="376" width="42" height="42" rx="6"/><rect x="372" y="376" width="42" height="42" rx="6"/><rect x="424" y="376" width="42" height="42" rx="6"/>
+      <rect x="60" y="428" width="42" height="42" rx="6"/><rect x="112" y="428" width="42" height="42" rx="6"/><rect x="164" y="428" width="42" height="42" rx="6"/><rect x="216" y="428" width="42" height="42" rx="6"/><rect x="268" y="428" width="42" height="42" rx="6"/><rect x="320" y="428" width="42" height="42" rx="6"/><rect x="372" y="428" width="42" height="42" rx="6"/><rect x="424" y="428" width="42" height="42" rx="6"/>
+    </g>
+
+    <g fill="#55d8bd" stroke="#a1f4df" stroke-width="2">
+      <rect x="60" y="168" width="42" height="42" rx="6"/><rect x="112" y="168" width="42" height="42" rx="6"/><rect x="164" y="168" width="42" height="42" rx="6"/><rect x="216" y="168" width="42" height="42" rx="6"/>
+      <rect x="268" y="168" width="42" height="42" rx="6"/><rect x="320" y="168" width="42" height="42" rx="6"/><rect x="372" y="168" width="42" height="42" rx="6"/><rect x="424" y="168" width="42" height="42" rx="6"/>
+    </g>
+
+    <rect x="520" y="160" width="620" height="310" rx="14" fill="#151d30" stroke="#34415f" stroke-width="2"/>
+
+    <circle cx="565" cy="213" r="13" fill="#25314d" stroke="#53617f" stroke-width="2"/>
+    <text x="596" y="221" fill="#f7f9ff" font-size="24" font-weight="700">48</text>
+    <text x="650" y="221" fill="#cbd5eb" font-size="18">prospective operation cells</text>
+
+    <circle cx="565" cy="281" r="13" fill="#55d8bd" stroke="#a1f4df" stroke-width="2"/>
+    <text x="596" y="289" fill="#f7f9ff" font-size="24" font-weight="700">8</text>
+    <text x="636" y="289" fill="#cbd5eb" font-size="18">synthetic represented cells</text>
+
+    <circle cx="565" cy="349" r="13" fill="none" stroke="#ffb86c" stroke-width="3"/>
+    <text x="596" y="357" fill="#f7f9ff" font-size="24" font-weight="700">0</text>
+    <text x="636" y="357" fill="#cbd5eb" font-size="18">accepted physical MLX / Metal observations</text>
+
+    <path d="M555 409H1104" stroke="#34415f" stroke-width="1"/>
+    <text x="555" y="441" fill="#ffcf9b" font-size="17" font-weight="700">Synthetic means contract evidence only.</text>
+  </g>
+</svg>
