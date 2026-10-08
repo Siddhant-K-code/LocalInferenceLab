@@ -38,7 +38,10 @@ include = [
   "/src",
   "/tests",
   "/docs",
+  "/evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json",
+  "/evidence/mlx-runtime-qualification-mlx-0.30.4-mlx-lm-0.30.6-macos-arm64-py313-v1.json",
   "/evidence/mlx-static-evidence-review-registry-v1.json",
+  "/evidence/mlx-wheel-closure-mlx-0.30.4-mlx-lm-0.30.6-macos-arm64-py313-v1.json",
   "/README.md",
   "/LICENSE",
   "/Makefile",
@@ -50,7 +53,10 @@ include = [
 packages = ["src/localinferencelab"]
 
 [tool.hatch.build.targets.wheel.force-include]
+"evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json" = "localinferencelab/evidence/mlx-runtime-candidate-mlx-0.30.4-mlx-lm-0.30.6-v1.json"
+"evidence/mlx-runtime-qualification-mlx-0.30.4-mlx-lm-0.30.6-macos-arm64-py313-v1.json" = "localinferencelab/evidence/mlx-runtime-qualification-mlx-0.30.4-mlx-lm-0.30.6-macos-arm64-py313-v1.json"
 "evidence/mlx-static-evidence-review-registry-v1.json" = "localinferencelab/evidence/mlx-static-evidence-review-registry-v1.json"
+"evidence/mlx-wheel-closure-mlx-0.30.4-mlx-lm-0.30.6-macos-arm64-py313-v1.json" = "localinferencelab/evidence/mlx-wheel-closure-mlx-0.30.4-mlx-lm-0.30.6-macos-arm64-py313-v1.json"
 
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers -ra"

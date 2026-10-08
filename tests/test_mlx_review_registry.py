@@ -32,6 +32,9 @@ from localinferencelab.mlx_qualification import (
     synthetic_eligible_qualification_package,
     verify_qualification_record,
 )
+from localinferencelab.mlx_qualification_publication import (
+    committed_qualification_publication_record,
+)
 from localinferencelab.mlx_review_registry import (
     EXPECTED_REVIEW_REGISTRY_ID,
     committed_candidate_review_approval,
@@ -463,9 +466,9 @@ def test_qualification_record_version_confusion_and_fallback_fail_closed() -> No
     assert "qualification_review_registry_is_not_exact" in _list(synthetic_preflight["blockers"])
 
 
-def test_no_final_eligible_qualification_record_is_published_with_registry() -> None:
+def test_candidate_only_record_stays_ineligible_beside_final_publication() -> None:
     candidate_record = build_qualification_record(_candidate())
     assert candidate_record["decision"] == INELIGIBLE
-    assert not any(
-        path.name.endswith("-qualification-record.json") for path in Path("evidence").iterdir()
-    )
+    publication = committed_qualification_publication_record()
+    assert publication["decision"] == ELIGIBLE
+    assert publication["blockers"] == []

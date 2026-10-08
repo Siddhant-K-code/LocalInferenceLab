@@ -59,7 +59,8 @@ not a tokens-per-second leaderboard and it does not infer determinism from a see
 > ambiguous, or metadata-drifting members. Qualification consumes only the repository-pinned
 > review registry, whose approval binds the exact candidate, manifest, pack spec, and verified
 > receipt identities. A committed manifest or record alone never proves that the wheel bytes were
-> locally present, and the final eligible record remains a separate later publication.
+> locally present. The separately published canonical qualification record replays the reviewed
+> receipt offline, derives zero blockers, and is eligible only for a new human authorization review.
 > The prospective schema-1.1 contract now defines those prerequisite and result shapes without
 > making execution reachable. It accepts only a committed eligible `reviewed_candidate`
 > qualification record bound to the exact pinned review registry. Authoritative authorization
@@ -281,6 +282,9 @@ localinferencelab mlx runtime-qualification-verify RECORD.json
 localinferencelab mlx runtime-qualification-inspect RECORD.json
 localinferencelab mlx runtime-qualification-fixture-compile OUTPUT_ROOT
 localinferencelab mlx runtime-qualification-replay CLOSED-QUALIFICATION-BUNDLE
+localinferencelab mlx runtime-qualification-publication-compile RECORD.json
+localinferencelab mlx runtime-qualification-publication-replay RECORD.json
+localinferencelab mlx runtime-qualification-publication-inspect RECORD.json
 localinferencelab mlx runtime-preflight-1-1-capability-report
 localinferencelab mlx runtime-preflight-1-1-protocol > PREFLIGHT-1-1-PROTOCOL.json
 localinferencelab mlx runtime-preflight-1-1-spec > PREFLIGHT-1-1-SPEC.json
@@ -431,8 +435,11 @@ and approval ID
 `sha256:03897777a7460b2000b808504268f7654176793181467d2b391468a432837f42`.
 The approval binds the exact candidate anchor/package/spec/target/worker identities, closure
 manifest, pack spec, and verified receipt. New reviewed-candidate records bind the exact registry
-and approval IDs used by reconstruction. No final eligible qualification record is committed
-beside the registry. Every future record still binds
+and approval IDs used by reconstruction. The separately committed canonical publication record is
+`sha256:419c6db9924a1da7ef815b445cc1412e3a0c19b9040cae3a26ef583f81eb8a21`.
+It mechanically derives `eligible_for_new_observed_authorization` with zero blockers. Offline
+replay reconstructs the exact reviewed receipt from manifest-bound aggregates; it does not claim
+that wheel bytes are currently present. Every future record still binds
 the unchanged schema-1.0 negative projection, lock, terminal failure, authorization, consumption,
 historical protocol, and historical worker IDs.
 
@@ -593,9 +600,9 @@ The project does not claim that:
    supplied metadata/source evidence without installing or importing it.
 2. Independently supply and verify the exact 34-wheel pack named by the reviewed closure manifest.
    The pinned registry clears both review blockers only for the exact manifest and verified receipt;
-   distribution blockers close only while those exact bytes are present. Publishing the resulting
-   eligible qualification record remains a separate later PR. The synthetic positive fixture and
-   historical records remain categorically insufficient.
+   the published static record binds that reviewed receipt, derives zero blockers, and remains
+   explicit that it proves no current wheel presence. The synthetic positive fixture and historical
+   records remain categorically insufficient.
 3. Review the prospective schema-1.1 protocol/spec and separately design the worker plus
    authoritative acquisition, current-expiry, exclusive-consumption/non-reuse, and independent
    output-root/nonce custody; the present contract machinery cannot unlock physical action.

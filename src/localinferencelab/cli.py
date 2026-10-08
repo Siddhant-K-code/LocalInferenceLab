@@ -58,6 +58,11 @@ from localinferencelab.mlx_qualification import (
     worker_api_evidence_spec,
     write_qualification_record,
 )
+from localinferencelab.mlx_qualification_publication import (
+    compile_qualification_publication_record,
+    load_qualification_publication_record,
+    qualification_publication_inspection,
+)
 from localinferencelab.mlx_review_registry import (
     committed_review_registry_inspection,
     review_registry_spec,
@@ -398,6 +403,21 @@ def _parser() -> argparse.ArgumentParser:
     runtime_qualification_pack_verify.add_argument("pack_root", type=Path)
     runtime_qualification_pack_verify.add_argument("record", type=Path)
     runtime_qualification_pack_verify.add_argument("--expected-manifest-id", required=True)
+    runtime_qualification_publication_compile = mlx_commands.add_parser(
+        "runtime-qualification-publication-compile",
+        help="compile the sole registry-bound real qualification publication record",
+    )
+    runtime_qualification_publication_compile.add_argument("output", type=Path)
+    runtime_qualification_publication_replay = mlx_commands.add_parser(
+        "runtime-qualification-publication-replay",
+        help="replay the published record offline without wheel bytes, processes, or network",
+    )
+    runtime_qualification_publication_replay.add_argument("record", type=Path)
+    runtime_qualification_publication_inspect = mlx_commands.add_parser(
+        "runtime-qualification-publication-inspect",
+        help="inspect the published static result, limitations, and next human gate",
+    )
+    runtime_qualification_publication_inspect.add_argument("record", type=Path)
     mlx_commands.add_parser(
         "runtime-preflight-1-1-capability-report",
         help="report the prospective model-free schema-1.1 contract with execution unreachable",
@@ -945,6 +965,25 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
             )
             output = supplied_pack_qualification_inspection(supplied_pack_record)
             output["status"] = "valid"
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-qualification-publication-compile":
+            publication_record = compile_qualification_publication_record(args.output)
+            output = qualification_publication_inspection(publication_record)
+            output["status"] = "compiled"
+            _emit(output)
+            return 0
+        if args.mlx_command in {
+            "runtime-qualification-publication-replay",
+            "runtime-qualification-publication-inspect",
+        }:
+            publication_record = load_qualification_publication_record(args.record)
+            output = qualification_publication_inspection(publication_record)
+            output["status"] = (
+                "replayed"
+                if args.mlx_command == "runtime-qualification-publication-replay"
+                else "inspected"
+            )
             _emit(output)
             return 0
         if args.mlx_command == "runtime-preflight-1-1-capability-report":
