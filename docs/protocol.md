@@ -340,8 +340,9 @@ full 3.13.15 value; wheel compatibility remains `cp313`-scoped. The pair depende
 source/API surfaces are satisfied, while the absent `mlx-metal`, `numpy`, `transformers`,
 `sentencepiece`, `protobuf`, `pyyaml`, and `jinja2` distributions keep the candidate-only result
 deterministically ineligible. The candidate review blocker is cleared only by the exact pinned
-registry. No eligible qualification record is committed with that registry. Historical and
-synthetic projections remain non-promotable.
+registry. The final publication combines it with the reviewed closure receipt and derives zero
+blockers without promoting the candidate-only record. Historical and synthetic projections remain
+non-promotable.
 
 The prior prospective value 3.13.0 is superseded. A bounded development-host observation of an
 already available 3.13.15 interpreter is retained in the target anchor without its private
@@ -396,14 +397,20 @@ recursive gaps, and coordinated rehashing against the trusted ID. No network is 
 verification or record reconstruction.
 
 A successful pack receipt proves only that those exact supplied bytes were present for that
-verification. A committed manifest does not. A later record may remove distribution blockers only
-by reconstructing with the pack present. The pinned registry clears both independent-review
-blockers only when every exact identity matches, including verified receipt
+verification. A committed manifest does not. Publication compilation requires the exact supplied
+pack and may obtain the approved receipt only from direct bounded verification of every wheel byte
+stream. Offline replay consumes the exact immutable receipt as prior reviewed attestation, reports
+that pack bytes were not reverified, and does not claim current pack presence. The pinned registry
+clears both independent-review blockers only when every exact identity matches, including verified receipt
 `sha256:6eb636208a880f49b7ece6571dd20a5b3465996692683bfa9b8e873a0f68b07c`.
 Generic registry and manifest verification remain caller-addressable, but qualification consumes
 neither caller-supplied allowlists nor caller-supplied expected registry IDs. Missing, altered,
-substituted, duplicate, ambiguous, or nonmatching registry state fails closed. No real eligible
-qualification record is committed here, and no runtime action is authorized.
+substituted, duplicate, ambiguous, or nonmatching registry state fails closed. The canonical
+publication record
+`sha256:3d789caf4e65581265dc686aed30df0d4612388710b20a2dabc36e2d906711df`
+derives `eligible_for_new_observed_authorization` with zero blockers. This is static coherence only;
+it proves no install, import, execution, Metal/device/synchronization/model fact, authorization, or
+permission to run.
 
 Exact records created before registry binding remain replayable without changing their bytes or
 identities. Their old field sets select immutable legacy reconstruction; no caller-provided version

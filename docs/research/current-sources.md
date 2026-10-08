@@ -123,10 +123,13 @@ Private inert verification produced receipt
 `sha256:6eb636208a880f49b7ece6571dd20a5b3465996692683bfa9b8e873a0f68b07c`.
 The pinned registry binds that receipt and the exact manifest/pack-spec identities. Deterministic
 registry matching clears both independent-review blockers only for all exact identities; any
-wrong package, spec, target, worker, manifest, pack, or receipt identity remains unapproved. No
-final eligible record is committed beside the registry. A later separate PR must reconstruct and
-publish that record with the supplied pack present. These identities do not authorize
-installation, import, execution, MLX/Metal access, or model action.
+wrong package, spec, target, worker, manifest, pack, or receipt identity remains unapproved. The
+canonical publication record
+`sha256:3d789caf4e65581265dc686aed30df0d4612388710b20a2dabc36e2d906711df`
+was compiled only after direct verification of all 34 exact supplied wheels and derives zero
+blockers. Offline replay consumes its immutable receipt as prior reviewed attestation, reports that
+pack bytes were not reverified, and does not claim current wheel presence. These identities do not
+authorize installation, import, execution, MLX/Metal access, or model action.
 
 ## Candidate worker API source evidence
 

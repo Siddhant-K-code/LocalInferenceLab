@@ -434,9 +434,11 @@ offline verifier can establish that the caller actually supplied the exact pack.
 verified, distribution blockers are removed. The registry clears both review blockers only for
 the exact candidate, manifest, pack spec, and verified receipt
 `sha256:6eb636208a880f49b7ece6571dd20a5b3465996692683bfa9b8e873a0f68b07c`.
-No final eligible record is published here; a later separate PR must construct and publish it from
-the independently merged registry. No runtime action is authorized, preserving separate review of
-evidence, mechanism, and decision.
+The separately published canonical record
+`sha256:3d789caf4e65581265dc686aed30df0d4612388710b20a2dabc36e2d906711df`
+derives static eligibility with zero blockers from those exact reviewed identities. It neither
+claims current wheel presence nor authorizes runtime action, preserving separate review of
+evidence, mechanism, decision, and any future authorization.
 
 ## Prospective schema-1.1 model-free contract
 
@@ -452,9 +454,9 @@ A record requires both:
 2. future authoritative one-shot authorization acquisition, current-expiry observation,
    exclusive consumption/non-reuse, and independently verified output-root and nonce facts.
 
-The pinned registry includes the separately reviewed real-candidate evidence anchor described
-above, but no eligible qualification record exists for it. The synthetic positive fixture and the
-frozen historical record therefore deterministically refuse and cannot be used as substitutes.
+The pinned registry and separately published real-candidate qualification record described above
+establish only static eligibility for a new human review. The synthetic positive fixture and the
+frozen historical record still deterministically refuse and cannot be used as substitutes.
 Exact pre-registry qualification, supplied-pack, and schema-1.1 refusal records remain
 deterministically verifiable under frozen reconstruction solely as historical, non-promotable
 replay. They do not acquire registry bindings, cannot satisfy the active schema-1.1 prerequisite,

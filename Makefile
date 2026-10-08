@@ -22,10 +22,12 @@ build-smoke: build
 	uv venv .artifacts/install-wheel
 	UV_NO_NETWORK=1 uv pip install --python .artifacts/install-wheel/bin/python --no-index dist/*.whl
 	.artifacts/install-wheel/bin/python -c "import localinferencelab; assert localinferencelab.__version__ == '0.1.0'"
+	.artifacts/install-wheel/bin/python -c "from localinferencelab.mlx_qualification_publication import committed_qualification_publication_record as load; assert load()['record_id'] == 'sha256:3d789caf4e65581265dc686aed30df0d4612388710b20a2dabc36e2d906711df'"
 	uv venv .artifacts/install-sdist
 	UV_NO_NETWORK=1 uv pip install --python .artifacts/install-sdist/bin/python hatchling==1.27.0
 	UV_NO_NETWORK=1 uv pip install --python .artifacts/install-sdist/bin/python --no-index --no-build-isolation dist/*.tar.gz
 	.artifacts/install-sdist/bin/python -c "import localinferencelab; assert localinferencelab.__version__ == '0.1.0'"
+	.artifacts/install-sdist/bin/python -c "from localinferencelab.mlx_qualification_publication import committed_qualification_publication_record as load; assert load()['record_id'] == 'sha256:3d789caf4e65581265dc686aed30df0d4612388710b20a2dabc36e2d906711df'"
 
 fixture:
 	rm -rf .artifacts
@@ -64,6 +66,8 @@ fixture:
 	qualification_b=$$(find .artifacts/qualification-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-runtime-qualification-synthetic-v1-*' -print -quit); \
 	diff -r "$$qualification_a" "$$qualification_b" && \
 	uv run localinferencelab mlx runtime-qualification-replay "$$qualification_a"
+	uv run localinferencelab mlx runtime-qualification-publication-replay \
+		evidence/mlx-runtime-qualification-mlx-0.30.4-mlx-lm-0.30.6-macos-arm64-py313-v1.json
 	mkdir .artifacts/preflight-contract-a .artifacts/preflight-contract-b
 	uv run localinferencelab mlx runtime-preflight-1-1-fixture-compile .artifacts/preflight-contract-a
 	uv run localinferencelab mlx runtime-preflight-1-1-fixture-compile .artifacts/preflight-contract-b

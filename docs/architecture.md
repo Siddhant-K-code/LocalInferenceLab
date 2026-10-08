@@ -23,6 +23,7 @@ Every trust transition is represented by immutable canonical data.
 | `mlx_runtime_preflight_worker.py` | Standalone sealed FD-3 runtime-only synthetic worker | After synthetic authorization only, imports bound fake `mlx.core` and `mlx_lm`, queries model-free backend/device/stream facts, and synchronizes; no model action or network/command surface |
 | `mlx_qualification.py` | Canonical static candidate package, dependency/marker/wheel assessment, immutable source-only worker-API evidence verification, sole deterministic decision, and two-outcome closed fixture replay | Explicit record/fixture writes only; no install, network, process, socket, authorization, runtime import, backend, model, or spend action |
 | `mlx_wheel_custody.py` | Content-addressed exact-wheel closure manifests, bounded no-follow supplied-pack verification, and pack-required qualification reconstruction | Reads caller-supplied wheel ZIP bytes and may write a record only; no install, network, package import, wheel-content execution, process, socket, MLX/Metal, model, or spend action |
+| `mlx_qualification_publication.py` | Pinned-evidence final qualification compilation from a directly verified supplied pack, bounded inspection, and prior-attestation offline replay | Compile reads exact supplied wheel bytes through the custody verifier and may write one deterministic record; replay reads committed canonical JSON only; no wheel download, install, import, process, socket, authorization, MLX/Metal, model, or spend action |
 | `mlx_preflight_contract.py` | Prospective schema-1.1 model-free protocol/spec, prerequisite/refusal record, bounded inspection, and deterministic closed-fixture replay | Explicit record/fixture writes only; no authorization creation/consumption, install, import, worker, process, socket, backend/device/Metal, synchronization, model, or spend action |
 | `mlx_determinism_canary.py` | Prospective operation matrix, exact embedded byte vectors, IEEE comparison metrics, strict synthetic result schema, synthetic atlas, and closed replay | Explicit fixture-bundle writes only; no MLX import, process, authorization, backend/device/Metal query, hardware synchronization, MLX tensor/model action, timing, network, cloud, or spend |
 | `ollama.py` | Prospective package, direct numeric-loopback transport, one-shot authorization, bounded execution, terminal custody/replay | Explicit output-root writes; loopback calls only after authorization |
@@ -70,9 +71,11 @@ directory and every basename without following links, requires regular single-li
 rejects missing/extras and ZIP ambiguity, and reconstructs the closure offline. A caller-supplied
 content address is sufficient only for generic pack verification. Qualification instead consumes
 the exact repository-pinned review registry, which binds the unchanged manifest and candidate to
-the exact pack spec and verified receipt. The manifest and any committed qualification record
-explicitly do not attest that a pack was present; reconstruction requires the same supplied pack.
-Publishing the final eligible record remains a separate later change.
+the exact pack spec and verified receipt. Canonical publication compilation requires all exact
+supplied wheels and obtains the success receipt only from the custody verifier after full byte and
+ZIP control-record validation. Offline replay consumes the immutable receipt as prior attestation,
+explicitly reports that pack bytes were not reverified, and refuses to claim current pack presence.
+The publication derives static eligibility only and adds no runtime or authorization surface.
 
 Qualification and supplied-pack verification dispatch by exact canonical field set. Original
 pre-registry forms are reconstructed with the frozen policy that produced them and are exposed

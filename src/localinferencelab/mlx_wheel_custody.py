@@ -183,24 +183,13 @@ class VerifiedWheelEvidencePack:
     pack_spec_id: str
     artifacts: tuple[VerifiedWheelEvidence, ...]
     total_size_bytes: int
+    receipt_bytes: bytes
 
     def receipt(self) -> dict[str, JsonValue]:
-        content: dict[str, JsonValue] = {
-            "record_type": "mlx_wheel_evidence_pack_verification_receipt",
-            "schema_version": SCHEMA_VERSION,
-            "manifest_id": self.manifest_id,
-            "pack_spec_id": self.pack_spec_id,
-            "artifact_count": len(self.artifacts),
-            "total_size_bytes": self.total_size_bytes,
-            "supplied_pack_verified": True,
-            "committed_manifest_alone_proves_supplied_bytes_present": False,
-            "network_actions": 0,
-            "package_installations": 0,
-            "runtime_imports": 0,
-            "process_starts": 0,
-        }
-        content["receipt_id"] = canonical_identity(content)
-        return content
+        receipt = load_json_bytes(self.receipt_bytes)
+        if not isinstance(receipt, dict):
+            raise ContractError("verified wheel pack receipt must be an object")
+        return receipt
 
 
 def _mapping(value: JsonValue, label: str) -> dict[str, JsonValue]:
@@ -1770,11 +1759,27 @@ def verify_supplied_wheel_pack(
     )
     if total_size != expected_total:
         raise ContractError("supplied wheel pack total byte size mismatch")
+    receipt: dict[str, JsonValue] = {
+        "record_type": "mlx_wheel_evidence_pack_verification_receipt",
+        "schema_version": SCHEMA_VERSION,
+        "manifest_id": manifest["manifest_id"],
+        "pack_spec_id": manifest["pack_spec_id"],
+        "artifact_count": len(artifacts),
+        "total_size_bytes": total_size,
+        "supplied_pack_verified": True,
+        "committed_manifest_alone_proves_supplied_bytes_present": False,
+        "network_actions": 0,
+        "package_installations": 0,
+        "runtime_imports": 0,
+        "process_starts": 0,
+    }
+    receipt["receipt_id"] = canonical_identity(receipt)
     return VerifiedWheelEvidencePack(
         cast("str", manifest["manifest_id"]),
         cast("str", manifest["pack_spec_id"]),
         tuple(artifacts),
         total_size,
+        canonical_json(receipt),
     )
 
 
