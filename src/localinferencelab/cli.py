@@ -34,6 +34,13 @@ from localinferencelab.mlx_manifest import (
     load_runtime_scan_spec,
     write_manifest,
 )
+from localinferencelab.mlx_physical_atlas import (
+    compile_physical_atlas_fixture,
+    load_physical_atlas_record,
+    physical_atlas_inspection,
+    physical_atlas_study_spec,
+    replay_physical_atlas_fixture,
+)
 from localinferencelab.mlx_preflight_contract import (
     build_runtime_preflight_record_1_1,
     compile_runtime_preflight_fixture_1_1,
@@ -494,6 +501,30 @@ def _parser() -> argparse.ArgumentParser:
         help="replay one closed synthetic canary bundle without physical actions",
     )
     determinism_replay.add_argument("bundle", type=Path)
+    mlx_commands.add_parser(
+        "physical-atlas-spec",
+        help="emit the exact process-free physical-observation study specification",
+    )
+    physical_atlas_verify = mlx_commands.add_parser(
+        "physical-atlas-verify",
+        help="strictly verify one physical-atlas specification or prospective envelope record",
+    )
+    physical_atlas_verify.add_argument("record", type=Path)
+    physical_atlas_inspect = mlx_commands.add_parser(
+        "physical-atlas-inspect",
+        help="inspect prospective, synthetic, and accepted-physical counts without runtime action",
+    )
+    physical_atlas_inspect.add_argument("record", type=Path)
+    physical_atlas_fixture = mlx_commands.add_parser(
+        "physical-atlas-fixture-compile",
+        help="compile the static study and unobserved envelopes without MLX or Metal actions",
+    )
+    physical_atlas_fixture.add_argument("output_root", type=Path)
+    physical_atlas_replay = mlx_commands.add_parser(
+        "physical-atlas-replay",
+        help="replay one closed static physical-atlas contract bundle process-free",
+    )
+    physical_atlas_replay.add_argument("bundle", type=Path)
 
     ollama = commands.add_parser(
         "ollama",
@@ -1063,6 +1094,29 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
         if args.mlx_command == "determinism-canary-replay":
             canary_replay = replay_determinism_fixture(args.bundle)
             output = canary_replay.to_dict()
+            output["status"] = "replayed"
+            _emit(output)
+            return 0
+        if args.mlx_command == "physical-atlas-spec":
+            _emit_document(physical_atlas_study_spec())
+            return 0
+        if args.mlx_command in {"physical-atlas-verify", "physical-atlas-inspect"}:
+            output = physical_atlas_inspection(load_physical_atlas_record(args.record))
+            output["status"] = (
+                "valid" if args.mlx_command == "physical-atlas-verify" else "inspected"
+            )
+            _emit(output)
+            return 0
+        if args.mlx_command == "physical-atlas-fixture-compile":
+            fixture_path, physical_atlas_replay = compile_physical_atlas_fixture(args.output_root)
+            output = physical_atlas_replay.to_dict()
+            output["status"] = "compiled"
+            output["path"] = fixture_path.name
+            _emit(output)
+            return 0
+        if args.mlx_command == "physical-atlas-replay":
+            physical_atlas_replay = replay_physical_atlas_fixture(args.bundle)
+            output = physical_atlas_replay.to_dict()
             output["status"] = "replayed"
             _emit(output)
             return 0

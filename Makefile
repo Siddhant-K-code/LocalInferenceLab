@@ -82,5 +82,12 @@ fixture:
 	canary_b=$$(find .artifacts/determinism-canary-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-determinism-canary-synthetic-v1-*' -print -quit); \
 	diff -r "$$canary_a" "$$canary_b" && \
 	uv run localinferencelab mlx determinism-canary-replay "$$canary_a"
+	mkdir .artifacts/physical-atlas-a .artifacts/physical-atlas-b
+	uv run localinferencelab mlx physical-atlas-fixture-compile .artifacts/physical-atlas-a
+	uv run localinferencelab mlx physical-atlas-fixture-compile .artifacts/physical-atlas-b
+	physical_atlas_a=$$(find .artifacts/physical-atlas-a -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-physical-atlas-static-v1-*' -print -quit); \
+	physical_atlas_b=$$(find .artifacts/physical-atlas-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-physical-atlas-static-v1-*' -print -quit); \
+	diff -r "$$physical_atlas_a" "$$physical_atlas_b" && \
+	uv run localinferencelab mlx physical-atlas-replay "$$physical_atlas_a"
 
 validate: lint type test build-smoke fixture

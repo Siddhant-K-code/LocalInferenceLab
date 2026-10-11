@@ -79,10 +79,17 @@ code, making either minimum subnormal one ULP from zero and opposite minimum sub
 
 The synthetic closed bundle proves canonicalization, validation, metric reconstruction, identity
 cross-binding, and offline replay. The current verifier accepts no externally acquired,
-authorized, or physical result. A future machine-readable physical atlas requires a new schema and
-closed-bundle verifier that loads and independently validates each case registry, authorization,
-runtime, device, process, and acquisition binding. Arbitrary digest strings cannot establish that
-evidence.
+authorized, or physical result. The versioned physical-atlas successor schema defines the required
+slots, but a future acquisition compiler and closed-bundle verifier must still load and
+independently validate each cell, authorization, runtime, device, process, and acquisition
+binding. Arbitrary digest strings cannot establish that evidence.
+
+The additive
+[physical-observation contract](mlx-physical-atlas-contract.md) is that versioned successor
+specification. It selects 18 new-identity cells without changing any historical canary identity or
+count. Its committed envelopes are static and unobserved: they define required future identity,
+provenance, custody, run-order, synchronization, and comparison fields but cannot accept physical
+evidence while reviewed worker and authorization identities remain unavailable.
 
 Same-condition repeatability accepts only all-bitwise-equal observations. CPU/GPU,
 fused/unfused, and synchronization-mode comparisons remain descriptive until a separately

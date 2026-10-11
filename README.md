@@ -41,6 +41,9 @@ The project proves what it can without quietly crossing that boundary.
 - **Determinism canary**<br>
   **Proven:** It freezes a 48-cell prospective matrix and exact comparison semantics.<br>
   **Not proven:** Its eight committed positive cases are synthetic only. No physical MLX or Metal observation has been accepted.
+- **Physical atlas contract**<br>
+  **Proven:** A distinct 18-cell successor subset binds exact operations, deterministic inputs, run order, comparison metrics, identity slots, provenance, and custody envelopes.<br>
+  **Not proven:** Every envelope is static and unobserved. Worker and authorization identities remain unavailable; accepted physical observations and promotable records remain zero.
 
 ## A Map, Not a Measurement
 
@@ -65,6 +68,7 @@ binds bytes; it does not create authority.
 - [Protocol](docs/protocol.md) — which records, gates, counters, and ledgers define trust
 - [Direct MLX contract](docs/mlx-direct-runner-contract.md) — the private-worker boundary and its explicit blockers
 - [Determinism canary](docs/mlx-determinism-canary.md) — the 48-cell matrix and exact comparison rules
+- [Physical atlas contract](docs/mlx-physical-atlas-contract.md) — the identity-bound 18-cell successor study and unobserved envelopes
 - [Final static qualification record](evidence/mlx-runtime-qualification-mlx-0.30.4-mlx-lm-0.30.6-macos-arm64-py313-v1.json) — the canonical zero-blocker static decision
 - [Historical failed-attempt projection](evidence/mlx-runtime-preflight-negative-v1.json) — what the failed preflight retained — and did not retain
 - [Current sources](docs/research/current-sources.md) — immutable upstream revisions and claim boundaries
