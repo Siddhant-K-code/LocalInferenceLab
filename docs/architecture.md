@@ -26,6 +26,7 @@ Every trust transition is represented by immutable canonical data.
 | `mlx_qualification_publication.py` | Pinned-evidence final qualification compilation from a directly verified supplied pack, bounded inspection, and prior-attestation offline replay | Compile reads exact supplied wheel bytes through the custody verifier and may write one deterministic record; replay reads committed canonical JSON only; no wheel download, install, import, process, socket, authorization, MLX/Metal, model, or spend action |
 | `mlx_preflight_contract.py` | Prospective schema-1.1 model-free protocol/spec, prerequisite/refusal record, bounded inspection, and deterministic closed-fixture replay | Explicit record/fixture writes only; no authorization creation/consumption, install, import, worker, process, socket, backend/device/Metal, synchronization, model, or spend action |
 | `mlx_determinism_canary.py` | Prospective operation matrix, exact embedded byte vectors, IEEE comparison metrics, strict synthetic result schema, synthetic atlas, and closed replay | Explicit fixture-bundle writes only; no MLX import, process, authorization, backend/device/Metal query, hardware synchronization, MLX tensor/model action, timing, network, cloud, or spend |
+| `mlx_physical_atlas.py` | Exact physical-study specification, deterministic input identities, ordered unobserved envelopes, IEEE metric analyzer, inspection, and static closed replay | Explicit static fixture-bundle writes only; no MLX/MLX-LM import, process, authorization, runtime/backend/device/Metal query, synchronization, tensor/model action, timing, network, cloud, or spend |
 | `ollama.py` | Prospective package, direct numeric-loopback transport, one-shot authorization, bounded execution, terminal custody/replay | Explicit output-root writes; loopback calls only after authorization |
 | `ollama_declaration.py` | Canonical multi-run study intent, exact package closure binding, eligibility, and offline declaration fixture replay | Explicit declaration/fixture writes only; no host probe, socket, marker, authorization, or model |
 | `ollama_attestation.py` | Pinned listener/runner feasibility requirements, candidate evidence, derived negative verdict, and offline fixture replay | Explicit assessment/fixture writes only; no live process probe, socket, subprocess, Ollama call, authorization, output-root consumption, or model |
@@ -326,8 +327,35 @@ computation-defining parameter. Cases and results bind the operation-spec identi
 parameters, including axes, keepdims, exact epsilon/initial-accumulator bits, intermediate and
 accumulation precision, evaluation/reduction order, fusion behavior, and every rounding stage.
 Expected fixture bytes are re-derived with bounded standard-library scalar arithmetic during
-verification. A future atlas path must be a new schema that independently verifies every physical
-identity and acquisition binding.
+verification. The successor atlas schema below defines the identity and acquisition slots; a
+future acceptance implementation must independently verify every physical binding before filling
+them.
+
+## Physical-observation atlas contract
+
+The additive `mlx_physical_atlas_study_spec`, `mlx_physical_observation_envelope`, and
+`mlx_physical_observation_envelope_set` records are a versioned successor subset, not a mutation of
+the canary. The historical canary remains 48 prospective cells, exactly eight represented
+synthetic cells, and zero accepted physical observations. The successor selects 18 new-identity
+cells across matrix multiplication, softmax, RMS normalization, layer normalization, and
+MLX-0.30.4 argmax. It covers `float16`, `bfloat16`, and `float32` where selected, with eager cells
+and bounded `float32` eager/compiled pairs. Argmax binds axis 1, `keepdims=false`, lowest-index
+ties, native `uint32` output, and output-specific no-cast policy.
+
+Every cell binds its operation definition/version, dtype, exact shapes/axes/layout, deterministic
+input algorithm and payload hashes, evaluation/accumulation dtype, constants, casting/rounding,
+and compile mode. Every prospective envelope binds three ordered cold observations, two warmups
+and five ordered warm observations, required synchronization points, zero retries, reviewed
+candidate/qualification/target slots, unavailable worker/authorization slots, and the full future
+provenance/custody field set. It also binds all three cold/cold, ten warm/warm, and 15 cold/warm
+comparison pairs per output, exact ordered record templates, and an all-records/exact-equality
+aggregate rule.
+
+Only static unobserved envelopes compile. Caller-supplied provenance cannot create authority;
+static and synthetic categories cannot become physical. No accepted physical or promotable record
+can exist until a separate reviewed acquisition implementation supplies independently verified
+worker, authorization, observer, process, runtime/device, synchronization, and terminal-custody
+bindings. The module includes only bounded standard-library byte generation and comparison.
 
 ## Identity graph
 

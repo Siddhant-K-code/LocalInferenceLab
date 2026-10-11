@@ -235,11 +235,12 @@ contains no canary launch, import, backend/device/Metal query, synchronization, 
 authorization command. Every committed output-bearing result is an embedded
 `synthetic_fixture`; it is not evidence of real MLX/Metal behavior.
 
-Schema 1.0 accepts only the pinned synthetic cases/results. It rejects
+Canary schema 1.0 accepts only the pinned synthetic cases/results. It rejects
 `authorized_observation`, physical result, and case-registry records even if they contain
-well-formed self-asserted SHA-256 strings. A future physical-evidence milestone needs a distinct
-schema and closed-bundle verifier that loads and independently validates the referenced
-authorization, runtime, device, process, acquisition, and case-registry records.
+well-formed self-asserted SHA-256 strings. The distinct physical-atlas schema below defines future
+observation slots but still accepts no physical evidence. A future acquisition compiler and
+closed-bundle verifier must load and independently validate the referenced authorization, runtime,
+device, process, acquisition, and cell records.
 
 The prospective matrix includes elementwise add and IEEE-edge identity, matmul, reduction sum,
 softmax, RMS normalization, and paired fused/unfused multiply-add across `float32`, `float16`, and
@@ -277,6 +278,43 @@ Retries and selective replacement are zero. Same-condition repeatability accepts
 output is bitwise equal. CPU/GPU, fusion, and synchronization comparisons remain report-only
 unless a separate reviewed protocol defines a threshold. Timing is forbidden unless a later
 protocol separately authorizes it.
+
+## Physical-observation atlas protocol
+
+The schema-1.0 physical atlas study is a versioned successor subset with new identities. It does
+not alter the canary's 48 prospective cells, eight represented synthetic cells, or zero accepted
+physical observations. Its 18 selected cells cover matrix multiplication, softmax, RMS
+normalization, and two-pass layer normalization in `float16`, `bfloat16`, and `float32` eager
+forms plus `float32` compiled forms, and exact MLX-0.30.4 `float32` argmax in eager and compiled
+forms. Argmax binds axis 1, `keepdims=false`, lowest-index tie selection, and native `uint32`
+output with no cell-dtype cast. Every cell remains prospective and makes no runtime support claim.
+
+The study binds mathematical definitions, operation versions, exact shapes/axes/row-major layout,
+typed epsilon bytes, evaluation and accumulation dtype, casts, rounding, reduction order,
+deterministic SHA-256/codebook input generation, payload hashes, and eager/compiled policy. Each
+cell plans three one-observation cold processes followed by one warm process with two warmups and
+five observations. The exact cell/process/step order, zero retries, and input, compile, operation,
+and output-materialization synchronization points are identity-bound.
+
+Each output requires 28 ordered comparisons: all three cold/cold pairs, all ten warm/warm pairs,
+and all 15 cold/warm pairs. Envelopes bind the exact observation indices, pair classes, output
+names/dtypes, per-pair record identities, required counts, and aggregate all-exact-equal rule.
+Missing, duplicate, reordered, or favorable-subset records fail closed.
+
+Compatible floating outputs report exact equality, element mismatch count, maximum absolute and
+relative error, RMS error, signed-zero-normalized native ULP distance, and finite/NaN/infinity/
+signed-zero/special counts. NaN sign/payload and infinity sign mismatches fail. Non-finite pairs
+are excluded from finite metrics; both-infinite pairs are counted even when their signs mismatch.
+Argmax indices use strict canonical `uint32` parsing and exact element comparison only.
+
+Evidence origin is immutable: `static_specification`, `synthetic_fixture`, and
+`physical_observation` cannot be relabeled into one another. The committed records are only static
+unobserved envelopes. They bind reviewed candidate, qualification, and prospective target
+identities while leaving reviewed worker and authorization identities explicitly unavailable.
+Caller-supplied provenance or hashes cannot satisfy those slots. Runs, comparison metrics,
+physical provenance, and custody are empty; comparison templates remain unobserved and accepted
+physical/promotable counts are zero. No command installs, imports, starts, queries, synchronizes,
+or executes MLX/MLX-LM/Metal.
 
 Native prompt TPS includes prefill plus the first decode step. Native generation TPS is a
 cumulative decode average after that first token. Peak memory is scoped since process start or the

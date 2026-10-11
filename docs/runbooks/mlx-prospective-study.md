@@ -169,3 +169,28 @@ must implement, test, and authorize all of the following together:
 9. Explicit claim scope that does not overstate per-kernel Metal proof.
 
 Until that milestone is approved, a real execution request must remain mechanically unreachable.
+
+## 8. Prepare the physical-atlas contract without observing
+
+The physical atlas commands define and replay only a static 18-cell successor study. They preserve
+the canary's 48 prospective cells, eight represented synthetic cells, and zero accepted physical
+observations:
+
+```bash
+localinferencelab mlx physical-atlas-spec > physical-atlas-spec.json
+localinferencelab mlx physical-atlas-verify physical-atlas-spec.json
+localinferencelab mlx physical-atlas-inspect physical-atlas-spec.json
+
+mkdir -p .artifacts/physical-atlas-a .artifacts/physical-atlas-b
+localinferencelab mlx physical-atlas-fixture-compile .artifacts/physical-atlas-a
+localinferencelab mlx physical-atlas-fixture-compile .artifacts/physical-atlas-b
+diff -r .artifacts/physical-atlas-a .artifacts/physical-atlas-b
+localinferencelab mlx physical-atlas-replay \
+  .artifacts/physical-atlas-a/localinferencelab-mlx-physical-atlas-static-v1-*
+```
+
+These commands create only unobserved `static_specification` envelopes. They perform no install,
+import, worker/process start, runtime/backend/device/Metal query, synchronization, tensor
+operation, model action, network action, or authorization action. Do not populate their provenance
+or custody fields manually: caller-supplied hashes are not authority and cannot make a record
+physical, accepted, or promotable.

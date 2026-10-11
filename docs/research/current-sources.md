@@ -39,6 +39,20 @@ METADATA entry and that the filename tag occurs in the embedded WHEEL control re
 Darwin requirement `mlx>=0.30.4` selects and accepts the pinned MLX `0.30.4`, correcting the
 historical `0.29.3` / `0.30.6` incompatibility.
 
+The physical-atlas argmax cells bind only the exact reviewed MLX `0.30.4` primitive. At revision
+`2f324cc3b200700b422db4811ae3ff8bd5bf48b4`, the
+[`mlx.core.argmax` binding](https://github.com/ml-explore/mlx/blob/2f324cc3b200700b422db4811ae3ff8bd5bf48b4/python/src/ops.cpp#L2682-L2713)
+accepts optional axis/keepdims and returns `uint32`; the
+[core operation](https://github.com/ml-explore/mlx/blob/2f324cc3b200700b422db4811ae3ff8bd5bf48b4/mlx/ops.cpp#L2277-L2311)
+constructs that `uint32` reduction; the
+[CPU reducer](https://github.com/ml-explore/mlx/blob/2f324cc3b200700b422db4811ae3ff8bd5bf48b4/mlx/backend/cpu/arg_reduce.cpp#L10-L55)
+updates only on strict greater-than; and the
+[Metal reducer](https://github.com/ml-explore/mlx/blob/2f324cc3b200700b422db4811ae3ff8bd5bf48b4/mlx/backend/metal/kernels/arg_reduce.metal#L24-L52)
+chooses the lower index for equal values when merging partial reductions. The study forbids NaN
+inputs and binds axis 1, `keepdims=false`, repeated finite maxima, lowest-index ties, and no
+post-operation cast. This source review is static API/semantic evidence, not an execution or
+support claim.
+
 The package now binds exact prospective runtime target
 `sha256:008f7c3ac60614bc6909822180a4bc0b9be17eaf0aa3abc23829eb2842c4fdc0`:
 CPython 3.13.15 (`cpython-313`, `cp313`, `cpython-313-darwin`) on macOS 27.0.1 build 26A434
