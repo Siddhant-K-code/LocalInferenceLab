@@ -8,7 +8,13 @@ from pathlib import Path
 from typing import Literal, NoReturn, cast
 
 from localinferencelab.backends import backend_plan, probe_runtime_artifact, validate_backend
-from localinferencelab.canonical import ContractError, canonical_json, digest_bytes, load_json_bytes
+from localinferencelab.canonical import (
+    ContractError,
+    canonical_json,
+    digest_bytes,
+    load_canonical_json_file,
+    load_json_bytes,
+)
 from localinferencelab.contracts import parse_record, record_id
 from localinferencelab.custody import replay_bundle
 from localinferencelab.fixture import compile_fixture
@@ -52,6 +58,13 @@ from localinferencelab.mlx_preflight_contract import (
     runtime_preflight_protocol_1_1,
     runtime_preflight_spec_1_1,
     write_runtime_preflight_record_1_1,
+)
+from localinferencelab.mlx_preflight_custody import (
+    compile_custody_bridge_fixture_1_1,
+    custody_bridge_capability_report_1_1,
+    custody_bridge_protocol_1_1,
+    custody_bridge_spec_1_1,
+    replay_custody_bridge_fixture_1_1,
 )
 from localinferencelab.mlx_qualification import (
     build_qualification_record,
@@ -436,8 +449,30 @@ def _parser() -> argparse.ArgumentParser:
     )
     mlx_commands.add_parser(
         "runtime-preflight-1-1-spec",
-        help="emit the candidate-agnostic schema-1.1 model-free preflight specification",
+        help="emit the schema-1.1 model-free preflight specification with inert custody",
     )
+    mlx_commands.add_parser(
+        "runtime-preflight-1-1-custody-capability-report",
+        help="report the complete inert custody bridge and absent physical execution gate",
+    )
+    mlx_commands.add_parser(
+        "runtime-preflight-1-1-custody-protocol",
+        help="emit the strict parent-owned custody protocol without physical action",
+    )
+    mlx_commands.add_parser(
+        "runtime-preflight-1-1-custody-spec",
+        help="emit exact qualification, authorization, target, root, and action bindings",
+    )
+    runtime_preflight_1_1_custody_fixture = mlx_commands.add_parser(
+        "runtime-preflight-1-1-custody-fixture-compile",
+        help="publish inert fake-worker validation and retained-rejection evidence",
+    )
+    runtime_preflight_1_1_custody_fixture.add_argument("output_root", type=Path)
+    runtime_preflight_1_1_custody_replay = mlx_commands.add_parser(
+        "runtime-preflight-1-1-custody-fixture-replay",
+        help="replay one custody fixture without process, socket, MLX, or Metal action",
+    )
+    runtime_preflight_1_1_custody_replay.add_argument("bundle", type=Path)
     runtime_preflight_1_1_create = mlx_commands.add_parser(
         "runtime-preflight-1-1-record-create",
         help="construct a process-free schema-1.1 prerequisite/refusal record",
@@ -1030,6 +1065,28 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
         if args.mlx_command == "runtime-preflight-1-1-spec":
             _emit_document(runtime_preflight_spec_1_1())
             return 0
+        if args.mlx_command == "runtime-preflight-1-1-custody-capability-report":
+            _emit(custody_bridge_capability_report_1_1())
+            return 0
+        if args.mlx_command == "runtime-preflight-1-1-custody-protocol":
+            _emit_document(custody_bridge_protocol_1_1())
+            return 0
+        if args.mlx_command == "runtime-preflight-1-1-custody-spec":
+            _emit_document(custody_bridge_spec_1_1())
+            return 0
+        if args.mlx_command == "runtime-preflight-1-1-custody-fixture-compile":
+            path, bridge_replay = compile_custody_bridge_fixture_1_1(args.output_root)
+            output = bridge_replay.to_dict()
+            output["status"] = "compiled"
+            output["path"] = path.name
+            _emit(output)
+            return 0
+        if args.mlx_command == "runtime-preflight-1-1-custody-fixture-replay":
+            bridge_replay = replay_custody_bridge_fixture_1_1(args.bundle)
+            output = bridge_replay.to_dict()
+            output["status"] = "replayed"
+            _emit(output)
+            return 0
         if args.mlx_command == "runtime-preflight-1-1-record-create":
             authorization_claim = (
                 None
@@ -1037,7 +1094,10 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
                 else load_authorization_claim_1_1(args.authorization_claim)
             )
             schema_1_1_record = build_runtime_preflight_record_1_1(
-                load_qualification_record(args.qualification_record),
+                load_canonical_json_file(
+                    args.qualification_record,
+                    "schema-1.1 qualification prerequisite",
+                ),
                 authorization_claim,
             )
             write_runtime_preflight_record_1_1(args.output, schema_1_1_record)

@@ -456,23 +456,22 @@ or downgrade flag is accepted. Legacy reviewed qualification and supplied-pack r
 reported as `verified_historical_replay_non_promotable` and cannot clear either current review
 blocker. Current reviewed records are the only forms that bind the pinned registry and approval.
 
-## Prospective schema-1.1 model-free runtime-preflight protocol
+## Inert schema-1.1 model-free runtime-preflight custody protocol
 
-Schema 1.1 is a contract/refusal layer only. It defines no worker or execution command. Its current
-canonical flow is:
+Schema 1.1 now includes a complete inert parent custody control plane but still defines no worker,
+authorization creator, installer, or execution command. Its current canonical flow is:
 
 ```text
-committed schema-1.0 qualification record + optional caller-supplied authorization claim ->
-strict canonical reconstruction -> prerequisite assessment ->
-disabled/unreachable contract record -> process-free inspection or closed-fixture replay
+exact committed final qualification publication + optional caller-supplied claim ->
+strict canonical reconstruction + inert custody policy binding ->
+disabled/unreachable contract record or synthetic fake-frame replay
 ```
 
-The qualification prerequisite must be an eligible `reviewed_candidate` record derived from the
-active schema-1.0 qualification spec and bound to the exact pinned review registry and approval
-used by reconstruction. The synthetic-positive fixture is rejected by candidate kind and missing
-registry binding even though it exercises the schema-1.0 positive decision. Historical schema-1.0
-records are rejected by candidate kind, decision, and missing registry binding. Their frozen
-records and identities are never rewritten.
+The qualification prerequisite is the exact eligible publication record and its complete identity
+graph: candidate package/review anchor, qualification spec, runtime target, worker API evidence,
+wheel closure manifest/pack spec/verified receipt, review registry/spec, and approval. The
+synthetic-positive and historical schema-1.0 records remain refusal fixtures. Their frozen records
+and identities are never rewritten.
 
 The exact predecessor schema-1.1 spec ID
 `sha256:23add482023ba3a97ab35dd2b78a6302ef5ae98abd3f5dccaaa341e242d4bf07`
@@ -481,40 +480,44 @@ remains accepted only to reconstruct its historical refusal records and closed f
 The active registry-bound spec has a distinct identity. Replay rejects unknown identities, mixed
 old/new bundles, extra or stripped fields, and malformed current records relabeled as legacy.
 
-The authorization prerequisite cannot be satisfied in this milestone. Authoritative acquisition,
-current-expiry observation, exclusive consumption/non-reuse, and independently verified
-output-root and nonce facts are unavailable. An optional
+The bridge specifies and validates authorization identity bindings, parent-observed
+issuance/not-before/expiry, three distinct parent-owned root identities, nonce/challenge,
+unconsumed-to-consumed one-shot transition, and duplicate/replay rejection. It commits no approved
+authority, authorization review, authorization, or worker-program identity, so the authorization
+prerequisite cannot be satisfied in this milestone. An optional
 `mlx_runtime_preflight_authorization_claim` uses
 `evidence_kind=caller_supplied_structure_only` and may carry claimed one-shot, unconsumed,
 qualification, anchor, spec/protocol, root/nonce digest, and internally ordered time-window fields.
 Validation uses no wall clock and treats every field as self-asserted. The claim never proves
-current freshness, authoritative acquisition, independent binding, consumption, or non-reuse and
-can never make `prerequisites_satisfied=true`.
+current freshness, authoritative acquisition, independent binding, consumption, non-reuse, host
+observation, or successful custody and can never make `prerequisites_satisfied=true`.
 
 The prospective future physical sequence is:
 
 ```text
-validate committed real-candidate qualification ->
-require authoritative authorization acquisition/expiry/consumption custody ->
-require independently verified output-root and nonce facts ->
-verify exact isolated supplied runtime closure ->
-future parent launch/identity -> future authorization consumption ->
-one model-free preflight -> strict parent validation -> shutdown/parent wait
+validate exact final qualification publication ->
+require separately committed reviewed authority/authorization/worker ->
+parent bind output/custody/runtime roots and nonce/challenge ->
+future parent launch/identity and exclusive consumption ->
+one model-free preflight -> validate or retain rejection ->
+shutdown/cleanup/parent wait -> receipt-last closed publication
 ```
 
-The base action set is exact closure verification; imports of pinned `mlx.core` and `mlx_lm`;
-bounded distribution-version, default-device, default-stream, and Metal-availability metadata.
-One default-stream synchronization canary is conditional on a distinct explicit one-shot
-authorization. There are no retries, warmups, concurrent probes, package retrieval/install,
-model/tokenizer discovery or loading, prompt/cache/inference/generation, tensor allocation or
-operations, benchmarks, cloud, or spend.
+The exact future allowlist is candidate-distribution identity checks, `import_mlx`,
+`import_mlx_lm`, one bounded backend/device/Metal availability query, and synchronization. There
+are no retries, warmups, concurrent probes, package resolution/retrieval/download/installation,
+arbitrary executables, environment inheritance, network, worker-controlled paths, model/tokenizer
+discovery or loading, prompt/cache/inference/generation, tensor allocation or operations,
+benchmarks, cloud, or spend.
 
 Every future result must keep three separate ledgers: `attempted_actions` for all attempted allowed
 or forbidden actions, `completed_actions` only for proven completions, and `accepted_evidence` only
 for the strict parent-validated subset. Python audit hooks are defense-in-depth attempted-action
-telemetry, not an OS sandbox and not proof that an action did not occur. Current records contain no
-runtime result: all ledgers are empty, all physical counters are zero, and prerequisite
-satisfaction cannot make execution reachable.
+telemetry, not an OS sandbox and not proof that an action did not occur. Current contract records contain no runtime result: all ledgers are empty, all physical counters
+are zero, and prerequisite satisfaction cannot make execution reachable. The deterministic custody
+fixture separately validates one complete synthetic frame sequence and one retained rejection
+using inert fake messages and simulated lifecycle facts. It creates or consumes no real
+authorization and starts no process or socket.
 
 ## Ollama repeatability-study declaration
 

@@ -235,28 +235,36 @@ authorization, consumption, historical protocol, and historical worker IDs with
 protocol/spec/worker review and authoritative one-shot authorization custody before any package
 installation, network, child/socket, import, backend, Metal, synchronization, or model action.
 
-## Prospective schema-1.1 runtime-preflight contract
+## Inert schema-1.1 runtime-preflight custody bridge
 
 `mlx_runtime_preflight_protocol`, `mlx_runtime_preflight_spec`, and
 `mlx_runtime_preflight_contract_record` use schema 1.1 and are additive. They do not alter the
 schema-1.0 qualification, runtime-preflight, authorization, consumption, terminal-failure, or
 negative-projection records. The schema-1.0 state remains permanently disabled.
 
-The protocol and spec are candidate-agnostic. Exact runtime versions and bytes must come from an
-eligible schema-1.0 `reviewed_candidate` qualification record whose derived review anchor and
-evidence identities match an exact approval in the pinned review registry. Strict reconstruction
-rejects the synthetic-positive fixture, historical projections, forged decisions, unapproved
-anchors, registry drift, and coordinated rehashing. The
-second prerequisite is future authoritative one-shot authorization custody. Acquisition,
-current-expiry observation, exclusive consumption/non-reuse, and independently verified
-output-root and nonce facts are all unimplemented. A caller may supply an
+The active protocol binds the exact final qualification publication
+`sha256:3d789caf4e65581265dc686aed30df0d4612388710b20a2dabc36e2d906711df`
+and all candidate, target, worker-API, closure-manifest, pack-specification, pack-receipt, review
+registry, registry-specification, and approval identities behind it. It also binds the complete
+selected-distribution set and exact prospective host/runtime target. Strict reconstruction rejects
+synthetic-positive candidate records, historical projections, forged decisions, unapproved
+anchors, registry drift, and coordinated rehashing.
+
+The additive custody bridge implements process-free contracts for exact authorization structure,
+parent-observed validity windows, distinct parent-owned output/custody/runtime root identities,
+nonce/challenge binding, one-time consumption transitions and replay detection, bounded canonical
+framing, exact frame order, deadlines, lifecycle/cleanup evidence, retained rejection evidence,
+and receipt-last closed publication. It deliberately commits no authority ID, authorization ID,
+authorization-review ID, or worker-program ID. A caller may still supply an
 `mlx_runtime_preflight_authorization_claim` whose canonical structure and internal claimed time
-ordering are checked, but every field remains self-asserted. The claim cannot satisfy any
-authoritative custody or independent-binding prerequisite.
+ordering are checked, but every field remains self-asserted. Caller-selected provenance labels,
+timestamps, state labels, root/nonce values, and recomputed hashes cannot establish freshness,
+independence, authority, host observation, consumption, or successful custody.
 
 The contract record keeps execution unreachable regardless of prerequisite state. There is no
-schema-1.1 worker, package installer/retriever, authorization creator/consumer, or public/internal
-execute entrypoint. Current construction and replay leave `attempted_actions`,
+schema-1.1 worker, package installer/resolver/retriever/downloader, authorization creator, approved
+authorization consumer, or public/internal execute entrypoint. Current construction and replay
+leave `attempted_actions`,
 `completed_actions`, and `accepted_evidence` empty and all physical counters zero. Closed fixture
 replay deterministically reconstructs refusals for the synthetic eligible qualification and the
 historical incompatible qualification; it includes no real candidate, authoritative
@@ -269,15 +277,16 @@ selected by exact `spec_id`; unknown or mixed spec/record bundles fail closed. L
 state cannot satisfy the active registry-bound prerequisite, and every legacy inspection reports
 non-promotable scope.
 
-The future physical action contract is deliberately narrower than model execution: exact isolated
-runtime-closure verification; imports only of pinned `mlx.core` and `mlx_lm` plus transitive files
-from that bound closure; bounded distribution/backend/device/default-stream/Metal metadata; and at
-most one default-stream synchronization canary under its own explicit one-shot authorization.
-Package retrieval or installation, retries, model/tokenizer discovery or loading, prompts,
+The future physical action allowlist is exactly one candidate-distribution identity check, one
+`mlx.core` import, one `mlx_lm` import, one bounded backend/device/Metal availability query, and
+one synchronization. It is preinstalled-only. Package resolution, retrieval, download, or
+installation, arbitrary executables, inherited environments, worker-controlled paths, retries,
+model/tokenizer discovery or loading, prompts,
 cache/inference/generation, tensor allocation or operations, benchmarks, network, cloud, and spend
-are forbidden. Attempted actions, completed actions, and strict parent-accepted evidence have
-separate claim scopes. Audit hooks may add attempted-action telemetry but are defense in depth, not
-an OS sandbox or proof of non-occurrence.
+are forbidden. The future parent owns process/socket birth and wait, executable and worker
+identity, roots, environment, framing, counters, deadlines, cleanup, rejection retention, and
+final evidence publication. Synthetic fixtures use only in-memory fake frames and simulated
+lifecycle facts; their accepted physical-evidence ledger and every physical counter remain zero.
 
 The first authorized observed attempt closed negatively at parent validation of
 `preflight_result`. Authorization was consumed, one child was started and reaped, and no retry was

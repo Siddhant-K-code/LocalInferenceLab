@@ -50,6 +50,10 @@ from localinferencelab.mlx_qualification import (
     synthetic_eligible_qualification_package,
     verify_qualification_package,
 )
+from localinferencelab.mlx_qualification_publication import (
+    EXPECTED_QUALIFICATION_RECORD_ID,
+    committed_qualification_publication_record,
+)
 from localinferencelab.mlx_runtime_target import (
     EXPECTED_RUNTIME_TARGET_ANCHOR_ID,
     RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS,
@@ -128,11 +132,14 @@ def _rehash(value: dict[str, JsonValue], identity_field: str) -> None:
 
 
 _UNRESOLVED_AUTHORIZATION_BLOCKERS = {
-    "authoritative_authorization_acquisition_custody_unimplemented",
-    "authoritative_authorization_current_expiry_observation_unimplemented",
-    "authoritative_authorization_exclusive_consumption_and_nonreuse_custody_unimplemented",
-    "independent_authorization_nonce_binding_unimplemented",
-    "independent_output_root_identity_binding_unimplemented",
+    "approved_authorization_authority_not_committed",
+    "caller_supplied_consumption_state_not_authoritative",
+    "caller_supplied_freshness_not_authoritative",
+    "caller_supplied_nonce_not_authoritative",
+    "caller_supplied_output_root_not_authoritative",
+    "independently_reviewed_authorization_not_committed",
+    "physical_execution_entrypoint_absent",
+    "reviewed_worker_program_not_committed",
 }
 _UNRESOLVED_TARGET_OBSERVATION_BLOCKERS = set(RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS)
 
@@ -160,9 +167,11 @@ def test_spec_protocol_and_capability_keep_execution_unreachable() -> None:
     }
     assert _dict(spec["execution"]) == {
         "authorization_consumer_present": False,
+        "authorization_consumption_contract_present": True,
         "authorization_creator_present": False,
         "authoritative_authorization_prerequisite_satisfiable": False,
         "becomes_reachable_when_prerequisites_satisfied": False,
+        "custody_control_plane_present": True,
         "implementation_present": False,
         "package_retrieval_or_installation_present": False,
         "public_or_internal_execute_entrypoint_present": False,
@@ -184,6 +193,8 @@ def test_spec_protocol_and_capability_keep_execution_unreachable() -> None:
     )
     assert report["authoritative_runtime_observer_identity_present"] is False
     assert report["custody_bound_runtime_measurement_present"] is False
+    assert report["custody_control_plane_present"] is True
+    assert report["authorization_consumption_contract_present"] is True
     assert not any("execute" in cast("str", item) for item in _list(report["pure_commands"]))
 
 
@@ -192,23 +203,18 @@ def test_future_action_contract_is_narrow_and_truthful() -> None:
     allowed = _list(protocol["base_allowed_physical_actions"])
     assert allowed == sorted(allowed)
     assert allowed == [
-        "default_device_metadata_query",
-        "default_stream_metadata_query",
-        "distribution_version_query",
-        "isolated_runtime_closure_verification",
-        "metal_availability_metadata_query",
-        "mlx_core_import",
-        "mlx_lm_import",
+        "candidate_distribution_identity_checks",
+        "import_mlx",
+        "import_mlx_lm",
+        "query_backend_device_metal_availability",
+        "synchronize",
     ]
-    conditional = _dict(protocol["conditional_physical_action"])
-    assert conditional["action"] == "single_default_stream_synchronization_canary"
-    assert conditional["maximum"] == 1
-    assert conditional["requires_distinct_explicit_one_shot_authorization"] is True
+    assert "conditional_physical_action" not in protocol
     imports = _dict(protocol["imports"])
     assert imports["allowed"] == ["mlx.core", "mlx_lm"]
     assert imports["import_before_authorization"] is False
     assert _dict(protocol["metadata_bounds"]) == {
-        "distribution_records": 2,
+        "distribution_records": 34,
         "imported_module_records": 4096,
         "representation_utf8_bytes_each": 256,
         "values": "canonical_json_only",
@@ -350,6 +356,29 @@ def test_missing_authorization_claim_refuses_without_authoritative_custody() -> 
     assert set(_dict(inspection["static_action_counters"]).values()) == {0}
 
 
+def test_current_publication_clears_static_gate_but_cannot_unlock_execution() -> None:
+    publication = committed_qualification_publication_record()
+    record = build_runtime_preflight_record_1_1(publication)
+    inspection = inspect_runtime_preflight_record_1_1(record)
+    assessment = _dict(record["prerequisite_assessment"])
+    checks = _list(assessment["qualification_checks"])
+
+    assert record["qualification_record_id"] == EXPECTED_QUALIFICATION_RECORD_ID
+    assert inspection["qualification_record_id"] == EXPECTED_QUALIFICATION_RECORD_ID
+    assert all(_dict(item)["satisfied"] is True for item in checks)
+    assert not any(
+        cast("str", blocker).startswith("qualification_")
+        for blocker in _list(inspection["blockers"])
+    )
+    assert set(_list(inspection["blockers"])) >= _UNRESOLVED_AUTHORIZATION_BLOCKERS
+    assert set(_list(inspection["blockers"])) >= _UNRESOLVED_TARGET_OBSERVATION_BLOCKERS
+    assert inspection["prerequisites_satisfied"] is False
+    assert inspection["execution_state"] == "disabled_unreachable_contract_only"
+    assert inspection["attempted_actions"] == []
+    assert inspection["completed_actions"] == []
+    assert inspection["accepted_evidence"] == []
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
@@ -405,11 +434,8 @@ def test_fabricated_historical_claim_replay_and_reuse_always_refuse() -> None:
         assert assessment["prerequisites_satisfied"] is False
         blockers = set(_list(assessment["blockers"]))
         assert blockers >= _UNRESOLVED_AUTHORIZATION_BLOCKERS
-        assert "authoritative_authorization_current_expiry_observation_unimplemented" in blockers
-        assert (
-            "authoritative_authorization_exclusive_consumption_and_nonreuse_custody_unimplemented"
-            in blockers
-        )
+        assert "caller_supplied_freshness_not_authoritative" in blockers
+        assert "caller_supplied_consumption_state_not_authoritative" in blockers
 
 
 def test_arbitrary_claimed_root_and_nonce_values_never_satisfy_bindings() -> None:
@@ -430,8 +456,8 @@ def test_arbitrary_claimed_root_and_nonce_values_never_satisfy_bindings() -> Non
         inspection = inspect_runtime_preflight_record_1_1(record)
         assert inspection["prerequisites_satisfied"] is False
         blockers = set(_list(inspection["blockers"]))
-        assert "independent_authorization_nonce_binding_unimplemented" in blockers
-        assert "independent_output_root_identity_binding_unimplemented" in blockers
+        assert "caller_supplied_nonce_not_authoritative" in blockers
+        assert "caller_supplied_output_root_not_authoritative" in blockers
         assert inspection["independent_nonce_binding_supported"] is False
         assert inspection["independent_output_root_binding_supported"] is False
 
@@ -553,7 +579,7 @@ def test_schema_1_1_version_confusion_and_malformed_fallback_fail_closed(
     relabeled = _copy(current)
     relabeled["spec_id"] = "sha256:23add482023ba3a97ab35dd2b78a6302ef5ae98abd3f5dccaaa341e242d4bf07"
     _rehash(relabeled, "record_id")
-    with pytest.raises(ContractError, match="reconstruction mismatch"):
+    with pytest.raises(ContractError, match=r"unsupported|reconstruction mismatch"):
         verify_runtime_preflight_record_1_1(relabeled)
 
     stripped = _copy(current)
@@ -588,7 +614,10 @@ def test_schema_1_1_version_confusion_and_malformed_fallback_fail_closed(
     mixed_root = tmp_path / "mixed"
     mixed_root.mkdir()
     mixed = publish_bundle(content, mixed_root, name_prefix="mixed-schema-1-1")
-    with pytest.raises(ContractError, match="fixture record reconstruction mismatch"):
+    with pytest.raises(
+        ContractError,
+        match=r"fixture (protocol or specification drift|record reconstruction mismatch)",
+    ):
         replay_runtime_preflight_fixture_1_1(mixed)
 
 
@@ -660,6 +689,23 @@ def test_cli_contract_record_and_fixture_commands_are_pure(
     created = _dict(load_json_bytes(capfd.readouterr().out.encode("utf-8").strip()))
     assert created["status"] == "created"
     assert created["prerequisites_satisfied"] is False
+    publication_path = tmp_path / "qualification-publication.json"
+    publication_path.write_bytes(canonical_json(committed_qualification_publication_record()))
+    publication_record_path = tmp_path / "publication-preflight-record.json"
+    assert (
+        run(
+            [
+                "mlx",
+                "runtime-preflight-1-1-record-create",
+                str(publication_path),
+                str(publication_record_path),
+            ]
+        )
+        == 0
+    )
+    publication_created = _dict(load_json_bytes(capfd.readouterr().out.encode("utf-8").strip()))
+    assert publication_created["qualification_record_id"] == EXPECTED_QUALIFICATION_RECORD_ID
+    assert publication_created["prerequisites_satisfied"] is False
     qualification = _qualification()
     claim_path = tmp_path / "authorization-claim.json"
     claim_path.write_bytes(canonical_json(_authorization_claim(qualification, issued_at=1)))
@@ -704,6 +750,14 @@ def test_cli_contract_record_and_fixture_commands_are_pure(
         _dict(load_json_bytes(capfd.readouterr().out.encode("utf-8").strip()))["physical_actions"]
         == 0
     )
+    for command in (
+        "runtime-preflight-1-1-custody-capability-report",
+        "runtime-preflight-1-1-custody-protocol",
+        "runtime-preflight-1-1-custody-spec",
+    ):
+        assert run(["mlx", command]) == 0
+        emitted = _dict(load_json_bytes(capfd.readouterr().out.encode("utf-8").strip()))
+        assert emitted["schema_version"] == "1.1"
 
     fixture_root = tmp_path / "fixture"
     fixture_root.mkdir()
@@ -715,3 +769,32 @@ def test_cli_contract_record_and_fixture_commands_are_pure(
     replayed = _dict(load_json_bytes(capfd.readouterr().out.encode("utf-8").strip()))
     assert replayed["status"] == "replayed"
     assert replayed["physical_actions"] == 0
+
+    custody_root = tmp_path / "custody"
+    custody_root.mkdir()
+    assert (
+        run(
+            [
+                "mlx",
+                "runtime-preflight-1-1-custody-fixture-compile",
+                str(custody_root),
+            ]
+        )
+        == 0
+    )
+    custody_compiled = _dict(load_json_bytes(capfd.readouterr().out.encode("utf-8").strip()))
+    assert custody_compiled["physical_actions"] == 0
+    custody_bundle = custody_root / cast("str", custody_compiled["path"])
+    assert (
+        run(
+            [
+                "mlx",
+                "runtime-preflight-1-1-custody-fixture-replay",
+                str(custody_bundle),
+            ]
+        )
+        == 0
+    )
+    custody_replayed = _dict(load_json_bytes(capfd.readouterr().out.encode("utf-8").strip()))
+    assert custody_replayed["status"] == "replayed"
+    assert custody_replayed["physical_actions"] == 0
