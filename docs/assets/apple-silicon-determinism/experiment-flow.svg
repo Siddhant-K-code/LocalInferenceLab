@@ -1,86 +1,81 @@
 <svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" viewBox="0 0 1200 720">
-  <title id="title">Prospective model-free MLX determinism experiment flow</title>
-  <desc id="desc">A five-stage flow predeclares transformer primitives, stops at a fresh human authorization gate, then shows future bounded execution, strict parent validation, and an evidence atlas. Unsupported cells, drift, forbidden actions, or invalid outputs route to fail-closed refusal. The current project stops before authorization.</desc>
+  <title id="title">Committed static MLX physical-atlas contract</title>
+  <desc id="desc">The process-free schema binds 18 selected model-free cells, deterministic inputs, three cold observations, two non-observation warmups, five warm observations, exact synchronization points, and 28 comparison pairs per output. No acquisition compiler, worker, authorization, or execution permission exists. Physical candidate, accepted, and promotable record counts are zero.</desc>
 
   <rect width="1200" height="720" fill="#07111f"/>
   <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
-    <text x="54" y="57" fill="#f8fbff" font-size="36" font-weight="700">Measure primitives before loading a model</text>
-    <text x="54" y="93" fill="#c2cee3" font-size="19">Every dimension is declared first. Every mismatch becomes evidence-preserving refusal.</text>
+    <text x="54" y="57" fill="#f8fbff" font-size="36" font-weight="700">The physical atlas is committed—not observed</text>
+    <text x="54" y="93" fill="#c2cee3" font-size="19">Schema 1.0 fixes the study plan. It creates no runtime path or measured result.</text>
 
-    <rect x="42" y="136" width="208" height="190" rx="16" fill="#123049" stroke="#6ee7f5" stroke-width="3"/>
-    <text x="64" y="171" fill="#8cf4ff" font-size="16" font-weight="700" letter-spacing="1.4">01 / PREDECLARE</text>
-    <text x="64" y="207" fill="#ffffff" font-size="24" font-weight="700">Primitive matrix</text>
-    <text x="64" y="239" fill="#d8e8f4" font-size="16">ops · dtypes · shapes</text>
-    <text x="64" y="266" fill="#d8e8f4" font-size="16">eager / compiled</text>
-    <text x="64" y="293" fill="#d8e8f4" font-size="16">cold / warm · repeats</text>
-    <rect x="64" y="307" width="157" height="28" rx="14" fill="#6ee7f5"/>
-    <text x="142.5" y="326" fill="#07111f" font-size="16" font-weight="700" text-anchor="middle">CURRENT SIDE</text>
+    <rect x="42" y="136" width="248" height="190" rx="16" fill="#123049" stroke="#6ee7f5" stroke-width="3"/>
+    <text x="64" y="171" fill="#8cf4ff" font-size="16" font-weight="700" letter-spacing="1.4">STATIC CONTRACT</text>
+    <text x="64" y="207" fill="#ffffff" font-size="25" font-weight="700">18 selected cells</text>
+    <text x="64" y="241" fill="#d8e8f4" font-size="17">exact operations + inputs</text>
+    <text x="64" y="269" fill="#d8e8f4" font-size="17">eager / compiled identities</text>
+    <rect x="64" y="290" width="170" height="28" rx="14" fill="#6ee7f5"/>
+    <text x="149" y="310" fill="#07111f" font-size="16" font-weight="700" text-anchor="middle">CURRENT STATE</text>
 
-    <path d="M258 231H292" stroke="#77dfee" stroke-width="4" stroke-linecap="round"/>
-    <path d="M282 221L294 231L282 241" fill="none" stroke="#77dfee" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M298 231H332" stroke="#77dfee" stroke-width="4" stroke-linecap="round"/>
+    <path d="M322 221L334 231L322 241" fill="none" stroke="#77dfee" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
 
-    <rect x="300" y="136" width="208" height="190" rx="16" fill="#2b2020" stroke="#f2bd57" stroke-width="3" stroke-dasharray="9 7"/>
-    <text x="322" y="171" fill="#ffd477" font-size="16" font-weight="700" letter-spacing="1.4">02 / HUMAN GATE</text>
-    <path d="M365 234V214C365 188 384 176 404 176C424 176 443 188 443 214V234" fill="none" stroke="#ffe29a" stroke-width="7" stroke-linecap="round"/>
-    <rect x="352" y="228" width="104" height="67" rx="10" fill="#52391b" stroke="#f2bd57" stroke-width="3"/>
-    <circle cx="404" cy="253" r="8" fill="#fff1c2"/>
-    <path d="M404 261V279" stroke="#fff1c2" stroke-width="6" stroke-linecap="round"/>
-    <text x="404" y="318" fill="#fff1c2" font-size="16" font-weight="700" text-anchor="middle">NOT GRANTED</text>
+    <rect x="340" y="136" width="248" height="190" rx="16" fill="#10283b" stroke="#77dfee" stroke-width="3"/>
+    <text x="362" y="171" fill="#a8f2fb" font-size="16" font-weight="700" letter-spacing="1.4">BOUND RUN PLAN</text>
+    <text x="362" y="207" fill="#ffffff" font-size="24" font-weight="700">3 cold + 5 warm</text>
+    <text x="362" y="241" fill="#d8e8f4" font-size="16">2 warmups (not observations)</text>
+    <text x="362" y="269" fill="#d8e8f4" font-size="17">exact synchronization points</text>
+    <text x="362" y="297" fill="#d8e8f4" font-size="17">28 pairs per output</text>
 
-    <path d="M516 231H550" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 8"/>
-    <path d="M540 221L552 231L540 241" fill="none" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M596 231H630" stroke="#f2bd57" stroke-width="4" stroke-linecap="round"/>
+    <path d="M620 221L632 231L620 241" fill="none" stroke="#f2bd57" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
 
-    <rect x="558" y="136" width="208" height="190" rx="16" fill="#151d2c" stroke="#687896" stroke-width="3" stroke-dasharray="9 7"/>
-    <text x="580" y="171" fill="#aab8d3" font-size="16" font-weight="700" letter-spacing="1.4">03 / FUTURE RUN</text>
-    <text x="580" y="207" fill="#f0f4fb" font-size="24" font-weight="700">Bounded worker</text>
-    <text x="580" y="239" fill="#bac5d8" font-size="16">one-shot authority</text>
-    <text x="580" y="266" fill="#bac5d8" font-size="16">no retries · no model</text>
-    <text x="580" y="293" fill="#bac5d8" font-size="16">all outputs retained</text>
+    <rect x="638" y="136" width="250" height="190" rx="16" fill="#2b2020" stroke="#f2bd57" stroke-width="4"/>
+    <text x="660" y="171" fill="#ffd477" font-size="16" font-weight="700" letter-spacing="1.4">ACTION PATH</text>
+    <text x="660" y="207" fill="#ffffff" font-size="25" font-weight="700">ABSENT</text>
+    <text x="660" y="241" fill="#fff1c2" font-size="17">no acquisition compiler</text>
+    <text x="660" y="269" fill="#fff1c2" font-size="17">no worker or authorization</text>
+    <text x="660" y="297" fill="#ffffff" font-size="17" font-weight="700">permission to execute: false</text>
 
-    <path d="M774 231H808" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 8"/>
-    <path d="M798 221L810 231L798 241" fill="none" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M896 231H930" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 8"/>
+    <path d="M920 221L932 231L920 241" fill="none" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 
-    <rect x="816" y="136" width="164" height="190" rx="16" fill="#151d2c" stroke="#687896" stroke-width="3" stroke-dasharray="9 7"/>
-    <text x="838" y="171" fill="#aab8d3" font-size="16" font-weight="700" letter-spacing="1.2">04 / VALIDATE</text>
-    <text x="838" y="207" fill="#f0f4fb" font-size="23" font-weight="700">Parent checks</text>
-    <text x="838" y="239" fill="#bac5d8" font-size="16">identity + custody</text>
-    <text x="838" y="266" fill="#bac5d8" font-size="16">shape + exact bytes</text>
-    <text x="838" y="293" fill="#bac5d8" font-size="16">action ledgers</text>
+    <rect x="938" y="136" width="220" height="190" rx="16" fill="#151d2c" stroke="#687896" stroke-width="3" stroke-dasharray="9 7"/>
+    <text x="960" y="171" fill="#d7e0f2" font-size="16" font-weight="700">PHYSICAL RECORDS</text>
+    <text x="960" y="211" fill="#ffffff" font-size="20" font-weight="700">Candidates</text>
+    <text x="1134" y="211" fill="#ffadb6" font-size="28" font-weight="700" text-anchor="end">0</text>
+    <text x="960" y="255" fill="#ffffff" font-size="20" font-weight="700">Accepted</text>
+    <text x="1134" y="255" fill="#ffadb6" font-size="28" font-weight="700" text-anchor="end">0</text>
+    <text x="960" y="299" fill="#ffffff" font-size="20" font-weight="700">Promotable</text>
+    <text x="1134" y="299" fill="#ffadb6" font-size="28" font-weight="700" text-anchor="end">0</text>
 
-    <path d="M988 231H1022" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 8"/>
-    <path d="M1012 221L1024 231L1012 241" fill="none" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M763 336V382H1048V348" fill="none" stroke="#ff7f8d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M1038 358L1048 346L1058 358" fill="none" stroke="#ff7f8d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="905" y="374" fill="#ffadb6" font-size="16" font-weight="700" text-anchor="middle">NO AUTHORITY · NO ACQUISITION · NO EXECUTION</text>
 
-    <rect x="1030" y="136" width="128" height="190" rx="16" fill="#151d2c" stroke="#687896" stroke-width="3" stroke-dasharray="9 7"/>
-    <text x="1050" y="171" fill="#aab8d3" font-size="16" font-weight="700">05 / ATLAS</text>
-    <text x="1050" y="217" fill="#f0f4fb" font-size="46" font-weight="700">0</text>
-    <text x="1050" y="248" fill="#bac5d8" font-size="16">accepted</text>
-    <text x="1050" y="273" fill="#bac5d8" font-size="16">physical</text>
-    <text x="1050" y="298" fill="#bac5d8" font-size="16">observations</text>
+    <rect x="42" y="402" width="1116" height="92" rx="15" fill="#3b1924" stroke="#ff7f8d" stroke-width="3"/>
+    <text x="68" y="439" fill="#ffadb6" font-size="16" font-weight="700" letter-spacing="1.5">FAIL CLOSED</text>
+    <text x="68" y="472" fill="#ffffff" font-size="22" font-weight="700">Static envelopes cannot be relabeled, self-filled, or promoted to observations.</text>
 
-    <path d="M404 336V389H1094V350" fill="none" stroke="#ff7f8d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M1084 360L1094 348L1104 360" fill="none" stroke="#ff7f8d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="748" y="378" fill="#ffadb6" font-size="16" font-weight="700" text-anchor="middle">ANY MISMATCH OR MISSING AUTHORITY</text>
-
-    <rect x="42" y="410" width="1116" height="92" rx="15" fill="#3b1924" stroke="#ff7f8d" stroke-width="3"/>
-    <text x="68" y="447" fill="#ffadb6" font-size="16" font-weight="700" letter-spacing="1.5">FAIL CLOSED</text>
-    <text x="68" y="480" fill="#ffffff" font-size="22" font-weight="700">Retain the failure. Do not retry, replace, promote, or manufacture a result.</text>
-
-    <text x="42" y="556" fill="#9fb1cf" font-size="16" font-weight="700" letter-spacing="1.5">PROSPECTIVE STUDY DIMENSIONS</text>
+    <text x="42" y="548" fill="#9fb1cf" font-size="16" font-weight="700" letter-spacing="1.5">18 SELECTED CELLS</text>
     <g font-size="17" font-weight="700">
-      <rect x="42" y="576" width="202" height="46" rx="23" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
-      <text x="143" y="605" fill="#eafcff" text-anchor="middle">matmul · softmax</text>
-      <rect x="256" y="576" width="230" height="46" rx="23" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
-      <text x="371" y="605" fill="#eafcff" text-anchor="middle">reduction · RMS norm</text>
-      <rect x="498" y="576" width="194" height="46" rx="23" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
-      <text x="595" y="605" fill="#eafcff" text-anchor="middle">top-k · argmax</text>
-      <rect x="704" y="576" width="214" height="46" rx="23" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
-      <text x="811" y="605" fill="#eafcff" text-anchor="middle">fp32 · fp16 · bf16</text>
-      <rect x="930" y="576" width="228" height="46" rx="23" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
-      <text x="1044" y="605" fill="#eafcff" text-anchor="middle">eager · compiled</text>
-      <rect x="267" y="640" width="286" height="46" rx="23" fill="#1e263c" stroke="#7c8fb5" stroke-width="2"/>
-      <text x="410" y="669" fill="#eef3ff" text-anchor="middle">5 same-process · 5 cold</text>
-      <rect x="565" y="640" width="368" height="46" rx="23" fill="#1e263c" stroke="#7c8fb5" stroke-width="2"/>
-      <text x="749" y="669" fill="#eef3ff" text-anchor="middle">bits · digest · ULP · abs / relative error</text>
+      <rect x="42" y="568" width="202" height="46" rx="23" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
+      <text x="143" y="597" fill="#eafcff" text-anchor="middle">matrix multiply</text>
+      <rect x="256" y="568" width="160" height="46" rx="23" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
+      <text x="336" y="597" fill="#eafcff" text-anchor="middle">softmax</text>
+      <rect x="428" y="568" width="184" height="46" rx="23" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
+      <text x="520" y="597" fill="#eafcff" text-anchor="middle">RMS norm</text>
+      <rect x="624" y="568" width="196" height="46" rx="23" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
+      <text x="722" y="597" fill="#eafcff" text-anchor="middle">layer norm</text>
+      <rect x="832" y="568" width="154" height="46" rx="23" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
+      <text x="909" y="597" fill="#eafcff" text-anchor="middle">argmax</text>
+      <rect x="998" y="568" width="160" height="46" rx="23" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
+      <text x="1078" y="597" fill="#eafcff" text-anchor="middle">not top-k</text>
+
+      <rect x="202" y="636" width="258" height="46" rx="23" fill="#1e263c" stroke="#7c8fb5" stroke-width="2"/>
+      <text x="331" y="665" fill="#eef3ff" text-anchor="middle">fp16 · bf16 · fp32</text>
+      <rect x="472" y="636" width="220" height="46" rx="23" fill="#1e263c" stroke="#7c8fb5" stroke-width="2"/>
+      <text x="582" y="665" fill="#eef3ff" text-anchor="middle">eager · compiled</text>
+      <rect x="704" y="636" width="294" height="46" rx="23" fill="#1e263c" stroke="#7c8fb5" stroke-width="2"/>
+      <text x="851" y="665" fill="#eef3ff" text-anchor="middle">exact inputs · exact order</text>
     </g>
   </g>
 </svg>

@@ -75,9 +75,10 @@ The detailed boundaries live in the
 [architecture](../architecture.md), [experiment protocol](../protocol.md), and
 [direct MLX contract](../mlx-direct-runner-contract.md).
 
-## The current atlas is a map, not a measurement
+## The legacy 48-cell canary is a map, not a measurement
 
-The [runtime-independent determinism canary](../mlx-determinism-canary.md) freezes a 48-cell
+The historical [runtime-independent determinism canary](../mlx-determinism-canary.md) freezes a
+separate 48-cell
 Cartesian product:
 
 - eight operation forms: elementwise add, IEEE-edge identity, matrix multiplication, reduction
@@ -97,39 +98,39 @@ device placement, execution order, fusion behavior, numerical determinism, perfo
 physical observation. Determinism-canary schema 1.0 rejects physical and
 `authorized_observation` records by design.
 
-## The proposed model-free study
+## The committed model-free study contract
 
-The first physical study should stop below the model layer. No tokenizer, weights, prompt, cache,
+The committed physical study stops below the model layer. No tokenizer, weights, prompt, cache,
 sampling loop, or generated text is needed to ask whether transformer-shaped primitives repeat.
-The successor protocol should predeclare each dimension rather than discovering convenient
-settings after a run.
+That design is now committed as the process-free
+[physical-observation atlas schema 1.0](../mlx-physical-atlas-contract.md). Its exact study ID is
+`sha256:231214ab37eea562b70a52639e3bbfd92b6d3cc56a42a026b670c43db8a45d33`.
+The schema fixes what a future observer would have to do; it does not observe anything.
 
 <picture>
   <source media="(max-width: 1279px)" srcset="../assets/apple-silicon-determinism/experiment-flow-mobile.svg" width="600">
-  <img src="../assets/apple-silicon-determinism/experiment-flow.svg" width="1200" alt="Prospective experiment flow. The current project predeclares the matrix and stops at an ungranted human authorization gate. Future bounded execution, parent validation, and evidence-atlas stages are inactive; zero physical observations are accepted; any mismatch fails closed.">
+  <img src="../assets/apple-silicon-determinism/experiment-flow.svg" width="1200" alt="Static physical-atlas contract. The current project commits 18 selected model-free cells, deterministic inputs, three cold observations, two non-observation warmups, five warm observations, synchronization points, and 28 comparison pairs per output. It stops before acquisition or authorization; execution and validation are inactive, and physical candidate, accepted, and promotable record counts are all zero.">
 </picture>
 
-| Dimension | Prospective declaration |
+| Bound dimension | Committed schema-1.0 contract |
 |---|---|
-| **Primitives** | Matrix multiplication, softmax, reduction sum, RMS normalization, and value-plus-index `top-k` / `argmax`, including declared tie cases. `top-k` / `argmax` would be a new operation contract; it is not in the current 48-cell atlas. |
-| **Dtypes** | `float32`, `float16`, and `bfloat16`, but only for cells whose support is independently established. Unsupported combinations remain refusals, not missing data. |
-| **Evaluation path** | Separate eager/uncompiled and compiled declarations. The current canary’s explicit/deferred styles are not evidence for either path and must not be relabeled. |
-| **Process state** | A cold observation is the first declared evaluation in a fresh process. A warm observation is a numbered later evaluation in that same process. There are no discarded warmups. |
-| **Repeats** | Five retained same-process evaluations and five retained cold-process observations per accepted condition, matching the canary’s prospective repeat intent. Retry count is zero; failures stay in the record. |
-| **Synchronization** | Output-materialization-only and explicitly synchronized cohorts remain separately identified and report-only until a reviewed threshold exists. |
-| **Comparison** | Exact dtype, shape, byte order, element count, payload length, bytes, and digest; bitwise equality; maximum absolute and relative error; maximum native-dtype ULP distance; and explicit NaN, infinity, signed-zero, and special-mismatch counts. |
-| **Selection outputs** | `top-k` / `argmax` compare both values and indices. Tie construction and tie acceptance must be fixed before execution so an implementation-dependent tie cannot be explained away later. |
+| **18 selected cells** | Matrix multiplication, softmax, RMS normalization, and two-pass layer normalization each bind `float16`, `bfloat16`, and `float32` eager cells plus a `float32` compiled cell. Exact MLX `0.30.4` argmax adds `float32` eager and compiled cells. No cell claims current runtime support. |
+| **Argmax, not top-k** | Axis 1, `keepdims=false`, lowest-index tie selection, and native little-endian `uint32` indices are bound. Repeated maxima make the reference inputs tie-heavy. There is no top-k/sort/gather substitute. |
+| **Deterministic inputs** | Domain-separated SHA-256 chooses exact finite native-dtype encodings. Shape, row-major layout, payload length, bytes, and digest are identity-bound; generated inputs and reference bytes are not MLX outputs. |
+| **Exact run order** | Three fresh cold processes produce one observation each. One fresh warm process then performs two explicitly non-observation warmups followed by five ordered observations. That is eight observations, two warmups, zero retries, and no selective reruns per cell. |
+| **Synchronization** | Every planned step binds input materialization before the operation, compiled-operation completion before the first operation when applicable, operation completion before output readback, and output-byte materialization before process advance. Missing or reordered points invalidate the envelope. |
+| **28 comparisons per output** | All three cold/cold pairs, all ten warm/warm pairs, and all 15 cold/warm pairs are required in class-major lexicographic order. Missing, duplicate, reordered, or favorable-subset records fail closed. |
+| **Metrics** | Floating outputs bind exact payload equality, native mismatch count, maximum absolute and relative error, RMS error, signed-zero-normalized native ULP distance, and finite/NaN/infinity/signed-zero/special counts. Argmax uses exact `uint32` element comparison only. |
 
-Same-condition repeatability should pass only when every retained output is bitwise equal. ULP,
-absolute-error, and relative-error metrics remain diagnostic: they describe drift but do not turn a
-non-bitwise repeat into a deterministic one. Cross-mode, cross-device, fusion, and synchronization
-comparisons should remain descriptive unless a separately reviewed protocol defines an acceptance
-threshold.
+Every committed envelope is `static_specification` / `prospective_unobserved`. Runs, metrics,
+physical provenance, and custody are empty. Current counts are **0 physical candidates, 0 accepted
+physical observations, and 0 promotable records**; `permission_to_execute=false`.
 
-This is a determinism study, not a speed study. Timing is out of scope unless separately declared
-and authorized. A future accepted device string or `metal.is_available()` value would still not
-prove that each kernel used Metal; the strongest supportable claim would be scoped to the exact
-worker-side backend facts that were actually accepted.
+There is no acquisition compiler, worker, authoritative authorization, execution permission, or
+measured result. The offline surface can compile, inspect, verify, and replay the static contract,
+but it has no execute, observe, authorize, runtime-probe, device-query, Metal-query, or synchronize
+command. Timing remains forbidden. Even a future accepted device string or
+`metal.is_available()` value would not prove that each kernel used Metal.
 
 ## The hard stop and the refusal rules
 
@@ -166,6 +167,8 @@ physical MLX/Metal observations and no permission to run**.
 That is enough to design the experiment honestly. It is not enough to answer the title.
 
 For the canonical specifications rather than this narrative, read the
-[canary contract](../mlx-determinism-canary.md), [schema-1.1 protocol](../protocol.md#prospective-schema-11-model-free-runtime-preflight-protocol),
+[legacy canary contract](../mlx-determinism-canary.md),
+[physical atlas contract](../mlx-physical-atlas-contract.md),
+[schema-1.1 protocol](../protocol.md#prospective-schema-11-model-free-runtime-preflight-protocol),
 [current source boundaries](current-sources.md), and
 [static preparation runbook](../runbooks/mlx-prospective-study.md).

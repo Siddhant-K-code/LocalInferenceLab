@@ -5,7 +5,8 @@
   <rect width="360" height="760" fill="#07111f"/>
   <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
     <text x="20" y="35" fill="#f8fbff" font-size="24" font-weight="700">Three different proofs</text>
-    <text x="20" y="62" fill="#c2cee3" font-size="16">Identity is not permission or evidence.</text>
+    <text x="20" y="59" fill="#c2cee3" font-size="16">Identity is not permission</text>
+    <text x="20" y="79" fill="#c2cee3" font-size="16">or observed evidence.</text>
 
     <rect x="18" y="88" width="324" height="150" rx="14" fill="#12233b" stroke="#6ee7f5" stroke-width="3"/>
     <rect x="38" y="117" width="64" height="80" rx="6" fill="#0c1729" stroke="#a5f3fc" stroke-width="3"/>
