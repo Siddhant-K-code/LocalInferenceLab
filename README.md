@@ -7,9 +7,10 @@
   <img src="docs/assets/readme/qualification-pipeline.svg" width="1200" alt="System map showing the proposal, static qualification, human gate, inactive schema-1.1 execution path, and evidence; the current project stops after static qualification and routes missing authority to refusal">
 </picture>
 
-> **Current state: static only.** The final qualification record is
+> **Current state: zero-action custody preparation.** The final qualification record is
 > `eligible_for_new_observed_authorization`: eligible for human review toward a
-> possible fresh explicit authorization. **No runtime action is authorized.**
+> possible fresh explicit authorization. An inert schema-1.1 parent control plane now binds that
+> exact record, but **no authorization, worker, or runtime action exists.**
 
 ## ELI5: Checking Ingredients Is Not Cooking
 
@@ -33,8 +34,8 @@ The project proves what it can without quietly crossing that boundary.
   **Proven:** Review binds MLX `0.30.4` / MLX-LM `0.30.6`, source evidence, target, 34-wheel closure, pack specification, and prior verified receipt.<br>
   **Not proven:** Offline replay does not prove current wheel presence, native loading, or runtime executability.
 - **Execution boundary**<br>
-  **Proven:** MLX runtime-preflight schema 1.0 is permanently disabled; schema 1.1 defines a prospective refusal contract.<br>
-  **Not proven:** Schema 1.1 has no worker, installer, authorization creator/consumer, or execute entrypoint. It remains unreachable until fresh explicit authorization and custody prerequisites exist.
+  **Proven:** MLX runtime-preflight schema 1.0 is permanently disabled; schema 1.1 now has strict authorization/session/consumption, framing, deadline, lifecycle, rejection-retention, and closed-publication contracts.<br>
+  **Not proven:** There is no approved authorization authority or authorization, reviewed executable worker, installer/resolver/downloader, host observation, or execute entrypoint. Physical execution remains unreachable.
 - **Historical attempt**<br>
   **Proven:** One authorized preflight attempt failed closed and was not retried.<br>
   **Not proven:** Its rejected frame was not retained, so it yielded no accepted runtime facts: no import, backend/device, synchronization, or exact forbidden-action fact.
@@ -99,7 +100,7 @@ UV_NO_NETWORK=1 make validate
 
 ---
 
-**The next gate is not “run it.”** It is a fresh human decision backed by authoritative one-shot
-authorization and custody that does not exist yet.
+**The next gate is not “run it.”** It is a separately committed and independently reviewed
+authorization authority, one-shot authorization, and worker identity. None exists in this change.
 
 Apache-2.0.

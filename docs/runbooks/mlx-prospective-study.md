@@ -8,6 +8,8 @@ model, import MLX/MLX-LM, query Metal, load a tokenizer/model, run inference, or
 ```bash
 localinferencelab mlx capability-report
 localinferencelab mlx custody-capability-report
+localinferencelab mlx runtime-preflight-1-1-custody-capability-report
+localinferencelab mlx runtime-preflight-1-1-custody-spec
 localinferencelab mlx prospective-spec > mlx-study-spec.json
 ```
 
@@ -17,6 +19,13 @@ The capability report must show `production_worker_launch=false`,
 `python_native_runtime_and_dynamic_loader_closure=false`, `runtime_import=false`,
 `strict_model_parameter_key_shape_load_evidence=false`, `device_query=false`,
 `metal_initialization=false`, `inference=false`, `network=false`, and `subprocess=false`.
+
+The schema-1.1 custody report must show `control_plane_complete=true`,
+`execution_reachable=false`, `execute_command_present=false`,
+`worker_entrypoint_present=false`, `authorization_creator_present=false`,
+`approved_authorization_present=false`, and `physical_actions=0`. Emitting the custody spec loads
+and verifies committed canonical evidence only; it performs no installed-distribution, MLX, Metal,
+process, socket, or network check.
 
 ## 2. Optionally compile an explicit supplied package-root byte closure
 
@@ -116,12 +125,25 @@ localinferencelab mlx fixture-compile .artifacts/mlx-b
 diff -r .artifacts/mlx-a .artifacts/mlx-b
 localinferencelab mlx fixture-replay \
   .artifacts/mlx-a/localinferencelab-mlx-direct-refused-synthetic-v1-*
+
+mkdir -p .artifacts/preflight-custody-a .artifacts/preflight-custody-b
+localinferencelab mlx runtime-preflight-1-1-custody-fixture-compile \
+  .artifacts/preflight-custody-a
+localinferencelab mlx runtime-preflight-1-1-custody-fixture-compile \
+  .artifacts/preflight-custody-b
+diff -r .artifacts/preflight-custody-a .artifacts/preflight-custody-b
 ```
 
 The fixture contains fake non-model bytes and never invokes a fake transport or worker. Replay
 reconstructs the exact ineligible package from sealed values and rejects extra/missing files,
 noncanonical JSON, manifest/package identity drift, positive eligibility, or coordinated
 record/index/receipt tampering.
+
+The custody fixture separately feeds canonical fake-worker frames through the parent validators. It
+publishes one synthetic sequence-validation record and one retained rejection caused by an extra
+action. Simulated process/socket counts are explicitly nonphysical; real authorization creation
+and consumption, process/socket starts, MLX imports, Metal queries, and synchronization counters
+remain zero.
 
 ## 6. Explicit physical inert-custody validation
 

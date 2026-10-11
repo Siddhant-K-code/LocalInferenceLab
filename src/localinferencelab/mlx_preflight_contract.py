@@ -16,6 +16,14 @@ from localinferencelab.canonical import (
     load_json_bytes,
 )
 from localinferencelab.custody import publish_bundle, read_closed_bundle
+from localinferencelab.mlx_preflight_custody import (
+    ALLOWED_ACTIONS as CUSTODY_ALLOWED_ACTIONS,
+)
+from localinferencelab.mlx_preflight_custody import (
+    custody_bridge_capability_report_1_1,
+    custody_bridge_protocol_1_1,
+    custody_bridge_spec_1_1,
+)
 from localinferencelab.mlx_qualification import (
     ELIGIBLE,
     build_qualification_record,
@@ -23,6 +31,10 @@ from localinferencelab.mlx_qualification import (
     qualification_spec,
     synthetic_eligible_qualification_package,
     verify_qualification_record,
+)
+from localinferencelab.mlx_qualification_publication import (
+    EXPECTED_QUALIFICATION_RECORD_ID,
+    verify_qualification_publication_record,
 )
 from localinferencelab.mlx_review_registry import EXPECTED_REVIEW_REGISTRY_ID
 from localinferencelab.mlx_runtime_target import (
@@ -76,12 +88,22 @@ _ATTEMPTED_ACTIONS = (
     "mlx_lm_import",
 )
 _CONDITIONAL_SYNCHRONIZATION_ACTION = "single_default_stream_synchronization_canary"
-_UNRESOLVED_AUTHORIZATION_BLOCKERS = (
+_LEGACY_UNRESOLVED_AUTHORIZATION_BLOCKERS = (
     "authoritative_authorization_acquisition_custody_unimplemented",
     "authoritative_authorization_current_expiry_observation_unimplemented",
     "authoritative_authorization_exclusive_consumption_and_nonreuse_custody_unimplemented",
     "independent_authorization_nonce_binding_unimplemented",
     "independent_output_root_identity_binding_unimplemented",
+)
+_UNRESOLVED_AUTHORIZATION_BLOCKERS = (
+    "approved_authorization_authority_not_committed",
+    "caller_supplied_consumption_state_not_authoritative",
+    "caller_supplied_freshness_not_authoritative",
+    "caller_supplied_nonce_not_authoritative",
+    "caller_supplied_output_root_not_authoritative",
+    "independently_reviewed_authorization_not_committed",
+    "physical_execution_entrypoint_absent",
+    "reviewed_worker_program_not_committed",
 )
 _FORBIDDEN_ACTIONS = (
     "arbitrary_command",
@@ -243,8 +265,10 @@ def _verify_zero_actions(value: JsonValue, label: str) -> None:
             raise ContractError(f"{label}.{name} must remain zero")
 
 
-def runtime_preflight_protocol_1_1() -> dict[str, JsonValue]:
-    """Return the prospective, unimplemented schema-1.1 protocol."""
+def _runtime_preflight_protocol_1_1(
+    *,
+    legacy_custody_bridge: bool,
+) -> dict[str, JsonValue]:
     content: dict[str, JsonValue] = {
         "record_type": "mlx_runtime_preflight_protocol",
         "schema_version": SCHEMA_VERSION,
@@ -318,15 +342,70 @@ def runtime_preflight_protocol_1_1() -> dict[str, JsonValue]:
         "worker_implementation_present": False,
         "execution_command_present": False,
     }
+    if not legacy_custody_bridge:
+        bridge_protocol = custody_bridge_protocol_1_1()
+        bridge_spec = custody_bridge_spec_1_1()
+        content["implementation_state"] = (
+            "inert_execution_custody_bridge_present_physical_execution_unreachable"
+        )
+        content["sequence"] = [
+            "validate_exact_committed_qualification_publication",
+            "require_separately_committed_independently_reviewed_authorization",
+            "parent_bind_output_custody_runtime_roots_nonce_and_challenge",
+            "future_parent_launch_and_identity",
+            "future_parent_exclusive_authorization_consumption",
+            "future_model_free_preflight_once",
+            "strict_parent_result_or_rejection_validation_and_retention",
+            "shutdown_cleanup_parent_wait_and_receipt_last_publication",
+        ]
+        content["runtime_selection"] = (
+            "exact_target_and_preinstalled_distribution_identities_from_current_publication"
+        )
+        content["base_allowed_physical_actions"] = list(CUSTODY_ALLOWED_ACTIONS)
+        del content["conditional_physical_action"]
+        content["bounded_metadata"] = [
+            "candidate_distribution_identities",
+            "backend_representation",
+            "device_representation",
+            "metal_is_available",
+            "synchronization_completion",
+        ]
+        content["metadata_bounds"] = {
+            "distribution_records": 34,
+            "imported_module_records": 4096,
+            "representation_utf8_bytes_each": 256,
+            "values": "canonical_json_only",
+        }
+        content["forbidden_actions"] = bridge_protocol["forbidden_actions"]
+        content["parent_owned_custody"] = {
+            "authorization_consumption": True,
+            "challenge_and_nonce": True,
+            "child_socket_lifecycle_and_wait": True,
+            "counters_deadlines_cleanup": True,
+            "output_custody_and_runtime_roots": True,
+            "output_publication": "receipt_last_closed_bundle",
+            "rejected_evidence_retention": True,
+        }
+        content["custody_bridge"] = {
+            "protocol_id": bridge_protocol["protocol_id"],
+            "spec_id": bridge_spec["spec_id"],
+            "control_plane_complete": True,
+            "physical_execution_reachable": False,
+        }
     content["protocol_id"] = canonical_identity(content)
     return content
+
+
+def runtime_preflight_protocol_1_1() -> dict[str, JsonValue]:
+    """Return the schema-1.1 protocol with its inert custody bridge."""
+    return _runtime_preflight_protocol_1_1(legacy_custody_bridge=False)
 
 
 def _runtime_preflight_spec_1_1(
     *,
     legacy_review_policy: bool,
 ) -> dict[str, JsonValue]:
-    protocol = runtime_preflight_protocol_1_1()
+    protocol = _runtime_preflight_protocol_1_1(legacy_custody_bridge=legacy_review_policy)
     qualification = qualification_spec()
     qualification_prerequisite: dict[str, JsonValue] = {
         "record_type": "mlx_runtime_qualification_record",
@@ -342,8 +421,103 @@ def _runtime_preflight_spec_1_1(
     if legacy_review_policy:
         qualification_prerequisite["review_anchor_must_be_committed_in_qualification_spec"] = True
     else:
+        qualification_prerequisite["record_type"] = "mlx_runtime_qualification_publication_record"
+        qualification_prerequisite["record_id"] = EXPECTED_QUALIFICATION_RECORD_ID
         qualification_prerequisite["review_anchor_must_be_approved_by_committed_registry"] = True
         qualification_prerequisite["review_registry_id"] = EXPECTED_REVIEW_REGISTRY_ID
+    authorization_prerequisite: dict[str, JsonValue]
+    execution: dict[str, JsonValue]
+    physical_action_contract: dict[str, JsonValue]
+    claim_scope: str
+    if legacy_review_policy:
+        authorization_prerequisite = {
+            "authoritative_custody_state": "unimplemented_unavailable",
+            "required_future_properties": [
+                "authoritative_acquisition",
+                "current_expiry_observation",
+                "exclusive_consumption",
+                "independent_nonce_binding",
+                "independent_output_root_binding",
+                "nonreuse_proof",
+                "one_shot",
+            ],
+            "maximum_future_lifetime_ns": AUTHORIZATION_LIFETIME_NS,
+            "caller_supplied_claim": {
+                "record_type": "mlx_runtime_preflight_authorization_claim",
+                "schema_version": SCHEMA_VERSION,
+                "evidence_kind": "caller_supplied_structure_only",
+                "can_satisfy_authoritative_prerequisite": False,
+                "can_prove_current_freshness": False,
+                "can_prove_independent_bindings": False,
+                "can_prove_nonreuse_or_consumption": False,
+            },
+            "unresolved_blockers": list(_LEGACY_UNRESOLVED_AUTHORIZATION_BLOCKERS),
+        }
+        execution = {
+            "reachable": False,
+            "implementation_present": False,
+            "worker_present": False,
+            "authorization_creator_present": False,
+            "authorization_consumer_present": False,
+            "authoritative_authorization_prerequisite_satisfiable": False,
+            "runtime_observation_prerequisite_satisfiable": False,
+            "package_retrieval_or_installation_present": False,
+            "public_or_internal_execute_entrypoint_present": False,
+            "becomes_reachable_when_prerequisites_satisfied": False,
+        }
+        physical_action_contract = {
+            "base_allowed_actions": list(_ATTEMPTED_ACTIONS),
+            "conditional_synchronization_action": _CONDITIONAL_SYNCHRONIZATION_ACTION,
+            "forbidden_actions": list(_FORBIDDEN_ACTIONS),
+            "model_activity": False,
+        }
+        claim_scope = (
+            "prospective_contract_validation_and_refusal_only_no_physical_runtime_evidence"
+        )
+    else:
+        bridge_spec = custody_bridge_spec_1_1()
+        authorization_prerequisite = {
+            "authoritative_custody_state": (
+                "inert_bridge_present_no_committed_authorization_or_authority"
+            ),
+            "custody_bridge_spec_id": bridge_spec["spec_id"],
+            "structure_validator_present": True,
+            "current_expiry_validator_present": True,
+            "exclusive_consumption_record_contract_present": True,
+            "nonce_challenge_and_root_binding_contract_present": True,
+            "nonreuse_validator_present": True,
+            "maximum_future_lifetime_ns": AUTHORIZATION_LIFETIME_NS,
+            "caller_supplied_claim": {
+                "record_type": "mlx_runtime_preflight_authorization_claim",
+                "schema_version": SCHEMA_VERSION,
+                "evidence_kind": "caller_supplied_structure_only",
+                "can_satisfy_authoritative_prerequisite": False,
+                "can_prove_current_freshness": False,
+                "can_prove_independent_bindings": False,
+                "can_prove_nonreuse_or_consumption": False,
+            },
+            "unresolved_blockers": list(_UNRESOLVED_AUTHORIZATION_BLOCKERS),
+        }
+        execution = {
+            "reachable": False,
+            "implementation_present": False,
+            "custody_control_plane_present": True,
+            "worker_present": False,
+            "authorization_creator_present": False,
+            "authorization_consumer_present": False,
+            "authorization_consumption_contract_present": True,
+            "authoritative_authorization_prerequisite_satisfiable": False,
+            "runtime_observation_prerequisite_satisfiable": False,
+            "package_retrieval_or_installation_present": False,
+            "public_or_internal_execute_entrypoint_present": False,
+            "becomes_reachable_when_prerequisites_satisfied": False,
+        }
+        physical_action_contract = {
+            "allowed_actions": list(CUSTODY_ALLOWED_ACTIONS),
+            "forbidden_actions": bridge_spec["forbidden_actions"],
+            "model_activity": False,
+        }
+        claim_scope = "inert_custody_control_plane_and_refusal_only_no_physical_runtime_evidence"
     content: dict[str, JsonValue] = {
         "record_type": "mlx_runtime_preflight_spec",
         "schema_version": SCHEMA_VERSION,
@@ -365,58 +539,23 @@ def _runtime_preflight_spec_1_1(
                 "target_drift_accepted": False,
                 "unresolved_blockers": list(RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS),
             },
-            "authorization": {
-                "authoritative_custody_state": "unimplemented_unavailable",
-                "required_future_properties": [
-                    "authoritative_acquisition",
-                    "current_expiry_observation",
-                    "exclusive_consumption",
-                    "independent_nonce_binding",
-                    "independent_output_root_binding",
-                    "nonreuse_proof",
-                    "one_shot",
-                ],
-                "maximum_future_lifetime_ns": AUTHORIZATION_LIFETIME_NS,
-                "caller_supplied_claim": {
-                    "record_type": "mlx_runtime_preflight_authorization_claim",
-                    "schema_version": SCHEMA_VERSION,
-                    "evidence_kind": "caller_supplied_structure_only",
-                    "can_satisfy_authoritative_prerequisite": False,
-                    "can_prove_current_freshness": False,
-                    "can_prove_independent_bindings": False,
-                    "can_prove_nonreuse_or_consumption": False,
-                },
-                "unresolved_blockers": list(_UNRESOLVED_AUTHORIZATION_BLOCKERS),
-            },
+            "authorization": authorization_prerequisite,
         },
-        "execution": {
-            "reachable": False,
-            "implementation_present": False,
-            "worker_present": False,
-            "authorization_creator_present": False,
-            "authorization_consumer_present": False,
-            "authoritative_authorization_prerequisite_satisfiable": False,
-            "runtime_observation_prerequisite_satisfiable": False,
-            "package_retrieval_or_installation_present": False,
-            "public_or_internal_execute_entrypoint_present": False,
-            "becomes_reachable_when_prerequisites_satisfied": False,
-        },
-        "future_physical_action_contract": {
-            "base_allowed_actions": list(_ATTEMPTED_ACTIONS),
-            "conditional_synchronization_action": _CONDITIONAL_SYNCHRONIZATION_ACTION,
-            "forbidden_actions": list(_FORBIDDEN_ACTIONS),
-            "model_activity": False,
-        },
+        "execution": execution,
+        "future_physical_action_contract": physical_action_contract,
         "historical_schema_1_0": {
             "state": "permanently_disabled",
             "records_rewritten": False,
             "retry_authorized": False,
         },
-        "claim_scope": (
-            "prospective_contract_validation_and_refusal_only_no_physical_runtime_evidence"
-        ),
+        "claim_scope": claim_scope,
         "static_action_counters": dict(_ZERO_ACTION_COUNTERS),
     }
+    if not legacy_review_policy:
+        bridge_protocol = custody_bridge_protocol_1_1()
+        bridge_spec = custody_bridge_spec_1_1()
+        content["custody_bridge_protocol_id"] = bridge_protocol["protocol_id"]
+        content["custody_bridge_spec_id"] = bridge_spec["spec_id"]
     content["spec_id"] = canonical_identity(content)
     if legacy_review_policy and content["spec_id"] != _LEGACY_SCHEMA_1_1_SPEC_ID:
         raise ContractError("legacy schema-1.1 specification identity drift")
@@ -589,6 +728,48 @@ def _qualification_prerequisite_assessment(
     return checks, blockers, review_anchor_id
 
 
+def _publication_prerequisite_assessment(
+    publication_record: dict[str, JsonValue],
+) -> tuple[list[JsonValue], list[str], str]:
+    bindings = _mapping(
+        publication_record["evidence_bindings"],
+        "schema-1.1 qualification publication bindings",
+    )
+    review_anchor_id = _sha256(
+        bindings["candidate_review_anchor_id"],
+        "schema-1.1 qualification publication review anchor",
+    )
+    predicates = [
+        (
+            "qualification_publication_record_is_exact",
+            publication_record["record_id"] == EXPECTED_QUALIFICATION_RECORD_ID,
+            "qualification_publication_record_is_not_exact",
+        ),
+        (
+            "qualification_publication_decision_is_eligible",
+            publication_record["decision"] == ELIGIBLE,
+            "qualification_publication_decision_is_not_eligible",
+        ),
+        (
+            "qualification_publication_review_registry_is_exact",
+            bindings["review_registry_id"] == EXPECTED_REVIEW_REGISTRY_ID,
+            "qualification_publication_review_registry_is_not_exact",
+        ),
+        (
+            "qualification_publication_schema_1_0_remains_disabled",
+            publication_record["schema_1_0_remains_permanently_disabled"] is True,
+            "qualification_publication_does_not_preserve_schema_1_0_disablement",
+        ),
+    ]
+    checks: list[JsonValue] = []
+    blockers: list[str] = []
+    for name, satisfied, blocker in predicates:
+        checks.append({"name": name, "satisfied": satisfied})
+        if not satisfied:
+            blockers.append(blocker)
+    return checks, blockers, review_anchor_id
+
+
 def _legacy_qualification_prerequisite_assessment(
     qualification_record: dict[str, JsonValue],
 ) -> tuple[list[JsonValue], list[str], str]:
@@ -650,7 +831,20 @@ def _build_runtime_preflight_record_1_1(
     *,
     legacy_review_policy: bool,
 ) -> dict[str, JsonValue]:
-    qualification_record = verify_qualification_record(qualification_value)
+    qualification_candidate = _mapping(
+        qualification_value,
+        "schema-1.1 qualification prerequisite",
+    )
+    publication = (
+        not legacy_review_policy
+        and qualification_candidate.get("record_type")
+        == "mlx_runtime_qualification_publication_record"
+    )
+    qualification_record = (
+        verify_qualification_publication_record(qualification_candidate)
+        if publication
+        else verify_qualification_record(qualification_candidate)
+    )
     if (
         legacy_review_policy
         and {
@@ -661,9 +855,13 @@ def _build_runtime_preflight_record_1_1(
     ):
         raise ContractError("legacy schema-1.1 replay rejects registry-bound qualification records")
     assessment = (
-        _legacy_qualification_prerequisite_assessment
-        if legacy_review_policy
-        else _qualification_prerequisite_assessment
+        _publication_prerequisite_assessment
+        if publication
+        else (
+            _legacy_qualification_prerequisite_assessment
+            if legacy_review_policy
+            else _qualification_prerequisite_assessment
+        )
     )
     qualification_checks, blockers, review_anchor_id = assessment(qualification_record)
     authorization_claim: dict[str, JsonValue] | None
@@ -705,7 +903,11 @@ def _build_runtime_preflight_record_1_1(
             if not satisfied:
                 blockers.append(blocker)
     blockers.extend(RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS)
-    blockers.extend(_UNRESOLVED_AUTHORIZATION_BLOCKERS)
+    blockers.extend(
+        _LEGACY_UNRESOLVED_AUTHORIZATION_BLOCKERS
+        if legacy_review_policy
+        else _UNRESOLVED_AUTHORIZATION_BLOCKERS
+    )
     sorted_blockers = sorted(set(blockers))
     spec = _runtime_preflight_spec_1_1(legacy_review_policy=legacy_review_policy)
     record: dict[str, JsonValue] = {
@@ -819,6 +1021,11 @@ def verify_runtime_preflight_record_1_1(value: JsonValue) -> dict[str, JsonValue
         _text(item, f"schema-1.1 assessment.blockers[{index}]")
         for index, item in enumerate(_array(assessment["blockers"], "schema-1.1 blockers"))
     }
+    required_authorization_blockers = (
+        _LEGACY_UNRESOLVED_AUTHORIZATION_BLOCKERS
+        if legacy_replay
+        else _UNRESOLVED_AUTHORIZATION_BLOCKERS
+    )
     if (
         assessment["prerequisites_satisfied"] is not False
         or assessment["authoritative_authorization_custody_supported"] is not False
@@ -827,7 +1034,7 @@ def verify_runtime_preflight_record_1_1(value: JsonValue) -> dict[str, JsonValue
         or assessment["authoritative_runtime_observer_identity_supported"] is not False
         or assessment["custody_bound_runtime_measurement_supported"] is not False
         or not set(RUNTIME_TARGET_OBSERVATION_CLAIM_BLOCKERS).issubset(blockers)
-        or not set(_UNRESOLVED_AUTHORIZATION_BLOCKERS).issubset(blockers)
+        or not set(required_authorization_blockers).issubset(blockers)
     ):
         raise ContractError(
             "schema-1.1 authoritative authorization prerequisites remain unresolved"
@@ -913,6 +1120,7 @@ def inspect_runtime_preflight_record_1_1(value: JsonValue) -> dict[str, JsonValu
 def runtime_preflight_capability_report_1_1() -> dict[str, JsonValue]:
     """Report the pure schema-1.1 contract surface."""
     spec = runtime_preflight_spec_1_1()
+    bridge = custody_bridge_capability_report_1_1()
     return {
         "record_type": "mlx_runtime_preflight_capability_report",
         "schema_version": SCHEMA_VERSION,
@@ -924,6 +1132,10 @@ def runtime_preflight_capability_report_1_1() -> dict[str, JsonValue]:
         "worker_implementation_present": False,
         "authorization_creator_present": False,
         "authorization_consumer_present": False,
+        "authorization_consumption_contract_present": True,
+        "custody_control_plane_present": True,
+        "custody_bridge_spec_id": bridge["spec_id"],
+        "custody_bridge_protocol_id": bridge["protocol_id"],
         "authoritative_runtime_observer_identity_present": False,
         "custody_bound_runtime_measurement_present": False,
         "authoritative_authorization_custody_present": False,
@@ -939,6 +1151,11 @@ def runtime_preflight_capability_report_1_1() -> dict[str, JsonValue]:
             "mlx runtime-preflight-1-1-record-inspect",
             "mlx runtime-preflight-1-1-record-verify",
             "mlx runtime-preflight-1-1-spec",
+            "mlx runtime-preflight-1-1-custody-capability-report",
+            "mlx runtime-preflight-1-1-custody-fixture-compile",
+            "mlx runtime-preflight-1-1-custody-fixture-replay",
+            "mlx runtime-preflight-1-1-custody-protocol",
+            "mlx runtime-preflight-1-1-custody-spec",
         ],
         "physical_actions": 0,
         "static_action_counters": dict(_ZERO_ACTION_COUNTERS),
@@ -1005,7 +1222,9 @@ def _compile_legacy_runtime_preflight_fixture_1_1(
     destination = publish_bundle(
         {
             "source/fixture.json": canonical_json(_fixture_source()),
-            "source/protocol.json": canonical_json(runtime_preflight_protocol_1_1()),
+            "source/protocol.json": canonical_json(
+                _runtime_preflight_protocol_1_1(legacy_custody_bridge=True)
+            ),
             "source/spec.json": canonical_json(
                 _runtime_preflight_spec_1_1(legacy_review_policy=True)
             ),
@@ -1059,15 +1278,17 @@ def replay_runtime_preflight_fixture_1_1(bundle: Path) -> Schema11ReplayResult:
         _canonical_value(files["source/spec.json"], "schema-1.1 spec"),
         "schema-1.1 spec",
     )
-    if canonical_json(protocol) != canonical_json(runtime_preflight_protocol_1_1()):
-        raise ContractError("schema-1.1 fixture protocol or specification drift")
     current_spec = runtime_preflight_spec_1_1()
     legacy_spec = _runtime_preflight_spec_1_1(legacy_review_policy=True)
     if canonical_json(spec) == canonical_json(current_spec):
         legacy_replay = False
+        expected_protocol = runtime_preflight_protocol_1_1()
     elif canonical_json(spec) == canonical_json(legacy_spec):
         legacy_replay = True
+        expected_protocol = _runtime_preflight_protocol_1_1(legacy_custody_bridge=True)
     else:
+        raise ContractError("schema-1.1 fixture protocol or specification drift")
+    if canonical_json(protocol) != canonical_json(expected_protocol):
         raise ContractError("schema-1.1 fixture protocol or specification drift")
     synthetic_qualification = verify_qualification_record(
         _canonical_value(

@@ -440,19 +440,19 @@ derives static eligibility with zero blockers from those exact reviewed identiti
 claims current wheel presence nor authorizes runtime action, preserving separate review of
 evidence, mechanism, decision, and any future authorization.
 
-## Prospective schema-1.1 model-free contract
+## Inert schema-1.1 model-free custody bridge
 
-The additive schema-1.1 protocol/spec/contract-record layer prepares deterministic prerequisite
-validation without enabling execution. It has only capability, protocol/spec emission,
-record construction/verification/inspection, and deterministic closed-fixture replay commands.
-There is no authorize, install, worker, or execute surface.
+The additive schema-1.1 layer now includes an inert execution-custody bridge. It has only
+capability, protocol/spec emission, record construction/verification/inspection, and deterministic
+closed-fixture replay commands. There is no authorize, install/resolve/download, worker, or execute
+surface.
 
 A record requires both:
 
-1. an eligible schema-1.0 `reviewed_candidate` qualification record whose derived evidence anchor
-   was committed through a separate review; and
-2. future authoritative one-shot authorization acquisition, current-expiry observation,
-   exclusive consumption/non-reuse, and independently verified output-root and nonce facts.
+1. the exact final qualification publication and every candidate/target/worker-API/closure/receipt/
+   registry/approval identity it binds; and
+2. a future separately committed authority, authorization review, one-shot authorization, and
+   worker program, observed through parent-owned time/root/nonce/challenge/lifecycle custody.
 
 The pinned registry and separately published real-candidate qualification record described above
 establish only static eligibility for a new human review. The synthetic positive fixture and the
@@ -462,15 +462,17 @@ deterministically verifiable under frozen reconstruction solely as historical, n
 replay. They do not acquire registry bindings, cannot satisfy the active schema-1.1 prerequisite,
 and cannot authorize execution. Current records never fall back to legacy verification after
 missing fields, added fields, spec relabeling, or semantic reconstruction failure.
-The authorization prerequisite is also categorically unsatisfied: caller-supplied claim structures
-cannot establish custody or independent bindings. No current input combination can make
-`prerequisites_satisfied=true`, and execution remains disabled.
+The bridge validates the future shapes and transitions, including expiry and replay, but the
+authorization prerequisite is categorically unsatisfied. Caller-supplied labels, timestamps,
+state, roots, nonces, challenges, or recomputed hashes cannot establish freshness, authority,
+independence, host observation, consumption, non-reuse, or custody success. No current input
+combination can make `prerequisites_satisfied=true`, and execution remains disabled.
 
-The future allowed physical action set contains only exact isolated runtime closure verification,
-imports of the pinned `mlx.core` and `mlx_lm` surfaces, and bounded distribution/backend/device/
-default-stream/Metal metadata. One default-stream synchronization canary requires its own explicit
-one-shot authorization. Model/tokenizer discovery or loading, prompt/cache/inference/generation,
-tensor operations, benchmarks, retrieval/install, retries, cloud, and spend are forbidden.
-Attempted actions, completed actions, and accepted evidence are separate ledgers. Audit hooks are
-defense in depth and are not an OS sandbox. The current deterministic record and fixture ledgers
-are empty and report zero physical actions.
+The future allowlist is exact: candidate-distribution identity checks, `import_mlx`,
+`import_mlx_lm`, one bounded backend/device/Metal availability query, and synchronization.
+Model/tokenizer discovery or loading, prompt/cache/inference/generation, tensor operations,
+benchmarks, resolver/retrieval/download/install behavior, arbitrary executables, environment
+inheritance, worker-selected paths, network, retries, cloud, and spend are forbidden. The parent
+owns process/socket lifecycle, roots, framing, counters, deadlines, cleanup, rejected evidence,
+and final receipt-last publication. The deterministic custody fixture uses fake frames and
+simulated lifecycle evidence only; every physical counter remains zero.

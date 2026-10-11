@@ -75,6 +75,13 @@ fixture:
 	preflight_contract_b=$$(find .artifacts/preflight-contract-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-runtime-preflight-contract-synthetic-v1-1-*' -print -quit); \
 	diff -r "$$preflight_contract_a" "$$preflight_contract_b" && \
 	uv run localinferencelab mlx runtime-preflight-1-1-fixture-replay "$$preflight_contract_a"
+	mkdir .artifacts/preflight-custody-a .artifacts/preflight-custody-b
+	uv run localinferencelab mlx runtime-preflight-1-1-custody-fixture-compile .artifacts/preflight-custody-a
+	uv run localinferencelab mlx runtime-preflight-1-1-custody-fixture-compile .artifacts/preflight-custody-b
+	preflight_custody_a=$$(find .artifacts/preflight-custody-a -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-runtime-preflight-custody-synthetic-v1-1-*' -print -quit); \
+	preflight_custody_b=$$(find .artifacts/preflight-custody-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-runtime-preflight-custody-synthetic-v1-1-*' -print -quit); \
+	diff -r "$$preflight_custody_a" "$$preflight_custody_b" && \
+	uv run localinferencelab mlx runtime-preflight-1-1-custody-fixture-replay "$$preflight_custody_a"
 	mkdir .artifacts/determinism-canary-a .artifacts/determinism-canary-b
 	uv run localinferencelab mlx determinism-canary-fixture-compile .artifacts/determinism-canary-a
 	uv run localinferencelab mlx determinism-canary-fixture-compile .artifacts/determinism-canary-b
