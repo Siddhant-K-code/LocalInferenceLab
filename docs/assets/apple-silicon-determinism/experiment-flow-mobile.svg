@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" viewBox="0 0 600 1320">
+  <title id="title">Prospective model-free MLX experiment flow on a narrow screen</title>
+  <desc id="desc">A vertical flow predeclares transformer primitives and stops at a fresh human authorization gate. Future bounded execution, parent validation, and an evidence atlas remain inactive. Any missing authority, unsupported cell, drift, forbidden action, or invalid output routes to fail-closed refusal.</desc>
+
+  <rect width="600" height="1320" fill="#07111f"/>
+  <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+    <text x="34" y="54" fill="#f8fbff" font-size="32" font-weight="700">Measure primitives first</text>
+    <text x="34" y="88" fill="#c2cee3" font-size="18">Declare every condition before action.</text>
+
+    <rect x="34" y="126" width="532" height="170" rx="15" fill="#123049" stroke="#6ee7f5" stroke-width="3"/>
+    <text x="60" y="160" fill="#8cf4ff" font-size="15" font-weight="700" letter-spacing="1.4">01 / PREDECLARE — CURRENT SIDE</text>
+    <text x="60" y="200" fill="#ffffff" font-size="27" font-weight="700">Primitive matrix</text>
+    <text x="60" y="236" fill="#d8e8f4" font-size="18">ops · dtypes · shapes · modes</text>
+    <text x="60" y="268" fill="#d8e8f4" font-size="18">cold / warm · retained repeats</text>
+
+    <path d="M300 304V332" stroke="#77dfee" stroke-width="4" stroke-linecap="round"/>
+    <path d="M290 322L300 334L310 322" fill="none" stroke="#77dfee" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="34" y="340" width="532" height="170" rx="15" fill="#2b2020" stroke="#f2bd57" stroke-width="3" stroke-dasharray="9 7"/>
+    <text x="60" y="374" fill="#ffd477" font-size="15" font-weight="700" letter-spacing="1.4">02 / FRESH HUMAN AUTHORIZATION</text>
+    <path d="M98 444V426C98 401 116 390 134 390C152 390 170 401 170 426V444" fill="none" stroke="#ffe29a" stroke-width="7" stroke-linecap="round"/>
+    <rect x="86" y="438" width="96" height="56" rx="9" fill="#52391b" stroke="#f2bd57" stroke-width="3"/>
+    <text x="220" y="435" fill="#ffffff" font-size="27" font-weight="700">Hard stop</text>
+    <text x="220" y="470" fill="#fff1c2" font-size="18">Not granted. No run.</text>
+
+    <path d="M300 518V546" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 8"/>
+    <path d="M290 536L300 548L310 536" fill="none" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="34" y="554" width="252" height="176" rx="15" fill="#151d2c" stroke="#687896" stroke-width="3" stroke-dasharray="9 7"/>
+    <text x="58" y="589" fill="#aab8d3" font-size="15" font-weight="700">03 / FUTURE RUN</text>
+    <text x="58" y="630" fill="#f0f4fb" font-size="25" font-weight="700">Bounded worker</text>
+    <text x="58" y="666" fill="#bac5d8" font-size="17">one-shot authority</text>
+    <text x="58" y="696" fill="#bac5d8" font-size="17">no retries · no model</text>
+
+    <rect x="314" y="554" width="252" height="176" rx="15" fill="#151d2c" stroke="#687896" stroke-width="3" stroke-dasharray="9 7"/>
+    <text x="338" y="589" fill="#aab8d3" font-size="15" font-weight="700">04 / VALIDATE</text>
+    <text x="338" y="630" fill="#f0f4fb" font-size="25" font-weight="700">Parent checks</text>
+    <text x="338" y="666" fill="#bac5d8" font-size="17">identity · custody</text>
+    <text x="338" y="696" fill="#bac5d8" font-size="17">bytes · ledgers</text>
+
+    <path d="M300 738V766" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 8"/>
+    <path d="M290 756L300 768L310 756" fill="none" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="34" y="774" width="532" height="112" rx="15" fill="#151d2c" stroke="#687896" stroke-width="3" stroke-dasharray="9 7"/>
+    <text x="60" y="808" fill="#aab8d3" font-size="15" font-weight="700" letter-spacing="1.2">05 / EVIDENCE ATLAS</text>
+    <text x="60" y="857" fill="#ffffff" font-size="36" font-weight="700">0</text>
+    <text x="96" y="856" fill="#bac5d8" font-size="18">accepted physical observations today</text>
+
+    <path d="M300 894V922" stroke="#ff7f8d" stroke-width="4" stroke-linecap="round"/>
+    <path d="M290 912L300 924L310 912" fill="none" stroke="#ff7f8d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="34" y="930" width="532" height="134" rx="15" fill="#3b1924" stroke="#ff7f8d" stroke-width="3"/>
+    <text x="60" y="967" fill="#ffadb6" font-size="15" font-weight="700" letter-spacing="1.5">FAIL CLOSED</text>
+    <text x="60" y="1006" fill="#ffffff" font-size="22" font-weight="700">Missing authority · unsupported cell</text>
+    <text x="60" y="1037" fill="#ffffff" font-size="22" font-weight="700">drift · forbidden action · invalid output</text>
+
+    <text x="34" y="1110" fill="#9fb1cf" font-size="14" font-weight="700" letter-spacing="1.5">PROSPECTIVE DIMENSIONS</text>
+    <g font-size="17" font-weight="700">
+      <rect x="34" y="1130" width="252" height="45" rx="22.5" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
+      <text x="160" y="1159" fill="#eafcff" text-anchor="middle">matmul · softmax · norm</text>
+      <rect x="314" y="1130" width="252" height="45" rx="22.5" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
+      <text x="440" y="1159" fill="#eafcff" text-anchor="middle">top-k · argmax</text>
+      <rect x="34" y="1190" width="252" height="45" rx="22.5" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
+      <text x="160" y="1219" fill="#eafcff" text-anchor="middle">fp32 · fp16 · bf16</text>
+      <rect x="314" y="1190" width="252" height="45" rx="22.5" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
+      <text x="440" y="1219" fill="#eafcff" text-anchor="middle">eager · compiled</text>
+      <rect x="34" y="1250" width="532" height="45" rx="22.5" fill="#1e263c" stroke="#7c8fb5" stroke-width="2"/>
+      <text x="300" y="1279" fill="#eef3ff" text-anchor="middle">bits · digest · ULP · absolute / relative error</text>
+    </g>
+  </g>
+</svg>
