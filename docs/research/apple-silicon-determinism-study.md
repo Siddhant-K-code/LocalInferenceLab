@@ -9,7 +9,7 @@ observation bound to the exact runtime, operation, process, authorization, and c
 produced it.
 
 <picture>
-  <source media="(max-width: 640px)" srcset="../assets/apple-silicon-determinism/locked-lab-mobile.svg" width="600">
+  <source media="(max-width: 1279px)" srcset="../assets/apple-silicon-determinism/locked-lab-mobile.svg" width="600">
   <img src="../assets/apple-silicon-determinism/locked-lab.svg" width="1200" alt="A sealed recipe identifies exact inputs, a locked laboratory represents missing permission, and an empty evidence tray represents zero accepted physical observations">
 </picture>
 
@@ -58,9 +58,10 @@ binds the reviewed MLX `0.30.4` / MLX-LM `0.30.6` candidate, target, source anch
 That decision means only “eligible for human review toward a possible fresh authorization.”
 Offline replay does not prove that the wheel pack is present now.
 
-**2. Explicit authorization.** This does not exist. The current schema-1.1 layer is a
-process-free contract and refusal surface: it has no authorization creator or consumer, installer,
-worker, or execute entry point.
+**2. Explicit authorization.** This does not exist. Runtime-preflight schema-1.0 execution remains
+permanently disabled and unreachable. Runtime-preflight schema-1.1 is a process-free contract and
+refusal layer: it has no authorization creator or consumer, installer, worker, or execute entry
+point.
 
 **3. Bounded execution.** A future implementation would need exact runtime custody, a one-shot
 authority, fixed action budgets, no retries, a private worker protocol, strict parent validation,
@@ -93,7 +94,8 @@ reconstruct comparison metrics, detect identity drift, and replay a closed synth
 
 They **do not** establish MLX support, importability, Apple-silicon behavior, Metal availability,
 device placement, execution order, fusion behavior, numerical determinism, performance, or any
-physical observation. Schema 1.0 rejects physical and `authorized_observation` records by design.
+physical observation. Determinism-canary schema 1.0 rejects physical and
+`authorized_observation` records by design.
 
 ## The proposed model-free study
 
@@ -103,8 +105,8 @@ The successor protocol should predeclare each dimension rather than discovering 
 settings after a run.
 
 <picture>
-  <source media="(max-width: 640px)" srcset="../assets/apple-silicon-determinism/experiment-flow-mobile.svg" width="600">
-  <img src="../assets/apple-silicon-determinism/experiment-flow.svg" width="1200" alt="Prospective technical flow from a predeclared primitive matrix through a fresh human authorization gate, bounded future execution, strict parent validation, and an evidence atlas, with any mismatch routed to refusal">
+  <source media="(max-width: 1279px)" srcset="../assets/apple-silicon-determinism/experiment-flow-mobile.svg" width="600">
+  <img src="../assets/apple-silicon-determinism/experiment-flow.svg" width="1200" alt="Prospective experiment flow. The current project predeclares the matrix and stops at an ungranted human authorization gate. Future bounded execution, parent validation, and evidence-atlas stages are inactive; zero physical observations are accepted; any mismatch fails closed.">
 </picture>
 
 | Dimension | Prospective declaration |

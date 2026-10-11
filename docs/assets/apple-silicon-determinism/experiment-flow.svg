@@ -8,30 +8,30 @@
     <text x="54" y="93" fill="#c2cee3" font-size="19">Every dimension is declared first. Every mismatch becomes evidence-preserving refusal.</text>
 
     <rect x="42" y="136" width="208" height="190" rx="16" fill="#123049" stroke="#6ee7f5" stroke-width="3"/>
-    <text x="64" y="171" fill="#8cf4ff" font-size="14" font-weight="700" letter-spacing="1.4">01 / PREDECLARE</text>
+    <text x="64" y="171" fill="#8cf4ff" font-size="16" font-weight="700" letter-spacing="1.4">01 / PREDECLARE</text>
     <text x="64" y="207" fill="#ffffff" font-size="24" font-weight="700">Primitive matrix</text>
     <text x="64" y="239" fill="#d8e8f4" font-size="16">ops · dtypes · shapes</text>
     <text x="64" y="266" fill="#d8e8f4" font-size="16">eager / compiled</text>
     <text x="64" y="293" fill="#d8e8f4" font-size="16">cold / warm · repeats</text>
     <rect x="64" y="307" width="157" height="28" rx="14" fill="#6ee7f5"/>
-    <text x="142.5" y="326" fill="#07111f" font-size="13" font-weight="700" text-anchor="middle">CURRENT SIDE</text>
+    <text x="142.5" y="326" fill="#07111f" font-size="16" font-weight="700" text-anchor="middle">CURRENT SIDE</text>
 
     <path d="M258 231H292" stroke="#77dfee" stroke-width="4" stroke-linecap="round"/>
     <path d="M282 221L294 231L282 241" fill="none" stroke="#77dfee" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
 
     <rect x="300" y="136" width="208" height="190" rx="16" fill="#2b2020" stroke="#f2bd57" stroke-width="3" stroke-dasharray="9 7"/>
-    <text x="322" y="171" fill="#ffd477" font-size="14" font-weight="700" letter-spacing="1.4">02 / HUMAN GATE</text>
+    <text x="322" y="171" fill="#ffd477" font-size="16" font-weight="700" letter-spacing="1.4">02 / HUMAN GATE</text>
     <path d="M365 234V214C365 188 384 176 404 176C424 176 443 188 443 214V234" fill="none" stroke="#ffe29a" stroke-width="7" stroke-linecap="round"/>
     <rect x="352" y="228" width="104" height="67" rx="10" fill="#52391b" stroke="#f2bd57" stroke-width="3"/>
     <circle cx="404" cy="253" r="8" fill="#fff1c2"/>
     <path d="M404 261V279" stroke="#fff1c2" stroke-width="6" stroke-linecap="round"/>
-    <text x="404" y="318" fill="#fff1c2" font-size="15" font-weight="700" text-anchor="middle">NOT GRANTED</text>
+    <text x="404" y="318" fill="#fff1c2" font-size="16" font-weight="700" text-anchor="middle">NOT GRANTED</text>
 
     <path d="M516 231H550" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 8"/>
     <path d="M540 221L552 231L540 241" fill="none" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 
     <rect x="558" y="136" width="208" height="190" rx="16" fill="#151d2c" stroke="#687896" stroke-width="3" stroke-dasharray="9 7"/>
-    <text x="580" y="171" fill="#aab8d3" font-size="14" font-weight="700" letter-spacing="1.4">03 / FUTURE RUN</text>
+    <text x="580" y="171" fill="#aab8d3" font-size="16" font-weight="700" letter-spacing="1.4">03 / FUTURE RUN</text>
     <text x="580" y="207" fill="#f0f4fb" font-size="24" font-weight="700">Bounded worker</text>
     <text x="580" y="239" fill="#bac5d8" font-size="16">one-shot authority</text>
     <text x="580" y="266" fill="#bac5d8" font-size="16">no retries · no model</text>
@@ -41,7 +41,7 @@
     <path d="M798 221L810 231L798 241" fill="none" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 
     <rect x="816" y="136" width="164" height="190" rx="16" fill="#151d2c" stroke="#687896" stroke-width="3" stroke-dasharray="9 7"/>
-    <text x="838" y="171" fill="#aab8d3" font-size="14" font-weight="700" letter-spacing="1.2">04 / VALIDATE</text>
+    <text x="838" y="171" fill="#aab8d3" font-size="16" font-weight="700" letter-spacing="1.2">04 / VALIDATE</text>
     <text x="838" y="207" fill="#f0f4fb" font-size="23" font-weight="700">Parent checks</text>
     <text x="838" y="239" fill="#bac5d8" font-size="16">identity + custody</text>
     <text x="838" y="266" fill="#bac5d8" font-size="16">shape + exact bytes</text>
@@ -51,21 +51,21 @@
     <path d="M1012 221L1024 231L1012 241" fill="none" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 
     <rect x="1030" y="136" width="128" height="190" rx="16" fill="#151d2c" stroke="#687896" stroke-width="3" stroke-dasharray="9 7"/>
-    <text x="1050" y="171" fill="#aab8d3" font-size="14" font-weight="700">05 / ATLAS</text>
+    <text x="1050" y="171" fill="#aab8d3" font-size="16" font-weight="700">05 / ATLAS</text>
     <text x="1050" y="217" fill="#f0f4fb" font-size="46" font-weight="700">0</text>
-    <text x="1050" y="248" fill="#bac5d8" font-size="15">accepted</text>
-    <text x="1050" y="273" fill="#bac5d8" font-size="15">physical</text>
-    <text x="1050" y="298" fill="#bac5d8" font-size="15">observations</text>
+    <text x="1050" y="248" fill="#bac5d8" font-size="16">accepted</text>
+    <text x="1050" y="273" fill="#bac5d8" font-size="16">physical</text>
+    <text x="1050" y="298" fill="#bac5d8" font-size="16">observations</text>
 
     <path d="M404 336V389H1094V350" fill="none" stroke="#ff7f8d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
     <path d="M1084 360L1094 348L1104 360" fill="none" stroke="#ff7f8d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
     <text x="748" y="378" fill="#ffadb6" font-size="16" font-weight="700" text-anchor="middle">ANY MISMATCH OR MISSING AUTHORITY</text>
 
     <rect x="42" y="410" width="1116" height="92" rx="15" fill="#3b1924" stroke="#ff7f8d" stroke-width="3"/>
-    <text x="68" y="447" fill="#ffadb6" font-size="15" font-weight="700" letter-spacing="1.5">FAIL CLOSED</text>
+    <text x="68" y="447" fill="#ffadb6" font-size="16" font-weight="700" letter-spacing="1.5">FAIL CLOSED</text>
     <text x="68" y="480" fill="#ffffff" font-size="22" font-weight="700">Retain the failure. Do not retry, replace, promote, or manufacture a result.</text>
 
-    <text x="42" y="556" fill="#9fb1cf" font-size="14" font-weight="700" letter-spacing="1.5">PROSPECTIVE STUDY DIMENSIONS</text>
+    <text x="42" y="556" fill="#9fb1cf" font-size="16" font-weight="700" letter-spacing="1.5">PROSPECTIVE STUDY DIMENSIONS</text>
     <g font-size="17" font-weight="700">
       <rect x="42" y="576" width="202" height="46" rx="23" fill="#152b42" stroke="#4fc6da" stroke-width="2"/>
       <text x="143" y="605" fill="#eafcff" text-anchor="middle">matmul · softmax</text>
