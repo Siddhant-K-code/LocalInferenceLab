@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" viewBox="0 0 1200 560">
+  <title id="title">A sealed recipe, locked laboratory, and empty evidence tray</title>
+  <desc id="desc">Three panels separate identity, authority, and observed evidence. Exact static inputs are sealed, the laboratory remains locked because authorization is absent, and the evidence tray contains zero accepted physical MLX or Metal observations.</desc>
+
+  <rect width="1200" height="560" fill="#07111f"/>
+  <path d="M0 118H1200" stroke="#263754" stroke-width="2"/>
+  <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+    <text x="60" y="58" fill="#f8fbff" font-size="36" font-weight="700">Same study. Three different proofs.</text>
+    <text x="60" y="94" fill="#c2cee3" font-size="19">Identity can be complete while permission and physical evidence remain absent.</text>
+
+    <rect x="45" y="152" width="340" height="332" rx="18" fill="#12233b" stroke="#6ee7f5" stroke-width="3"/>
+    <rect x="82" y="194" width="102" height="128" rx="8" fill="#0c1729" stroke="#a5f3fc" stroke-width="3"/>
+    <path d="M105 228H161M105 252H161M105 276H145" stroke="#a5f3fc" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="181" cy="315" r="28" fill="#113c49" stroke="#6ee7f5" stroke-width="4"/>
+    <path d="M167 315L177 325L197 301" fill="none" stroke="#d7fffa" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="82" y="370" fill="#8cf4ff" font-size="16" font-weight="700" letter-spacing="1.6">IDENTITY</text>
+    <text x="82" y="407" fill="#ffffff" font-size="27" font-weight="700">Sealed recipe</text>
+    <text x="82" y="440" fill="#cbd8ec" font-size="17">Hashes bind exact bytes.</text>
+    <text x="82" y="466" fill="#cbd8ec" font-size="17">Static checks can replay.</text>
+
+    <rect x="430" y="152" width="340" height="332" rx="18" fill="#251e22" stroke="#f2bd57" stroke-width="3"/>
+    <path d="M545 255V224C545 184 575 166 600 166C625 166 655 184 655 224V255" fill="none" stroke="#ffe29a" stroke-width="10" stroke-linecap="round"/>
+    <rect x="520" y="244" width="160" height="110" rx="14" fill="#4b351c" stroke="#f2bd57" stroke-width="4"/>
+    <circle cx="600" cy="287" r="13" fill="#fff1c2"/>
+    <path d="M600 299V325" stroke="#fff1c2" stroke-width="9" stroke-linecap="round"/>
+    <text x="467" y="370" fill="#ffd477" font-size="16" font-weight="700" letter-spacing="1.6">AUTHORITY</text>
+    <text x="467" y="407" fill="#ffffff" font-size="27" font-weight="700">Laboratory locked</text>
+    <text x="467" y="440" fill="#ead9bd" font-size="17">Fresh permission is absent.</text>
+    <text x="467" y="466" fill="#ead9bd" font-size="17">No physical action may start.</text>
+
+    <rect x="815" y="152" width="340" height="332" rx="18" fill="#211925" stroke="#ff8f9b" stroke-width="3"/>
+    <path d="M867 303H1103L1079 349H891Z" fill="#381e2a" stroke="#ff8f9b" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M910 303V230H1060V303" fill="none" stroke="#ffc0c7" stroke-width="4"/>
+    <text x="985" y="277" fill="#ffffff" font-size="64" font-weight="700" text-anchor="middle">0</text>
+    <text x="852" y="370" fill="#ffadb6" font-size="16" font-weight="700" letter-spacing="1.6">OBSERVATION</text>
+    <text x="852" y="407" fill="#ffffff" font-size="27" font-weight="700">Evidence tray empty</text>
+    <text x="852" y="440" fill="#e6c8d0" font-size="17">No accepted physical MLX</text>
+    <text x="852" y="466" fill="#e6c8d0" font-size="17">or Metal observation.</text>
+
+    <rect x="45" y="510" width="1110" height="3" fill="#263754"/>
+    <text x="600" y="542" fill="#d8e3f5" font-size="18" font-weight="700" text-anchor="middle">A hash identifies the recipe. It does not unlock the lab or fill the tray.</text>
+  </g>
+</svg>

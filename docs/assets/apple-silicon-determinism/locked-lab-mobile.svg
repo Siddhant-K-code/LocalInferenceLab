@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" viewBox="0 0 360 760">
+  <title id="title">Identity, authority, and evidence on a narrow screen</title>
+  <desc id="desc">A sealed recipe establishes exact identity. The laboratory remains locked because fresh authorization is absent, so no physical action may start. The evidence tray remains empty with zero accepted physical MLX or Metal observations.</desc>
+
+  <rect width="360" height="760" fill="#07111f"/>
+  <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+    <text x="20" y="35" fill="#f8fbff" font-size="24" font-weight="700">Three different proofs</text>
+    <text x="20" y="59" fill="#c2cee3" font-size="16">Identity is not permission</text>
+    <text x="20" y="79" fill="#c2cee3" font-size="16">or observed evidence.</text>
+
+    <rect x="18" y="88" width="324" height="150" rx="14" fill="#12233b" stroke="#6ee7f5" stroke-width="3"/>
+    <rect x="38" y="117" width="64" height="80" rx="6" fill="#0c1729" stroke="#a5f3fc" stroke-width="3"/>
+    <path d="M53 139H88M53 156H88M53 173H78" stroke="#a5f3fc" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="101" cy="195" r="17" fill="#113c49" stroke="#6ee7f5" stroke-width="3"/>
+    <path d="M93 195L99 201L111 186" fill="none" stroke="#d7fffa" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="127" y="122" fill="#8cf4ff" font-size="16" font-weight="700">IDENTITY</text>
+    <text x="127" y="153" fill="#ffffff" font-size="23" font-weight="700">Recipe sealed</text>
+    <text x="127" y="183" fill="#d8e3f5" font-size="16">Exact bytes are bound.</text>
+    <text x="127" y="209" fill="#d8e3f5" font-size="16">Static checks replay.</text>
+
+    <path d="M180 244V268" stroke="#7686a4" stroke-width="4" stroke-linecap="round"/>
+
+    <rect x="18" y="276" width="324" height="198" rx="14" fill="#2b2020" stroke="#f2bd57" stroke-width="4"/>
+    <path d="M51 368V346C51 317 72 304 92 304C112 304 133 317 133 346V368" fill="none" stroke="#ffe29a" stroke-width="8" stroke-linecap="round"/>
+    <rect x="38" y="360" width="108" height="74" rx="10" fill="#52391b" stroke="#f2bd57" stroke-width="3"/>
+    <circle cx="92" cy="389" r="9" fill="#fff1c2"/>
+    <path d="M92 398V417" stroke="#fff1c2" stroke-width="7" stroke-linecap="round"/>
+    <text x="169" y="314" fill="#ffd477" font-size="16" font-weight="700">AUTHORITY</text>
+    <text x="169" y="348" fill="#ffffff" font-size="23" font-weight="700">LAB LOCKED</text>
+    <text x="169" y="379" fill="#fff1c2" font-size="18" font-weight="700">No permission.</text>
+    <text x="169" y="407" fill="#fff1c2" font-size="18" font-weight="700">No run.</text>
+    <text x="38" y="453" fill="#ffffff" font-size="18" font-weight="700">No physical action may start.</text>
+
+    <path d="M180 480V504" stroke="#7686a4" stroke-width="4" stroke-linecap="round"/>
+
+    <rect x="18" y="512" width="324" height="154" rx="14" fill="#211925" stroke="#ff8f9b" stroke-width="3"/>
+    <path d="M37 594H133L122 617H48Z" fill="#381e2a" stroke="#ff8f9b" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M57 594V546H113V594" fill="none" stroke="#ffc0c7" stroke-width="3"/>
+    <text x="85" y="582" fill="#ffffff" font-size="42" font-weight="700" text-anchor="middle">0</text>
+    <text x="156" y="550" fill="#ffadb6" font-size="16" font-weight="700">OBSERVATION</text>
+    <text x="156" y="582" fill="#ffffff" font-size="21" font-weight="700">Nothing accepted</text>
+    <text x="156" y="612" fill="#f2d5db" font-size="16">No physical MLX</text>
+    <text x="156" y="638" fill="#f2d5db" font-size="16">or Metal result.</text>
+
+    <text x="180" y="710" fill="#d8e3f5" font-size="16" font-weight="700" text-anchor="middle">Hashes identify bytes.</text>
+    <text x="180" y="735" fill="#d8e3f5" font-size="16" font-weight="700" text-anchor="middle">They do not authorize or observe.</text>
+  </g>
+</svg>

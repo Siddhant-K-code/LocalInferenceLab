@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" viewBox="0 0 360 996">
+  <title id="title">Committed static MLX physical-atlas contract on a narrow screen</title>
+  <desc id="desc">The current project commits a static 18-cell physical-atlas contract with exact inputs, run order, synchronization, and 28 comparison pairs per output. No acquisition compiler, worker, authorization, or execution permission exists. Physical candidate, accepted, and promotable record counts are zero.</desc>
+
+  <rect width="360" height="980" fill="#07111f"/>
+  <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+    <text x="20" y="35" fill="#f8fbff" font-size="24" font-weight="700">Static atlas contract</text>
+    <text x="20" y="62" fill="#c2cee3" font-size="16">Committed plan. No observations.</text>
+
+    <rect x="18" y="88" width="324" height="200" rx="14" fill="#123049" stroke="#6ee7f5" stroke-width="3"/>
+    <text x="38" y="122" fill="#8cf4ff" font-size="16" font-weight="700">CURRENT PROJECT</text>
+    <text x="38" y="156" fill="#ffffff" font-size="24" font-weight="700">18 static cells</text>
+    <text x="38" y="188" fill="#d8e8f4" font-size="17">5 exact operations.</text>
+    <text x="38" y="216" fill="#d8e8f4" font-size="17">Argmax, not top-k.</text>
+    <text x="38" y="244" fill="#d8e8f4" font-size="17">Exact inputs + run order.</text>
+    <text x="38" y="272" fill="#d8e8f4" font-size="17">No tensor operations.</text>
+
+    <path d="M180 296V320" stroke="#77dfee" stroke-width="4" stroke-linecap="round"/>
+    <path d="M171 311L180 322L189 311" fill="none" stroke="#77dfee" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="18" y="330" width="324" height="214" rx="14" fill="#10283b" stroke="#77dfee" stroke-width="3"/>
+    <text x="38" y="365" fill="#a8f2fb" font-size="16" font-weight="700">BOUND RUN + COMPARISON PLAN</text>
+    <text x="38" y="405" fill="#ffffff" font-size="20" font-weight="700">3 cold observations</text>
+    <text x="38" y="439" fill="#ffffff" font-size="20" font-weight="700">2 warmups—not observations</text>
+    <text x="38" y="473" fill="#ffffff" font-size="20" font-weight="700">5 warm observations</text>
+    <text x="38" y="507" fill="#d8e8f4" font-size="17">Exact sync points · 28 pairs/output</text>
+
+    <path d="M180 552V576" stroke="#f2bd57" stroke-width="4" stroke-linecap="round"/>
+    <path d="M171 567L180 578L189 567" fill="none" stroke="#f2bd57" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="18" y="586" width="324" height="188" rx="14" fill="#2b2020" stroke="#f2bd57" stroke-width="4"/>
+    <text x="38" y="621" fill="#ffd477" font-size="16" font-weight="700">ACTION PATH ABSENT</text>
+    <text x="38" y="659" fill="#ffffff" font-size="22" font-weight="700">No acquisition compiler</text>
+    <text x="38" y="693" fill="#ffffff" font-size="22" font-weight="700">No worker or authorization</text>
+    <text x="38" y="727" fill="#fff1c2" font-size="18" font-weight="700">Permission to execute: false</text>
+    <text x="38" y="757" fill="#f2dfbd" font-size="16">Static envelopes only.</text>
+
+    <path d="M180 782V806" stroke="#ff7f8d" stroke-width="4" stroke-linecap="round"/>
+    <path d="M171 797L180 808L189 797" fill="none" stroke="#ff7f8d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="18" y="816" width="324" height="124" rx="14" fill="#3b1924" stroke="#ff7f8d" stroke-width="3"/>
+    <text x="38" y="853" fill="#ffffff" font-size="21" font-weight="700">Physical records</text>
+    <text x="38" y="888" fill="#ffd1d6" font-size="18" font-weight="700">Candidates 0 · Accepted 0</text>
+    <text x="38" y="918" fill="#ffd1d6" font-size="18" font-weight="700">Promotable 0</text>
+
+    <text x="180" y="970" fill="#c2cee3" font-size="16" font-weight="700" text-anchor="middle">No acquisition. No run. No result.</text>
+  </g>
+</svg>
