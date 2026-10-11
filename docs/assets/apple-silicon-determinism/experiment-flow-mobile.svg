@@ -23,7 +23,6 @@
     <text x="165" y="351" fill="#ffffff" font-size="24" font-weight="700">NOT GRANTED</text>
     <text x="165" y="384" fill="#fff1c2" font-size="18" font-weight="700">STOP. No run.</text>
     <text x="165" y="414" fill="#f2dfbd" font-size="16">Fresh decision required.</text>
-    <text x="38" y="442" fill="#ffffff" font-size="18" font-weight="700">The project stops here today.</text>
 
     <path d="M180 463V487" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 7"/>
     <path d="M171 478L180 489L189 478" fill="none" stroke="#687896" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
