@@ -42,7 +42,7 @@ The project proves what it can without quietly crossing that boundary.
   **Proven:** It freezes a 48-cell prospective matrix and exact comparison semantics.<br>
   **Not proven:** Its eight committed positive cases are synthetic only. No physical MLX or Metal observation has been accepted.
 - **Physical atlas contract**<br>
-  **Proven:** A distinct 18-cell successor subset binds exact operations, deterministic inputs, run order, comparison metrics, identity slots, provenance, and custody envelopes.<br>
+  **Proven:** A distinct 18-cell successor subset binds exact operations including MLX-0.30.4 `argmax`/`uint32`, deterministic inputs, run order, all 28 required observation pairs, comparison metrics, identity slots, provenance, and custody envelopes.<br>
   **Not proven:** Every envelope is static and unobserved. Worker and authorization identities remain unavailable; accepted physical observations and promotable records remain zero.
 
 ## A Map, Not a Measurement

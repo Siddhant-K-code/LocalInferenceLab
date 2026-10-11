@@ -27,11 +27,12 @@ _CONTROL_LIMIT = 32
 _DIGEST_LENGTH = 71
 _MAX_ELEMENTS = 4_096
 _MAX_RANK = 4
+_MIN_TIE_COUNT = 2
 _SEED_MATERIAL = (
     "LocalInferenceLab Apple-Silicon MLX Determinism Atlas physical observation contract v1"
 )
 _SEED_HEX = hashlib.sha256(_SEED_MATERIAL.encode("utf-8")).hexdigest()
-_DTYPE_BYTES = {"bfloat16": 2, "float16": 2, "float32": 4}
+_DTYPE_BYTES = {"bfloat16": 2, "float16": 2, "float32": 4, "uint32": 4}
 _DTYPE_CODEBOOK = {
     "float16": ("00c0", "00bc", "00b8", "0000", "0038", "003c", "0040", "0042"),
     "bfloat16": ("00c0", "80bf", "00bf", "0000", "003f", "803f", "0040", "4040"),
@@ -51,7 +52,7 @@ _OPERATION_ORDER = (
     "softmax",
     "rms_normalization",
     "layer_normalization",
-    "top_k",
+    "argmax",
 )
 _CELL_MATRIX = tuple(
     (operation, dtype, mode)
@@ -63,9 +64,10 @@ _CELL_MATRIX = tuple(
         ("float32", "compiled"),
     )
 ) + (
-    ("top_k", "float32", "eager"),
-    ("top_k", "float32", "compiled"),
+    ("argmax", "float32", "eager"),
+    ("argmax", "float32", "compiled"),
 )
+_REVIEWED_MLX_REVISION = "2f324cc3b200700b422db4811ae3ff8bd5bf48b4"
 _ZERO_ACTIONS: dict[str, int] = {
     "authorization_actions": 0,
     "backend_queries": 0,
@@ -228,8 +230,10 @@ def _operations() -> list[dict[str, JsonValue]]:
     common_casting: dict[str, JsonValue] = {
         "evaluation_dtype": "float32",
         "input_casting": "exact_source_value_to_float32",
-        "output_casting": "round_to_nearest_ties_to_even_to_cell_dtype",
         "intermediate_rounding": "round_to_nearest_ties_to_even_to_float32",
+    }
+    floating_output_casting: dict[str, JsonValue] = {
+        "output_casting_by_name": {"output": "round_to_nearest_ties_to_even_to_cell_dtype"}
     }
     definitions = [
         _operation_content(
@@ -244,6 +248,7 @@ def _operations() -> list[dict[str, JsonValue]]:
             {"contracted_left_axis": 1, "contracted_right_axis": 0},
             {
                 **common_casting,
+                **floating_output_casting,
                 "accumulation_dtype": "float32",
                 "accumulation_order": "ascending_k",
                 "initial_accumulator": "positive_zero_float32",
@@ -263,6 +268,7 @@ def _operations() -> list[dict[str, JsonValue]]:
             {"axis": 2, "keepdims": True},
             {
                 **common_casting,
+                **floating_output_casting,
                 "accumulation_dtype": "float32",
                 "exponentiation": "exact_real_exp_then_round_to_float32",
                 "maximum_reduction_order": "ascending_axis_index",
@@ -280,6 +286,7 @@ def _operations() -> list[dict[str, JsonValue]]:
             {"axis": 2, "keepdims": True},
             {
                 **common_casting,
+                **floating_output_casting,
                 "accumulation_dtype": "float32",
                 "epsilon": {
                     "dtype": "float32",
@@ -304,6 +311,7 @@ def _operations() -> list[dict[str, JsonValue]]:
             {"axis": 2, "keepdims": True},
             {
                 **common_casting,
+                **floating_output_casting,
                 "accumulation_dtype": "float32",
                 "algorithm": "two_pass_mean_then_centered_variance",
                 "epsilon": {
@@ -318,25 +326,35 @@ def _operations() -> list[dict[str, JsonValue]]:
             },
         ),
         _operation_content(
-            "top_k",
-            (
-                "for each row return the four greatest values sorted descending and their "
-                "original indices;equal values sort by lowest original index"
-            ),
+            "argmax",
+            ("output[i]=the lowest axis-1 index j whose input[i,j] equals max_k(input[i,k])"),
             ["float32"],
             [_tensor_contract("input", [2, 16], "cell_dtype")],
-            [
-                _tensor_contract("values", [2, 4], "cell_dtype"),
-                _tensor_contract("indices", [2, 4], "int32"),
-            ],
-            {"axis": 1, "k": 4},
+            [_tensor_contract("indices", [2], "uint32")],
+            {"axis": 1, "keepdims": False},
             {
-                **common_casting,
+                "evaluation_dtype": "float32",
+                "input_casting": "none_input_is_float32",
+                "intermediate_rounding": "not_applicable",
+                "output_casting_by_name": {"indices": "none_native_uint32"},
                 "accumulation_dtype": "not_applicable",
-                "index_dtype": "int32",
-                "nan_input_policy": "input_generator_emits_finite_values_only",
-                "ordering": "value_descending_then_original_index_ascending",
-                "value_comparison": "exact_float32_total_order_over_finite_values",
+                "index_dtype": "uint32",
+                "nan_input_policy": "forbidden_by_finite_input_generator",
+                "tie_policy": "lowest_axis_index",
+                "upstream_api": "mlx.core.argmax",
+                "upstream_binding": {
+                    "repository": "https://github.com/ml-explore/mlx",
+                    "tag": "v0.30.4",
+                    "revision": _REVIEWED_MLX_REVISION,
+                    "python_binding_path": "python/src/ops.cpp",
+                    "core_api_path": "mlx/ops.cpp",
+                    "cpu_tie_path": "mlx/backend/cpu/arg_reduce.cpp",
+                    "metal_tie_path": "mlx/backend/metal/kernels/arg_reduce.metal",
+                    "verified_semantics": (
+                        "axis_1_keepdims_false_uint32_output_strict_greater_update_"
+                        "and_lowest_index_equal_value_merge"
+                    ),
+                },
             },
         ),
     ]
@@ -345,6 +363,18 @@ def _operations() -> list[dict[str, JsonValue]]:
 
 def _cell_name(operation_name: str, dtype: str, evaluation_mode: str) -> str:
     return f"{operation_name}_{dtype}_{evaluation_mode}"
+
+
+def _input_selection_indices(
+    cell_name: str,
+    input_name: str,
+    element_count: int,
+) -> list[int]:
+    indices: list[int] = []
+    for element_index in range(element_count):
+        domain = (f"{STUDY_NAME}\0{cell_name}\0{input_name}\0{element_index}\0{_SEED_HEX}").encode()
+        indices.append(hashlib.sha256(domain).digest()[0] % 8)
+    return indices
 
 
 def _input_payload(
@@ -356,9 +386,7 @@ def _input_payload(
     element_count = math.prod(shape)
     codebook = _DTYPE_CODEBOOK[dtype]
     payload = bytearray()
-    for element_index in range(element_count):
-        domain = (f"{STUDY_NAME}\0{cell_name}\0{input_name}\0{element_index}\0{_SEED_HEX}").encode()
-        selector = hashlib.sha256(domain).digest()[0] % len(codebook)
+    for selector in _input_selection_indices(cell_name, input_name, element_count):
         payload.extend(bytes.fromhex(codebook[selector]))
     return {
         "input_name": input_name,
@@ -369,6 +397,33 @@ def _input_payload(
         "element_count": element_count,
         "payload_byte_count": len(payload),
         "payload_sha256": digest_bytes(bytes(payload)),
+    }
+
+
+def _argmax_reference_output(cell_name: str) -> dict[str, JsonValue]:
+    row_count = 2
+    axis_size = 16
+    selections = _input_selection_indices(cell_name, "input", row_count * axis_size)
+    indices: list[int] = []
+    maximum_tie_counts: list[JsonValue] = []
+    for row_index in range(row_count):
+        row = selections[row_index * axis_size : (row_index + 1) * axis_size]
+        maximum = max(row)
+        indices.append(row.index(maximum))
+        maximum_tie_counts.append(row.count(maximum))
+    payload = b"".join(index.to_bytes(4, "little") for index in indices)
+    return {
+        "derivation": "finite_codebook_order_then_lowest_axis_index_on_equal_maximum",
+        "shape": [2],
+        "dtype": "uint32",
+        "endianness": "little",
+        "data_hex": payload.hex(),
+        "payload_sha256": digest_bytes(payload),
+        "maximum_tie_counts_by_row": maximum_tie_counts,
+        "all_rows_are_tie_heavy": all(
+            cast("int", count) >= _MIN_TIE_COUNT for count in maximum_tie_counts
+        ),
+        "physical_observation": False,
     }
 
 
@@ -394,6 +449,8 @@ def _cell(
         "finite_codebook_values": ["-2", "-1", "-0.5", "+0", "+0.5", "+1", "+2", "+3"],
         "inputs": cast("list[JsonValue]", inputs),
     }
+    if operation_name == "argmax":
+        input_set["reference_output"] = _argmax_reference_output(name)
     input_set["canonical_input_set_id"] = canonical_identity(input_set)
     content: dict[str, JsonValue] = {
         "cell_name": name,
@@ -444,10 +501,39 @@ def _run_protocol() -> dict[str, JsonValue]:
 
 
 def _comparison_contract() -> dict[str, JsonValue]:
-    return {
+    content: dict[str, JsonValue] = {
         "tensor_compatibility": "dtype_shape_layout_endianness_and_element_count_must_match",
         "exact_equality": "identical_payload_bytes_after_metadata_validation",
         "mismatch_count": "count_of_native_dtype_element_bit_patterns_that_differ",
+        "floating_metric_record": {
+            "comparison_kind": "floating_ieee_754",
+            "required_metrics": [
+                "exact_equal",
+                "numerical_equal",
+                "element_count",
+                "mismatch_count",
+                "finite_pair_count",
+                "finite_mismatch_count",
+                "nan_pair_count",
+                "infinity_pair_count",
+                "signed_zero_bit_difference_count",
+                "special_mismatch_count",
+                "maximum_absolute_error",
+                "maximum_relative_error",
+                "rms_error",
+                "maximum_signed_zero_normalized_ulp_distance",
+            ],
+        },
+        "uint32_metric_record": {
+            "comparison_kind": "exact_uint32",
+            "required_metrics": [
+                "exact_equal",
+                "element_count",
+                "mismatch_count",
+                "equal_element_count",
+            ],
+            "floating_metrics": "not_applicable",
+        },
         "maximum_absolute_error": "maximum_abs_left_minus_right_over_finite_pairs",
         "maximum_relative_error": (
             "maximum_abs_left_minus_right_divided_by_max_abs_operand_over_finite_pairs;"
@@ -460,11 +546,44 @@ def _comparison_contract() -> dict[str, JsonValue]:
             "_mapped_to_one_code"
         ),
         "nan_policy": "both_nan_requires_identical_sign_and_payload_else_special_mismatch",
-        "infinity_policy": "both_infinite_requires_identical_sign_else_special_mismatch",
+        "infinity_policy": (
+            "both_infinite_increments_infinity_pair_count;"
+            "opposite_sign_or_code_also_increments_special_mismatch_count"
+        ),
         "non_finite_error_policy": "exclude_from_abs_relative_rms_and_ulp_then_count_separately",
-        "top_k_index_policy": "int32_indices_require_exact_shape_and_payload_equality",
-        "acceptance_threshold": "same_condition_observations_must_be_exactly_equal",
+        "argmax_index_policy": "uint32_indices_require_exact_shape_and_payload_equality",
+        "pairing": {
+            "cold_observation_indices": [0, 1, 2],
+            "warm_observation_indices": [3, 4, 5, 6, 7],
+            "cold_all_pairs_required": 3,
+            "warm_all_pairs_required": 10,
+            "cold_warm_all_pairs_required": 15,
+            "total_required_pairs_per_output": 28,
+            "pair_order": "cold_lexicographic_then_warm_lexicographic_then_cross_lexicographic",
+        },
+        "comparison_record_required_fields": [
+            "record_type",
+            "schema_version",
+            "study_id",
+            "cell_id",
+            "record_state",
+            "pair_index",
+            "pair_class",
+            "left_observation_index",
+            "right_observation_index",
+            "output_name",
+            "output_dtype",
+            "comparison_kind",
+            "metrics",
+            "pair_accepted",
+            "comparison_record_id",
+        ],
+        "aggregate_acceptance": (
+            "all_28_required_pairs_for_every_output_must_be_present_in_exact_order_and_exact_equal"
+        ),
+        "favorable_subset_acceptance": "forbidden",
     }
+    return _identity_record(content, "comparison_contract_id")
 
 
 def _evidence_contract() -> dict[str, JsonValue]:
@@ -589,9 +708,9 @@ def _verify_cell_dimensions(cell: dict[str, JsonValue], label: str) -> None:
     if operation_name == "matrix_multiply":
         if axes != {"contracted_left_axis": 1, "contracted_right_axis": 0}:
             raise ContractError(f"{label}.axes invalid for matrix multiplication")
-    elif operation_name == "top_k":
-        if axes != {"axis": 1, "k": 4}:
-            raise ContractError(f"{label}.axes invalid for top-k")
+    elif operation_name == "argmax":
+        if axes != {"axis": 1, "keepdims": False}:
+            raise ContractError(f"{label}.axes invalid for argmax")
     elif axes != {"axis": 2, "keepdims": True}:
         raise ContractError(f"{label}.axes invalid for normalization or softmax")
 
@@ -610,6 +729,8 @@ def verify_physical_atlas_study_spec(value: JsonValue) -> dict[str, JsonValue]:
         raise ContractError("physical atlas study identity mismatch")
     operations = _array(spec["operations"], "physical atlas operations", maximum=16)
     expected_operations = cast("list[JsonValue]", expected["operations"])
+    if len(operations) != len(expected_operations):
+        raise ContractError("physical atlas operation count mismatch")
     operation_dtypes: dict[str, set[str]] = {}
     operation_ids: dict[str, str] = {}
     for index, operation_value in enumerate(operations):
@@ -635,6 +756,8 @@ def verify_physical_atlas_study_spec(value: JsonValue) -> dict[str, JsonValue]:
             raise ContractError(f"physical atlas operation identity mismatch: {name}")
     cells = _array(spec["selected_cells"], "physical atlas selected_cells", maximum=64)
     expected_cells = cast("list[JsonValue]", expected["selected_cells"])
+    if len(cells) != len(expected_cells):
+        raise ContractError("physical atlas selected cell array length mismatch")
     if _integer(spec["selected_cell_count"], "physical atlas selected_cell_count") != len(cells):
         raise ContractError("physical atlas selected cell count mismatch")
     seen_cell_ids: set[str] = set()
@@ -743,6 +866,105 @@ def _planned_steps(cell: dict[str, JsonValue]) -> list[dict[str, JsonValue]]:
     return steps
 
 
+def _comparison_pairs() -> list[dict[str, JsonValue]]:
+    groups = (
+        ("cold_all_pairs", (0, 1, 2), (0, 1, 2), True),
+        ("warm_all_pairs", (3, 4, 5, 6, 7), (3, 4, 5, 6, 7), True),
+        ("cold_warm_all_pairs", (0, 1, 2), (3, 4, 5, 6, 7), False),
+    )
+    pairs: list[dict[str, JsonValue]] = []
+    for pair_class, left_indices, right_indices, triangular in groups:
+        for left_index in left_indices:
+            for right_index in right_indices:
+                if triangular and left_index >= right_index:
+                    continue
+                pairs.append(
+                    {
+                        "pair_index": len(pairs),
+                        "pair_class": pair_class,
+                        "left_observation_index": left_index,
+                        "right_observation_index": right_index,
+                    }
+                )
+    return pairs
+
+
+def _comparison_outputs(cell: dict[str, JsonValue]) -> list[dict[str, JsonValue]]:
+    outputs: list[dict[str, JsonValue]] = []
+    for output_value in cast("list[JsonValue]", cell["output_contract"]):
+        output = cast("dict[str, JsonValue]", output_value)
+        declared_dtype = cast("str", output["dtype"])
+        dtype = cast("str", cell["dtype"]) if declared_dtype == "cell_dtype" else declared_dtype
+        outputs.append(
+            {
+                "output_name": output["name"],
+                "output_dtype": dtype,
+                "comparison_kind": ("exact_uint32" if dtype == "uint32" else "floating_ieee_754"),
+            }
+        )
+    return outputs
+
+
+def _comparison_templates(
+    spec: dict[str, JsonValue],
+    cell: dict[str, JsonValue],
+) -> tuple[dict[str, JsonValue], list[dict[str, JsonValue]], dict[str, JsonValue]]:
+    pairs = _comparison_pairs()
+    outputs = _comparison_outputs(cell)
+    records: list[dict[str, JsonValue]] = []
+    for pair in pairs:
+        for output in outputs:
+            content: dict[str, JsonValue] = {
+                "record_type": "mlx_physical_observation_comparison",
+                "schema_version": SCHEMA_VERSION,
+                "study_id": spec["study_id"],
+                "cell_id": cell["cell_id"],
+                "record_state": "unobserved_template",
+                "pair_index": pair["pair_index"],
+                "pair_class": pair["pair_class"],
+                "left_observation_index": pair["left_observation_index"],
+                "right_observation_index": pair["right_observation_index"],
+                "output_name": output["output_name"],
+                "output_dtype": output["output_dtype"],
+                "comparison_kind": output["comparison_kind"],
+                "metrics": None,
+                "pair_accepted": None,
+            }
+            records.append(_identity_record(content, "comparison_record_id"))
+    plan: dict[str, JsonValue] = {
+        "comparison_contract_id": cast("dict[str, JsonValue]", spec["comparison_contract"])[
+            "comparison_contract_id"
+        ],
+        "equivalence_classes": {
+            "cold_observation_indices": [0, 1, 2],
+            "warm_observation_indices": [3, 4, 5, 6, 7],
+            "cold_warm_cross_comparison_required": True,
+        },
+        "required_pairs": cast("list[JsonValue]", pairs),
+        "required_pair_count": len(pairs),
+        "required_outputs": cast("list[JsonValue]", outputs),
+        "required_output_count": len(outputs),
+        "required_comparison_record_count": len(records),
+        "record_order": "pair_order_then_output_contract_order",
+    }
+    aggregate: dict[str, JsonValue] = {
+        "record_state": "unobserved",
+        "required_pair_count": len(pairs),
+        "required_output_count": len(outputs),
+        "required_comparison_record_count": len(records),
+        "present_metric_record_count": 0,
+        "missing_metric_record_count": len(records),
+        "exact_equal_record_count": 0,
+        "failed_record_count": 0,
+        "aggregate_accepted": False,
+        "acceptance_rule": (
+            "all_required_records_present_in_exact_order_and_every_pair_exact_equal"
+        ),
+        "favorable_subset_accepted": False,
+    }
+    return plan, records, aggregate
+
+
 def prospective_observation_envelope(cell_name: str) -> dict[str, JsonValue]:
     """Compile one identity-bound unobserved envelope; provenance is never caller supplied."""
     spec = physical_atlas_study_spec()
@@ -757,6 +979,7 @@ def prospective_observation_envelope(cell_name: str) -> dict[str, JsonValue]:
     except KeyError as error:
         raise ContractError(f"unknown physical atlas cell: {cell_name}") from error
     steps = _planned_steps(cell)
+    comparison_plan, comparison_records, comparison_aggregate = _comparison_templates(spec, cell)
     content: dict[str, JsonValue] = {
         "record_type": "mlx_physical_observation_envelope",
         "schema_version": SCHEMA_VERSION,
@@ -774,7 +997,9 @@ def prospective_observation_envelope(cell_name: str) -> dict[str, JsonValue]:
             "planned_steps": cast("list[JsonValue]", steps),
         },
         "observed_runs": [],
-        "comparison_summary": None,
+        "comparison_plan": comparison_plan,
+        "comparison_records": cast("list[JsonValue]", comparison_records),
+        "comparison_aggregate": comparison_aggregate,
         "provenance": {
             "source_kind": "none_unobserved",
             "collector_identity_id": None,
@@ -847,8 +1072,54 @@ def verify_observation_envelope(value: JsonValue) -> dict[str, JsonValue]:
             cast("dict[str, JsonValue]", expected_steps[index])["synchronization_points"]
         ):
             raise ContractError("required synchronization point missing or reordered")
-    if envelope["observed_runs"] != [] or envelope["comparison_summary"] is not None:
-        raise ContractError("prospective envelope cannot contain observed results")
+    if envelope["observed_runs"] != []:
+        raise ContractError("prospective envelope cannot contain observed runs")
+    expected_plan = cast("dict[str, JsonValue]", expected["comparison_plan"])
+    if canonical_json(envelope["comparison_plan"]) != canonical_json(expected_plan):
+        raise ContractError(
+            "required comparison pairs or outputs are missing, duplicated, or reordered"
+        )
+    records = _array(
+        envelope["comparison_records"],
+        "physical observation envelope comparison_records",
+        maximum=128,
+    )
+    expected_records = cast("list[JsonValue]", expected["comparison_records"])
+    if len(records) != len(expected_records):
+        raise ContractError("required comparison record count mismatch; subsets are forbidden")
+    seen_comparison_ids: set[str] = set()
+    for index, record_value in enumerate(records):
+        record = _mapping(
+            record_value,
+            f"physical observation envelope comparison_records[{index}]",
+        )
+        expected_record = cast("dict[str, JsonValue]", expected_records[index])
+        _keys(
+            record,
+            set(expected_record),
+            f"physical observation envelope comparison_records[{index}]",
+        )
+        comparison_id = _sha256(
+            record["comparison_record_id"],
+            f"physical observation envelope comparison_records[{index}].comparison_record_id",
+        )
+        if comparison_id in seen_comparison_ids:
+            raise ContractError("duplicate physical observation comparison record")
+        seen_comparison_ids.add(comparison_id)
+        comparison_content = dict(record)
+        del comparison_content["comparison_record_id"]
+        if canonical_identity(comparison_content) != comparison_id:
+            raise ContractError("physical observation comparison record identity mismatch")
+        if record["metrics"] is not None or record["pair_accepted"] is not None:
+            raise ContractError("unobserved comparison templates cannot contain favorable metrics")
+        if canonical_json(record) != canonical_json(expected_record):
+            raise ContractError(
+                "comparison records are missing, duplicated, reordered, or subset-selected"
+            )
+    if canonical_json(envelope["comparison_aggregate"]) != canonical_json(
+        expected["comparison_aggregate"]
+    ):
+        raise ContractError("comparison aggregate count or acceptance drift")
     if canonical_json(envelope["identity_bindings"]) != canonical_json(_IDENTITY_BINDINGS):
         raise ContractError("observation identity binding mismatch")
     if canonical_json(envelope["provenance"]) != canonical_json(expected["provenance"]):
@@ -1061,11 +1332,23 @@ def compare_physical_outputs(
     left_value: JsonValue,
     right_value: JsonValue,
 ) -> dict[str, JsonValue]:
-    """Compare bounded float tensors with the physical-atlas edge policy."""
+    """Compare bounded float or uint32 tensors with the physical-atlas policy."""
     left = _parse_tensor(left_value, "physical comparison left")
     right = _parse_tensor(right_value, "physical comparison right")
     if left.dtype != right.dtype or left.shape != right.shape:
         raise ContractError("physical comparison metadata mismatch")
+    if left.dtype == "uint32":
+        mismatch_count = sum(
+            left_code != right_code
+            for left_code, right_code in zip(left.codes, right.codes, strict=True)
+        )
+        return {
+            "comparison_kind": "exact_uint32",
+            "exact_equal": mismatch_count == 0,
+            "element_count": len(left.codes),
+            "mismatch_count": mismatch_count,
+            "equal_element_count": len(left.codes) - mismatch_count,
+        }
     mismatch_count = 0
     finite_pair_count = 0
     finite_mismatch_count = 0
@@ -1095,8 +1378,10 @@ def compare_physical_outputs(
         left_infinite = math.isinf(left_number)
         right_infinite = math.isinf(right_number)
         if left_infinite or right_infinite:
-            if left_infinite and right_infinite and left_code == right_code:
+            if left_infinite and right_infinite:
                 infinity_pair_count += 1
+                if left_code != right_code:
+                    special_mismatch_count += 1
             else:
                 special_mismatch_count += 1
             continue
@@ -1127,6 +1412,7 @@ def compare_physical_outputs(
     )
     numerical_equal = finite_mismatch_count == 0 and special_mismatch_count == 0
     return {
+        "comparison_kind": "floating_ieee_754",
         "exact_equal": left.payload == right.payload,
         "numerical_equal": numerical_equal,
         "element_count": len(left.codes),

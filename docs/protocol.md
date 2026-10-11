@@ -285,8 +285,9 @@ The schema-1.0 physical atlas study is a versioned successor subset with new ide
 not alter the canary's 48 prospective cells, eight represented synthetic cells, or zero accepted
 physical observations. Its 18 selected cells cover matrix multiplication, softmax, RMS
 normalization, and two-pass layer normalization in `float16`, `bfloat16`, and `float32` eager
-forms plus `float32` compiled forms, and `float32` top-k in eager and compiled forms. Every cell
-remains prospective and makes no MLX support claim.
+forms plus `float32` compiled forms, and exact MLX-0.30.4 `float32` argmax in eager and compiled
+forms. Argmax binds axis 1, `keepdims=false`, lowest-index tie selection, and native `uint32`
+output with no cell-dtype cast. Every cell remains prospective and makes no runtime support claim.
 
 The study binds mathematical definitions, operation versions, exact shapes/axes/row-major layout,
 typed epsilon bytes, evaluation and accumulation dtype, casts, rounding, reduction order,
@@ -295,18 +296,25 @@ cell plans three one-observation cold processes followed by one warm process wit
 five observations. The exact cell/process/step order, zero retries, and input, compile, operation,
 and output-materialization synchronization points are identity-bound.
 
+Each output requires 28 ordered comparisons: all three cold/cold pairs, all ten warm/warm pairs,
+and all 15 cold/warm pairs. Envelopes bind the exact observation indices, pair classes, output
+names/dtypes, per-pair record identities, required counts, and aggregate all-exact-equal rule.
+Missing, duplicate, reordered, or favorable-subset records fail closed.
+
 Compatible floating outputs report exact equality, element mismatch count, maximum absolute and
 relative error, RMS error, signed-zero-normalized native ULP distance, and finite/NaN/infinity/
 signed-zero/special counts. NaN sign/payload and infinity sign mismatches fail. Non-finite pairs
-are excluded from finite metrics. Top-k indices require exact `int32` equality.
+are excluded from finite metrics; both-infinite pairs are counted even when their signs mismatch.
+Argmax indices use strict canonical `uint32` parsing and exact element comparison only.
 
 Evidence origin is immutable: `static_specification`, `synthetic_fixture`, and
 `physical_observation` cannot be relabeled into one another. The committed records are only static
 unobserved envelopes. They bind reviewed candidate, qualification, and prospective target
 identities while leaving reviewed worker and authorization identities explicitly unavailable.
-Caller-supplied provenance or hashes cannot satisfy those slots. Runs, comparisons, physical
-provenance, and custody are empty; accepted physical and promotable counts are zero. No command
-installs, imports, starts, queries, synchronizes, or executes MLX/MLX-LM/Metal.
+Caller-supplied provenance or hashes cannot satisfy those slots. Runs, comparison metrics,
+physical provenance, and custody are empty; comparison templates remain unobserved and accepted
+physical/promotable counts are zero. No command installs, imports, starts, queries, synchronizes,
+or executes MLX/MLX-LM/Metal.
 
 Native prompt TPS includes prefill plus the first decode step. Native generation TPS is a
 cumulative decode average after that first token. Peak memory is scoped since process start or the

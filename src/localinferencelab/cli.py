@@ -503,11 +503,11 @@ def _parser() -> argparse.ArgumentParser:
     determinism_replay.add_argument("bundle", type=Path)
     mlx_commands.add_parser(
         "physical-atlas-spec",
-        help="emit the exact process-free physical-observation study specification",
+        help="emit the exact MLX-0.30.4-bound process-free physical-observation study",
     )
     physical_atlas_verify = mlx_commands.add_parser(
         "physical-atlas-verify",
-        help="strictly verify one physical-atlas specification or prospective envelope record",
+        help=("verify one atlas specification or envelope with complete comparison templates"),
     )
     physical_atlas_verify.add_argument("record", type=Path)
     physical_atlas_inspect = mlx_commands.add_parser(

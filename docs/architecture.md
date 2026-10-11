@@ -337,16 +337,19 @@ The additive `mlx_physical_atlas_study_spec`, `mlx_physical_observation_envelope
 `mlx_physical_observation_envelope_set` records are a versioned successor subset, not a mutation of
 the canary. The historical canary remains 48 prospective cells, exactly eight represented
 synthetic cells, and zero accepted physical observations. The successor selects 18 new-identity
-cells across matrix multiplication, softmax, RMS normalization, layer normalization, and top-k.
-It covers `float16`, `bfloat16`, and `float32` where selected, with eager cells and bounded
-`float32` eager/compiled pairs.
+cells across matrix multiplication, softmax, RMS normalization, layer normalization, and
+MLX-0.30.4 argmax. It covers `float16`, `bfloat16`, and `float32` where selected, with eager cells
+and bounded `float32` eager/compiled pairs. Argmax binds axis 1, `keepdims=false`, lowest-index
+ties, native `uint32` output, and output-specific no-cast policy.
 
 Every cell binds its operation definition/version, dtype, exact shapes/axes/layout, deterministic
 input algorithm and payload hashes, evaluation/accumulation dtype, constants, casting/rounding,
 and compile mode. Every prospective envelope binds three ordered cold observations, two warmups
 and five ordered warm observations, required synchronization points, zero retries, reviewed
 candidate/qualification/target slots, unavailable worker/authorization slots, and the full future
-provenance/custody field set.
+provenance/custody field set. It also binds all three cold/cold, ten warm/warm, and 15 cold/warm
+comparison pairs per output, exact ordered record templates, and an all-records/exact-equality
+aggregate rule.
 
 Only static unobserved envelopes compile. Caller-supplied provenance cannot create authority;
 static and synthetic categories cannot become physical. No accepted physical or promotable record
