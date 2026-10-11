@@ -492,6 +492,12 @@ Validation uses no wall clock and treats every field as self-asserted. The claim
 current freshness, authoritative acquisition, independent binding, consumption, non-reuse, host
 observation, or successful custody and can never make `prerequisites_satisfied=true`.
 
+Duplicate/replay rejection currently applies only within the list passed to one
+`verify_one_shot_consumptions_1_1` call. Verification is stateless across calls, so the same pair
+can be verified again later. No durable or atomic consumption store exists in this milestone; a
+future physical gate must implement parent-owned durable one-shot consumption before making any
+worker action reachable.
+
 The prospective future physical sequence is:
 
 ```text

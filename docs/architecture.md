@@ -261,6 +261,12 @@ ordering are checked, but every field remains self-asserted. Caller-selected pro
 timestamps, state labels, root/nonce values, and recomputed hashes cannot establish freshness,
 independence, authority, host observation, consumption, or successful custody.
 
+Current replay detection is deliberately limited to duplicate authorization or consumption IDs
+within one caller-supplied verification batch. Repeating the same verified pair in a later call
+succeeds because this inert bridge has no parent-owned durable state or atomic consumption store.
+That limitation is harmless while execution is unreachable, but a future physical gate must add
+an atomic durable unconsumed-to-consumed transition before any worker action.
+
 The contract record keeps execution unreachable regardless of prerequisite state. There is no
 schema-1.1 worker, package installer/resolver/retriever/downloader, authorization creator, approved
 authorization consumer, or public/internal execute entrypoint. Current construction and replay
