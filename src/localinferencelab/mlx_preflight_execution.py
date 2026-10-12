@@ -53,6 +53,8 @@ from localinferencelab.mlx_preflight_worker import (
     RUNTIME_FD,
     SCHEMA_VERSION,
     WORKER_FD,
+    WorkerError,
+    validate_hello,
 )
 from localinferencelab.mlx_qualification_publication import (
     EXPECTED_QUALIFICATION_RECORD_ID,
@@ -62,7 +64,7 @@ from localinferencelab.mlx_runtime_target import runtime_target_anchor
 
 # This is a NEW implementation identity, not the old reviewed source/API approval.
 EXPECTED_WORKER_SOURCE_ID = (
-    "sha256:f1ed6f00fe49ce99478672bc2232222dbe7fe20d32c1f6fbd059335d01534821"
+    "sha256:de881a2334aae009eb077ea0a189908d46fba6d23d1c4943dbd5824b5f9ccbed"
 )
 BLOCKERS = (
     "durable_consumption_implementation_not_independently_reviewed_and_integrated",
@@ -85,6 +87,31 @@ _IDENTITY_FIELDS = {
 }
 _STANDARD_FDS = 2
 _REPRESENTATION_BOUND = 256
+_MAX_PID = 2_147_483_647
+
+
+def require_hello(value: dict[str, JsonValue]) -> None:
+    """Translate shared worker schema rejection to one privacy-safe parent code."""
+    try:
+        validate_hello(value)
+    except WorkerError as error:
+        raise AcquisitionError("hello_invalid") from error
+
+
+def require_identity(value: dict[str, JsonValue], hello: dict[str, JsonValue]) -> None:
+    """Validate observed process identities before comparison or public projection."""
+    fields = {"pid", "parent_pid", "interpreter_sha256", "runtime_root", "worker_program_id"}
+    if value.keys() != fields:
+        raise AcquisitionError("worker_identity_mismatch")
+    for name in ("pid", "parent_pid"):
+        pid = value[name]
+        if isinstance(pid, bool) or not isinstance(pid, int) or not 0 < pid <= _MAX_PID:
+            raise AcquisitionError("worker_identity_mismatch")
+    if value["pid"] == value["parent_pid"] or any(
+        value[name] != hello[name]
+        for name in ("interpreter_sha256", "runtime_root", "worker_program_id")
+    ):
+        raise AcquisitionError("worker_identity_mismatch")
 
 
 def _object(value: JsonValue) -> dict[str, JsonValue]:
@@ -148,6 +175,9 @@ class SessionValidator:
 
     def __init__(self, hello: dict[str, JsonValue], identity: dict[str, JsonValue]) -> None:
         """Start with parent-observed identities, not worker-selected input claims."""
+        require_hello(hello)
+        if identity:
+            require_identity(identity, hello)
         self.hello = hello
         self.identity = identity
         self.sequence = 0
@@ -156,6 +186,34 @@ class SessionValidator:
         self.terminal = False
         self.states = dict.fromkeys(ACTIONS, "refused_not_requested")
         self.observations: dict[str, JsonValue] = {}
+        self.delivery = dict.fromkeys(ACTIONS, "not_exposed")
+
+    def note_exposure(self, capture: Capture) -> None:
+        """Retained parent delivery is distinct from protocol/deadline acceptance."""
+        if (
+            capture.direction != "parent_to_worker"
+            or not capture.wire
+            or self.stage not in {"command", "started", "completed"}
+        ):
+            return
+        action = ACTIONS[self.action_index]
+        if capture.complete:
+            try:
+                frame = decode_frame(capture.wire)
+            except AcquisitionError:
+                frame = {}
+            candidate = frame.get("action")
+            if (
+                frame.get("kind") == "run_action"
+                and isinstance(candidate, str)
+                and candidate in ACTIONS
+            ):
+                action = candidate
+            self.delivery[action] = "complete_parent_command_exposed"
+        else:
+            self.delivery[action] = "partial_parent_command_exposure"
+        if self.states[action] == "refused_not_requested":
+            self.states[action] = "command_exposed_acceptance_unknown"
 
     def _verify_observation(self, action: str, value: JsonValue) -> None:
         if action == ACTIONS[0]:
@@ -226,18 +284,18 @@ class SessionValidator:
                 self.stage = "completed"
             else:
                 kind = value.get("kind")
-                if kind not in {"action_completed", "action_failed"}:
+                if not isinstance(kind, str) or kind not in {"action_completed", "action_failed"}:
                     raise AcquisitionError("action_terminal_kind")
                 fields = {
                     "action",
                     "observation" if kind == "action_completed" else "error_category",
                 }
-                require_frame(value, cast("str", kind), self.sequence, session, fields)
+                require_frame(value, kind, self.sequence, session, fields)
                 if direction != "worker_to_parent" or value["action"] != action:
                     raise AcquisitionError("action_order")
                 if kind == "action_failed":
                     category = value["error_category"]
-                    if category not in {
+                    if not isinstance(category, str) or category not in {
                         "WorkerError",
                         "ImportError",
                         "ModuleNotFoundError",
@@ -276,7 +334,7 @@ class SessionValidator:
         for action, state in self.states.items():
             attempted: JsonValue = (
                 None
-                if state == "command_sent_attempt_unknown"
+                if state in {"command_sent_attempt_unknown", "command_exposed_acceptance_unknown"}
                 else (state != "refused_not_requested")
             )
             completed: JsonValue = (
@@ -288,6 +346,7 @@ class SessionValidator:
                 "state": state,
                 "attempted": attempted,
                 "completed": completed,
+                "delivery": self.delivery[action],
                 "observation_scope": "worker_report_not_native_nonaction_proof",
             }
         return result
@@ -690,11 +749,18 @@ def replay_captures(
     prior = started_ns
     rejection: str | None = None
     for capture in captures:
+        if (
+            not isinstance(capture.direction, str)
+            or capture.direction not in {"parent_to_worker", "worker_to_parent"}
+            or (capture.rejection is not None and not isinstance(capture.rejection, str))
+        ):
+            raise AcquisitionError("capture_enum_fields")
         if capture.observed_ns < prior:
             raise AcquisitionError("nonmonotonic_capture")
         prior = capture.observed_ns
         if rejection is not None:
             raise AcquisitionError("captures_after_rejection")
+        validator.note_exposure(capture)
         if capture.observed_ns > deadline_ns:
             rejection = "deadline"
         elif not capture.complete:

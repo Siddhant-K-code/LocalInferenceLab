@@ -14,8 +14,8 @@ import stat
 import struct
 import sys
 import time
-from collections.abc import Callable
-from pathlib import Path
+from collections.abc import Callable, Mapping
+from pathlib import Path, PurePosixPath
 from typing import NoReturn, Protocol, cast
 
 SCHEMA_VERSION = "1.2"
@@ -53,10 +53,30 @@ PROTOCOL: dict[str, object] = {
     "attempts": 1,
     "retries": 0,
     "model_free": True,
+    "hello_validation": "strict_tokens_roots_distribution_import_and_session_bindings",
 }
 _SAFE_REPR = re.compile(r"[A-Za-z0-9_(), .=:-]{1,256}\Z")
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _TOKEN = re.compile(r"[0-9a-f]{64}\Z")
+_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
+_VERSION = re.compile(r"[A-Za-z0-9.+!_-]{1,128}\Z")
+_MAX_DISTRIBUTIONS = 34
+_MIN_DISTRIBUTIONS = 2
+_IMMUTABLE_ROOT_MODE = 0o555
+HELLO_FIELDS = {
+    "kind",
+    "sequence",
+    "protocol_id",
+    "session_id",
+    "challenge",
+    "nonce",
+    "deadline_ns",
+    "interpreter_sha256",
+    "runtime_root",
+    "distributions",
+    "worker_program_id",
+    "import_files",
+}
 
 
 class WorkerError(ValueError):
@@ -125,6 +145,83 @@ def _token(value: object) -> str:
     if not isinstance(value, str) or _TOKEN.fullmatch(value) is None:
         raise WorkerError("invalid_token")
     return value
+
+
+def validate_hello(value: Mapping[str, object]) -> None:
+    """Share exact initial-frame semantics across worker, parent and offline replay."""
+    if value.keys() != HELLO_FIELDS:
+        raise WorkerError("hello_fields")
+    if (value["kind"], _integer(value["sequence"]), value["protocol_id"]) != (
+        "hello",
+        0,
+        PROTOCOL_ID,
+    ):
+        raise WorkerError("hello_header")
+    challenge, nonce = _token(value["challenge"]), _token(value["nonce"])
+    if challenge == nonce:
+        raise WorkerError("hello_tokens_not_distinct")
+    expected_session = _digest(_canonical({"challenge": challenge, "nonce": nonce}))
+    if _sha(value["session_id"]) != expected_session or _integer(value["deadline_ns"]) == 0:
+        raise WorkerError("hello_session_binding")
+    _sha(value["interpreter_sha256"])
+    _sha(value["worker_program_id"])
+    root = value["runtime_root"]
+    if not isinstance(root, dict) or root.keys() != {"device", "inode", "mode"}:
+        raise WorkerError("hello_root_fields")
+    for field in ("device", "inode", "mode"):
+        _integer(root[field])
+    if root["inode"] == 0 or root["mode"] != _IMMUTABLE_ROOT_MODE:
+        raise WorkerError("hello_root_identity")
+    distributions = value["distributions"]
+    if (
+        not isinstance(distributions, list)
+        or not _MIN_DISTRIBUTIONS <= len(distributions) <= _MAX_DISTRIBUTIONS
+    ):
+        raise WorkerError("hello_distributions")
+    names: list[str] = []
+    selected: dict[str, str] = {}
+    for item in distributions:
+        if not isinstance(item, dict):
+            raise WorkerError("hello_distribution_fields")
+        _keys(item, {"name", "version", "metadata_sha256"})
+        name, version = item["name"], item["version"]
+        if (
+            not isinstance(name, str)
+            or _NAME.fullmatch(name) is None
+            or not isinstance(version, str)
+            or _VERSION.fullmatch(version) is None
+            or name in selected
+        ):
+            raise WorkerError("hello_distribution_identity")
+        _sha(item["metadata_sha256"])
+        selected[name] = version
+        names.append(name)
+    if (
+        names != sorted(names)
+        or selected.get("mlx") != "0.30.4"
+        or selected.get("mlx-lm") != "0.30.6"
+    ):
+        raise WorkerError("hello_candidate_identity")
+    imports = value["import_files"]
+    if not isinstance(imports, dict) or imports.keys() != {"mlx.core", "mlx_lm"}:
+        raise WorkerError("hello_import_fields")
+    for module, item in imports.items():
+        if not isinstance(item, dict):
+            raise WorkerError("hello_import_fields")
+        _keys(item, {"relative_file", "sha256"})
+        relative = item["relative_file"]
+        if not isinstance(relative, str):
+            raise WorkerError("hello_import_identity")
+        path = PurePosixPath(relative)
+        prefix = "mlx/" if module == "mlx.core" else "mlx_lm/"
+        if (
+            not relative.startswith(prefix)
+            or "\\" in relative
+            or path.as_posix() != relative
+            or ".." in path.parts
+        ):
+            raise WorkerError("hello_import_identity")
+        _sha(item["sha256"])
 
 
 def _send(endpoint: socket.socket, value: dict[str, object], deadline: int) -> None:
@@ -336,6 +433,7 @@ def _serve(
     identity: dict[str, object],
 ) -> None:
     """Execute the fixed loop; tests supply inert operations, never a native adapter."""
+    validate_hello(hello)
     deadline = _integer(hello["deadline_ns"])
     session = _sha(hello["session_id"])
     challenge = _token(hello["challenge"])
@@ -421,29 +519,7 @@ def _worker_main() -> None:
             raise WorkerError("socket_identity")
         deadline = time.monotonic_ns() + MAX_LIFETIME_NS
         hello = _receive(endpoint, deadline)
-        _keys(
-            hello,
-            {
-                "kind",
-                "sequence",
-                "protocol_id",
-                "session_id",
-                "challenge",
-                "nonce",
-                "deadline_ns",
-                "interpreter_sha256",
-                "runtime_root",
-                "distributions",
-                "worker_program_id",
-                "import_files",
-            },
-        )
-        if (hello["kind"], _integer(hello["sequence"]), hello["protocol_id"]) != (
-            "hello",
-            0,
-            PROTOCOL_ID,
-        ):
-            raise WorkerError("hello_mismatch")
+        validate_hello(hello)
         interpreter = _file_digest(INTERPRETER_FD, 128 * MAX_METADATA_BYTES)
         root_identity = _root_identity(RUNTIME_FD)
         if hello["interpreter_sha256"] != interpreter or hello["runtime_root"] != root_identity:

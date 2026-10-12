@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import NoReturn, cast
+from typing import NoReturn
 
 from localinferencelab.canonical import (
     JsonValue,
@@ -21,6 +21,8 @@ from localinferencelab.mlx_preflight_execution import (
     _object,
     replay_captures,
     request_preflight,
+    require_hello,
+    require_identity,
     require_physical_launch,
 )
 from localinferencelab.mlx_preflight_protocol import (
@@ -49,6 +51,8 @@ _CONTENT_FILES = {
 _MAX_PRIVATE_BYTES = 1_048_576
 _MAX_WIRE_SIZE = 0xFFFFFFFF
 _HEADER_BYTES = 4
+_MAX_EXIT_CODE = 255
+_MAX_WAIT_SIGNAL = 127
 _FAILURE_CODES = {
     "deadline",
     "eof",
@@ -80,6 +84,7 @@ _FAILURE_CODES = {
     "physical_launch_closed",
     "retained_runtime_root_mismatch",
     "runtime_changed_during_attempt",
+    "hello_invalid",
 }
 
 
@@ -107,8 +112,9 @@ def _capture(value: JsonValue) -> Capture:
     raw = decode_bytes(item["wire_base64"])
     if len(raw) > MAX_FRAME_BYTES + 4:
         raise AcquisitionError("capture_bound")
+    _integer(item["retained_wire_bytes"])
     direction = item["direction"]
-    if direction not in {"parent_to_worker", "worker_to_parent"}:
+    if not isinstance(direction, str) or direction not in {"parent_to_worker", "worker_to_parent"}:
         raise AcquisitionError("capture_direction")
     complete = item["complete_frame_retained"]
     if not isinstance(complete, bool):
@@ -119,15 +125,17 @@ def _capture(value: JsonValue) -> Capture:
         if declared > _MAX_WIRE_SIZE:
             raise AcquisitionError("capture_declared_size")
     rejection = item["rejection"]
-    if rejection is not None and rejection not in _FAILURE_CODES:
+    if rejection is not None and (
+        not isinstance(rejection, str) or rejection not in _FAILURE_CODES
+    ):
         raise AcquisitionError("capture_rejection_code")
     capture = Capture(
-        cast("str", direction),
+        direction,
         raw,
         _integer(item["observed_ns"]),
         declared,
         complete,
-        cast("str | None", rejection),
+        rejection,
     )
     if capture.private_record() != item:
         raise AcquisitionError("capture_digest_or_shape")
@@ -142,6 +150,34 @@ def _capture(value: JsonValue) -> Capture:
     if rejection == "frame_size" and len(raw) > 4 + MAX_RETAINED_OVERSIZE_BYTES:
         raise AcquisitionError("oversize_retention_bound")
     return capture
+
+
+def _child_wait(
+    value: JsonValue, identity: dict[str, JsonValue], processes: int
+) -> dict[str, JsonValue] | None:
+    if value is None:
+        return None
+    wait = _object(value)
+    if wait.keys() != {"pid", "wait_owned", "exited", "exit_code", "signal"} or processes != 1:
+        raise AcquisitionError("child_wait_fields_or_lifetime")
+    pid = _integer(wait["pid"])
+    if pid == 0 or pid != identity.get("pid"):
+        raise AcquisitionError("child_wait_pid")
+    if (
+        not isinstance(wait["wait_owned"], bool)
+        or wait["wait_owned"] is not True
+        or not isinstance(wait["exited"], bool)
+    ):
+        raise AcquisitionError("child_wait_ownership")
+    if wait["exited"]:
+        code = _integer(wait["exit_code"])
+        if code > _MAX_EXIT_CODE or wait["signal"] is not None:
+            raise AcquisitionError("child_wait_exit_state")
+    else:
+        signal = _integer(wait["signal"])
+        if not 0 < signal <= _MAX_WAIT_SIGNAL or wait["exit_code"] is not None:
+            raise AcquisitionError("child_wait_signal_state")
+    return wait
 
 
 def _acquisition(value: JsonValue) -> Acquisition:
@@ -176,45 +212,39 @@ def _acquisition(value: JsonValue) -> Acquisition:
     if not isinstance(captures, list) or len(captures) > MAX_CAPTURES:
         raise AcquisitionError("captures_bound")
     rejection = item["rejection"]
-    if rejection is not None and rejection not in _FAILURE_CODES:
+    if rejection is not None and (
+        not isinstance(rejection, str) or rejection not in _FAILURE_CODES
+    ):
         raise AcquisitionError("terminal_rejection_code")
     if not isinstance(item["cleanup_complete"], bool):
         raise AcquisitionError("cleanup_shape")
     process = None if item["process_evidence"] is None else _object(item["process_evidence"])
-    wait = None if item["child_wait"] is None else _object(item["child_wait"])
     sockets, processes = _integer(item["socketpairs_created"]), _integer(item["processes_started"])
     if not 0 <= processes <= sockets <= 1:
         raise AcquisitionError("lifetime_counts")
     hello = _object(item["hello"])
-    hello_fields = {
-        "kind",
-        "sequence",
-        "session_id",
-        "protocol_id",
-        "challenge",
-        "nonce",
-        "deadline_ns",
-        "interpreter_sha256",
-        "runtime_root",
-        "distributions",
-        "worker_program_id",
-        "import_files",
-    }
-    if hello.keys() != hello_fields or hello["protocol_id"] != PROTOCOL_ID:
-        raise AcquisitionError("hello_fields")
+    require_hello(hello)
     if hello["worker_program_id"] != EXPECTED_WORKER_SOURCE_ID:
         raise AcquisitionError("hello_worker_identity")
     if hello["deadline_ns"] != item["deadline_ns"]:
         raise AcquisitionError("hello_deadline")
+    identity = _object(item["identity"])
+    if processes:
+        require_identity(identity, hello)
+    elif identity:
+        raise AcquisitionError("identity_without_process")
+    wait = _child_wait(item["child_wait"], identity, processes)
+    if processes and item["cleanup_complete"] and wait is None:
+        raise AcquisitionError("cleanup_without_owned_wait")
     return Acquisition(
         hello,
-        _object(item["identity"]),
+        identity,
         [_capture(entry) for entry in captures],
         _integer(item["started_ns"]),
         _integer(item["deadline_ns"]),
         process,
         wait,
-        cast("str | None", rejection),
+        rejection,
         item["cleanup_complete"],
         sockets,
         processes,
@@ -223,6 +253,7 @@ def _acquisition(value: JsonValue) -> Acquisition:
 
 
 def _derive_report(acquisition: Acquisition) -> dict[str, JsonValue]:
+    acquisition = _acquisition(acquisition.private_record())
     validator, retained_rejection = replay_captures(
         acquisition.hello,
         acquisition.identity,
@@ -316,6 +347,8 @@ def human_report(value: dict[str, JsonValue]) -> str:
             "their retained-prefix digest, length, completeness and fixed failure code.",
             "Unread bytes and native side effects remain unknown. No automatic retry;",
             "failed consumption is never refunded.",
+            "A deadline-rejected command may still have been delivered; without a trusted",
+            "start/terminal acknowledgment, exposed actions remain unknown, not refused/zero.",
             "",
             "Physical launch remains closed pending independent ledger/authority/approval,",
             "exact provisioned",
@@ -405,7 +438,7 @@ def synthetic_fixture() -> Acquisition:
         "runtime_root": {"device": 1, "inode": 2, "mode": 0o555},
         "worker_program_id": EXPECTED_WORKER_SOURCE_ID,
     }
-    session = "sha256:" + "e" * 64
+    session = canonical_identity({"challenge": "a" * 64, "nonce": "b" * 64})
     hello = expected_frame(
         "hello",
         0,
@@ -415,7 +448,10 @@ def synthetic_fixture() -> Acquisition:
         deadline_ns=deadline,
         interpreter_sha256=identity["interpreter_sha256"],
         runtime_root=identity["runtime_root"],
-        distributions=[],
+        distributions=[
+            {"name": "mlx", "version": "0.30.4", "metadata_sha256": "sha256:" + "c" * 64},
+            {"name": "mlx-lm", "version": "0.30.6", "metadata_sha256": "sha256:" + "c" * 64},
+        ],
         worker_program_id=EXPECTED_WORKER_SOURCE_ID,
         import_files={
             "mlx.core": {"relative_file": "mlx/core.fake.so", "sha256": "sha256:" + "c" * 64},
@@ -423,7 +459,7 @@ def synthetic_fixture() -> Acquisition:
         },
     )
     observations: tuple[JsonValue, ...] = (
-        [],
+        hello["distributions"],
         {"module": "mlx.core", "relative_file": "mlx/core.fake.so", "sha256": "sha256:" + "c" * 64},
         {"module": "mlx_lm", "relative_file": "mlx_lm/__init__.py", "sha256": "sha256:" + "c" * 64},
         "Device(gpu, 0)",

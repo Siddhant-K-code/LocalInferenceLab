@@ -345,7 +345,7 @@ def _prepared(tmp_path: Path) -> parent._PreparedLaunch:
         *descriptors,
         roots[1],
         parent._root(descriptors[0]),
-        [],
+        cast("list[JsonValue]", fixture.hello["distributions"]),
         "sha256:" + "c" * 64,
         _object(fixture.hello["import_files"]),
         {"package_root": root_record, "files": files},

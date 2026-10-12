@@ -127,3 +127,9 @@ side-effect proof. A sent command without a start event has unknown attempt stat
 a valid terminal event has unknown completion. Actions not requested are refused, not secretly
 claimed attempted. Unread/unretained events and forbidden native effects remain unknown.
 Replaying a bundle verifies retained evidence only and performs zero process/socket/MLX actions.
+
+Parent command exposure is recorded separately from deadline/protocol acceptance. A command
+delivered across a deadline remains rejected, but absence of an accepted start/terminal event leaves
+attempt/completion unknown, never zero. Offline compilation validates owned child-wait types,
+PID and lifetime bindings and coherent exit/signal state before projecting public evidence.
+The same strict hello validator is used by worker, parent acquisition and offline compilation/replay.
