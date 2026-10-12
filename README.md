@@ -68,6 +68,7 @@ binds bytes; it does not create authority.
 - [Architecture](docs/architecture.md) — what exists, what can act, and what stays process-free
 - [Protocol](docs/protocol.md) — which records, gates, counters, and ledgers define trust
 - [Direct MLX contract](docs/mlx-direct-runner-contract.md) — the private-worker boundary and its explicit blockers
+- [Durable preflight ledger](docs/mlx-preflight-ledger.md) — real synthetic one-shot storage and opaque parent dispatch; production authority stays blocked
 - [Determinism canary](docs/mlx-determinism-canary.md) — the 48-cell matrix and exact comparison rules
 - [Physical atlas contract](docs/mlx-physical-atlas-contract.md) — the identity-bound 18-cell successor study and unobserved envelopes
 - [Final static qualification record](evidence/mlx-runtime-qualification-mlx-0.30.4-mlx-lm-0.30.6-macos-arm64-py313-v1.json) — the canonical zero-blocker static decision
