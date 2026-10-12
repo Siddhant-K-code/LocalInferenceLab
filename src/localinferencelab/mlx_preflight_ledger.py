@@ -379,6 +379,14 @@ class SyntheticAuthorizationLedger:
         with self._locked() as descriptor:
             self._read(descriptor)
 
+    def __copy__(self) -> NoReturn:
+        """Reject cloned handles that could share the issuing instance's permit registry."""
+        raise ContractError("synthetic ledger handles cannot be copied")
+
+    def __deepcopy__(self, _memo: dict[int, object]) -> NoReturn:
+        """Reject deep copying without consulting or duplicating private origin state."""
+        raise ContractError("synthetic ledger handles cannot be copied")
+
     def _check_context(self) -> None:
         if self._pid != os.getpid():
             raise ContractError("ledger/permit cannot be inherited across fork")
@@ -442,6 +450,7 @@ class SyntheticAuthorizationLedger:
             raise ContractError("ledger busy; no permit issued")
         try:
             try:
+                self._check_context()
                 root = os.open(self._name, _flags(directory=True), dir_fd=self._parent)
                 try:
                     journal = os.open(_JOURNAL_NAME, _flags(directory=False), dir_fd=root)

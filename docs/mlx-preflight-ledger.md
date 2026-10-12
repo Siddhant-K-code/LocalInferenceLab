@@ -103,6 +103,9 @@ hidden retry loop. Exactly one cooperating contender can commit and receive
 a permit. A live parent also detects observed size rollback.
 
 Write/short-write/fsync failures return no permit and poison the live handle.
+Every queued operation rechecks context and poisoning **under** the acquired
+mutex before touching storage or retiring a token; passing an earlier check
+cannot outlive another operation's failure.
 On reopening, a complete suffix remains consumed and a partial suffix refuses;
 there is no refund, reset, truncation repair, or retry after launch intent.
 A process crash after fsync, after permit issuance, during callback, after
@@ -118,7 +121,9 @@ record. Dispatch verifies the issuing ledger/issuer process, store pins,
 authorization, session, interpreter digest, roots, and latest synthetic
 expiry. Tokens inherited through `fork`, deserialized/lookalike objects,
 booleans, caller receipts, or a token supplied to a reopened/foreign ledger
-refuse. Threads serialize origin checking and token retirement; one token
+refuse. Ledger handles explicitly forbid shallow/deep copying, so a copied
+handle cannot inherit the issuing instance's token registry. Threads
+serialize origin checking and token retirement; one token
 can dispatch exactly once. The token is retired **before** a callback, even
 when the callback fails. Restart never remints a token for a consumed record.
 
@@ -180,5 +185,6 @@ inert Python processes. They cover multi-process competing consumption,
 restart, crash boundaries, initialization/fsync/partial-write failures,
 missing/replaced/corrupt state, path races, permissions/hardlinks/symlinks/FIFO,
 expiry/clock/binding drift, unknown fields, zero actions, fork/forgery/concurrent
-token reuse, failed callback nonrefund, and historical deterministic replay.
+token reuse, event-coordinated queued-thread poisoning, shallow/deep ledger
+copy refusal, failed callback nonrefund, and historical deterministic replay.
 They do not retrieve, install, import, query, synchronize, or run MLX.

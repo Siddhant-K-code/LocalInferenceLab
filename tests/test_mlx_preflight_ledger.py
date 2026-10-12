@@ -11,6 +11,8 @@ import pickle
 import shutil
 import subprocess
 import sys
+import threading
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import cast
@@ -585,6 +587,114 @@ def test_serialized_forged_foreign_and_concurrent_permits_refuse(fixture: Fixtur
         outputs = list(pool.map(lambda _: dispatch(), range(8)))
     assert outputs.count("once") == 1
     assert outputs.count("refused") == 7
+
+
+@pytest.mark.parametrize("kind", ["shallow", "deep"])
+def test_copied_ledger_cannot_adopt_original_permit(fixture: Fixture, kind: str) -> None:
+    permit = fixture.store.consume_once(fixture.authorization, fixture.bindings)
+    copier = copy.copy if kind == "shallow" else copy.deepcopy
+    with pytest.raises(ContractError, match="cannot be copied"):
+        copier(fixture.store)
+    assert (
+        fixture.store.dispatch_synthetic_once(
+            permit, fixture.bindings, lambda _: "exact issuing instance"
+        )
+        == "exact issuing instance"
+    )
+    with pytest.raises(ContractError, match="already dispatched"):
+        fixture.store.dispatch_synthetic_once(permit, fixture.bindings, lambda _: None)
+
+
+@pytest.mark.parametrize("fault", ["inspect_pread", "intent_write"])
+def test_queued_calls_recheck_poison_under_mutex(
+    fixture: Fixture, monkeypatch: pytest.MonkeyPatch, fault: str
+) -> None:
+    permit = (
+        fixture.store.consume_once(fixture.authorization, fixture.bindings)
+        if fault == "inspect_pread"
+        else None
+    )
+    fault_entered = threading.Event()
+    queued_precheck_passed = threading.Event()
+    release_fault = threading.Event()
+    original_check = fixture.store._check_context  # noqa: SLF001
+    original_pread = os.pread
+    original_write = os.write
+    errors: dict[str, ContractError] = {}
+    successes: list[str] = []
+    callbacks: list[str] = []
+
+    def observe_precheck() -> None:
+        original_check()
+        if threading.current_thread().name == "ledger-queued":
+            queued_precheck_passed.set()
+
+    def fail_while_locked() -> None:
+        fault_entered.set()
+        assert release_fault.wait(timeout=10)
+        raise OSError(errno.EIO, "synthetic queued-call poisoning")
+
+    def faulting_pread(descriptor: int, count: int, offset: int) -> bytes:
+        if threading.current_thread().name == "ledger-fault" and count == 65537:
+            fail_while_locked()
+        return original_pread(descriptor, count, offset)
+
+    def faulting_write(descriptor: int, data: bytes) -> int:
+        if threading.current_thread().name == "ledger-fault" and data == b"!":
+            fail_while_locked()
+        return original_write(descriptor, data)
+
+    def fault_operation() -> None:
+        if fault == "inspect_pread":
+            fixture.store.inspect()
+        else:
+            fixture.store.consume_once(fixture.authorization, fixture.bindings)
+
+    def queued_operation() -> None:
+        if permit is None:
+            fixture.store.consume_once(fixture.authorization, fixture.bindings)
+        else:
+            fixture.store.dispatch_synthetic_once(
+                permit, fixture.bindings, lambda _: callbacks.append("launched")
+            )
+
+    def capture(label: str, operation: Callable[[], None]) -> None:
+        try:
+            operation()
+        except ContractError as error:
+            errors[label] = error
+        else:
+            successes.append(label)
+
+    monkeypatch.setattr(fixture.store, "_check_context", observe_precheck)
+    monkeypatch.setattr(ledger_module.os, "pread", faulting_pread)
+    monkeypatch.setattr(ledger_module.os, "write", faulting_write)
+    failing = threading.Thread(target=capture, args=("fault", fault_operation), name="ledger-fault")
+    queued = threading.Thread(
+        target=capture, args=("queued", queued_operation), name="ledger-queued"
+    )
+    failing.start()
+    try:
+        assert fault_entered.wait(timeout=10)
+        queued.start()
+        assert queued_precheck_passed.wait(timeout=10)
+    finally:
+        release_fault.set()
+        failing.join(timeout=10)
+        if queued.ident is not None:
+            queued.join(timeout=10)
+    assert not failing.is_alive() and not queued.is_alive()
+    assert not successes
+    assert not callbacks
+    assert set(errors) == {"fault", "queued"}
+    assert "storage unavailable" in str(errors["fault"])
+    assert "poisoned" in str(errors["queued"])
+    assert len(fixture.store._permits) == (1 if permit is not None else 0)  # noqa: SLF001
+    with pytest.raises(ContractError, match="poisoned"):
+        fixture.store.consume_once(fixture.authorization, fixture.bindings)
+    assert fixture.reopen().inspect()["state"] == (
+        "consumed" if permit is not None else "unconsumed"
+    )
 
 
 def test_inherited_permit_and_issuer_refuse_after_fork(fixture: Fixture) -> None:
