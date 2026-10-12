@@ -23,11 +23,13 @@ build-smoke: build
 	UV_NO_NETWORK=1 uv pip install --python .artifacts/install-wheel/bin/python --no-index dist/*.whl
 	.artifacts/install-wheel/bin/python -c "import localinferencelab; assert localinferencelab.__version__ == '0.1.0'"
 	.artifacts/install-wheel/bin/python -c "from localinferencelab.mlx_qualification_publication import committed_qualification_publication_record as load; assert load()['record_id'] == 'sha256:3d789caf4e65581265dc686aed30df0d4612388710b20a2dabc36e2d906711df'"
+	.artifacts/install-wheel/bin/python -m localinferencelab mlx runtime-preflight-1-2-capability-report | .artifacts/install-wheel/bin/python -c "import json,sys; r=json.load(sys.stdin); assert r['physical_launch_enabled'] is False; assert set(r['real_action_counters'].values()) == {0}"
 	uv venv .artifacts/install-sdist
 	UV_NO_NETWORK=1 uv pip install --python .artifacts/install-sdist/bin/python hatchling==1.27.0
 	UV_NO_NETWORK=1 uv pip install --python .artifacts/install-sdist/bin/python --no-index --no-build-isolation dist/*.tar.gz
 	.artifacts/install-sdist/bin/python -c "import localinferencelab; assert localinferencelab.__version__ == '0.1.0'"
 	.artifacts/install-sdist/bin/python -c "from localinferencelab.mlx_qualification_publication import committed_qualification_publication_record as load; assert load()['record_id'] == 'sha256:3d789caf4e65581265dc686aed30df0d4612388710b20a2dabc36e2d906711df'"
+	.artifacts/install-sdist/bin/python -m localinferencelab mlx runtime-preflight-1-2-capability-report | .artifacts/install-sdist/bin/python -c "import json,sys; r=json.load(sys.stdin); assert r['physical_launch_enabled'] is False; assert set(r['real_action_counters'].values()) == {0}"
 
 fixture:
 	rm -rf .artifacts
@@ -82,6 +84,13 @@ fixture:
 	preflight_custody_b=$$(find .artifacts/preflight-custody-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-runtime-preflight-custody-synthetic-v1-1-*' -print -quit); \
 	diff -r "$$preflight_custody_a" "$$preflight_custody_b" && \
 	uv run localinferencelab mlx runtime-preflight-1-1-custody-fixture-replay "$$preflight_custody_a"
+	mkdir .artifacts/preflight-1-2-a .artifacts/preflight-1-2-b
+	uv run localinferencelab mlx runtime-preflight-1-2-fixture-compile .artifacts/preflight-1-2-a
+	uv run localinferencelab mlx runtime-preflight-1-2-fixture-compile .artifacts/preflight-1-2-b
+	preflight_1_2_a=$$(find .artifacts/preflight-1-2-a -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-preflight-synthetic-v1-2-*' -print -quit); \
+	preflight_1_2_b=$$(find .artifacts/preflight-1-2-b -mindepth 1 -maxdepth 1 -type d -name 'localinferencelab-mlx-preflight-synthetic-v1-2-*' -print -quit); \
+	diff -r "$$preflight_1_2_a" "$$preflight_1_2_b" && \
+	uv run localinferencelab mlx runtime-preflight-1-2-evidence-replay "$$preflight_1_2_a"
 	mkdir .artifacts/determinism-canary-a .artifacts/determinism-canary-b
 	uv run localinferencelab mlx determinism-canary-fixture-compile .artifacts/determinism-canary-a
 	uv run localinferencelab mlx determinism-canary-fixture-compile .artifacts/determinism-canary-b

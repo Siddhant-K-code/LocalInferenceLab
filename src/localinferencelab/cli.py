@@ -66,6 +66,17 @@ from localinferencelab.mlx_preflight_custody import (
     custody_bridge_spec_1_1,
     replay_custody_bridge_fixture_1_1,
 )
+from localinferencelab.mlx_preflight_execution import (
+    capability_report as preflight_implementation_report,
+)
+from localinferencelab.mlx_preflight_execution import request_preflight
+from localinferencelab.mlx_preflight_protocol import protocol_record as preflight_protocol_record
+from localinferencelab.mlx_preflight_report import (
+    compile_acquisition,
+    human_report,
+    synthetic_fixture,
+)
+from localinferencelab.mlx_preflight_report import replay_bundle as replay_preflight_evidence
 from localinferencelab.mlx_qualification import (
     build_qualification_record,
     compile_qualification_fixture,
@@ -208,6 +219,21 @@ def _parser() -> argparse.ArgumentParser:
         help="offline direct-worker manifests, prospective contract, and refusal fixture",
     )
     mlx_commands = mlx.add_subparsers(dest="mlx_command", required=True)
+    for name in ("capability-report", "protocol", "request"):
+        mlx_commands.add_parser(
+            f"runtime-preflight-1-2-{name}",
+            help="offline schema-1.2 machinery; physical launch remains closed",
+        )
+    new_fixture = mlx_commands.add_parser(
+        "runtime-preflight-1-2-fixture-compile",
+        help="compile synthetic non-promotable preflight evidence without a worker",
+    )
+    new_fixture.add_argument("output_root", type=Path)
+    for name in ("evidence-replay", "report"):
+        new_replay = mlx_commands.add_parser(f"runtime-preflight-1-2-{name}")
+        new_replay.add_argument("bundle", type=Path)
+        if name == "report":
+            new_replay.add_argument("--format", choices=("json", "markdown"), default="markdown")
     mlx_commands.add_parser(
         "capability-report",
         help="report implemented direct-worker capabilities without probing MLX or Metal",
@@ -756,6 +782,29 @@ def run(arguments: list[str] | None = None) -> int:  # noqa: PLR0911
             _emit(output)
         return 0
     if args.command == "mlx":
+        if args.mlx_command == "runtime-preflight-1-2-capability-report":
+            _emit(preflight_implementation_report())
+            return 0
+        if args.mlx_command == "runtime-preflight-1-2-protocol":
+            _emit_document(preflight_protocol_record())
+            return 0
+        if args.mlx_command == "runtime-preflight-1-2-request":
+            _emit(request_preflight())
+            return 2
+        if args.mlx_command == "runtime-preflight-1-2-fixture-compile":
+            _path, report = compile_acquisition(synthetic_fixture(), args.output_root)
+            _emit(report)
+            return 0
+        if args.mlx_command in {
+            "runtime-preflight-1-2-evidence-replay",
+            "runtime-preflight-1-2-report",
+        }:
+            report = replay_preflight_evidence(args.bundle)
+            if args.mlx_command == "runtime-preflight-1-2-report" and args.format == "markdown":
+                sys.stdout.write(human_report(report))
+            else:
+                _emit(report)
+            return 0
         if args.mlx_command == "capability-report":
             _emit(mlx_capability_report())
             return 0

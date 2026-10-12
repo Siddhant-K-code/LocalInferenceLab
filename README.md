@@ -104,4 +104,10 @@ UV_NO_NETWORK=1 make validate
 **The next gate is not “run it.”** It is a separately committed and independently reviewed
 authorization authority, one-shot authorization, and worker identity. None exists in this change.
 
+The additive [model-free preflight implementation/runbook](docs/runbooks/mlx-model-free-preflight.md)
+provides schema-1.2 worker source, bounded parent acquisition and private rejection custody, plus
+offline JSON/Markdown reports. Physical launch remains closed before any runtime action; synthetic
+replays cannot become accepted physical evidence. Durable-consumption integration, independently
+reviewed authority/fresh approval, exact provisioning and OS/native enforcement remain blockers.
+
 Apache-2.0.
