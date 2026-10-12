@@ -399,7 +399,8 @@ def _install_inert_spawn(
         "_parent_process_evidence",
         lambda *_args: {"method": "inert_test_stub_not_physical", "available": False},
     )
-    monkeypatch.setattr(parent, "MAX_LIFETIME_NS", 250_000_000)
+    deadline = 250_000_000 if anomaly in {"timeout", "late"} else 5_000_000_000
+    monkeypatch.setattr(parent, "MAX_LIFETIME_NS", deadline)
 
 
 @pytest.mark.parametrize("failure", [None, *worker.ACTIONS])
@@ -767,3 +768,17 @@ def test_snapshot_cleanup_even_when_child_cannot_be_reaped(
             launch.custody_descriptor,
         ):
             os.close(descriptor)
+
+
+def test_target_platform_check_uses_only_inert_supplied_stubs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(worker.sys, "platform", "linux")
+    with pytest.raises(worker.WorkerError, match="target_platform_mismatch"):
+        worker._verify_target_platform()
+    monkeypatch.setattr(worker.sys, "platform", "darwin")
+    monkeypatch.setattr(worker.os, "uname", lambda: SimpleNamespace(machine="x86_64"))
+    with pytest.raises(worker.WorkerError, match="target_platform_mismatch"):
+        worker._verify_target_platform()
+    monkeypatch.setattr(worker.os, "uname", lambda: SimpleNamespace(machine="arm64"))
+    worker._verify_target_platform()

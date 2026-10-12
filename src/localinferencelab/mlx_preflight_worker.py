@@ -389,6 +389,11 @@ def _native_enforcement_gate() -> None:
     raise WorkerError("reviewed_os_native_network_and_forbidden_action_enforcement_unavailable")
 
 
+def _verify_target_platform() -> None:
+    if sys.platform != "darwin" or os.uname().machine != "arm64":
+        raise WorkerError("target_platform_mismatch")
+
+
 def _worker_main() -> None:
     _native_enforcement_gate()
     if dict(os.environ) != ENVIRONMENT:
@@ -436,11 +441,13 @@ def _worker_main() -> None:
             raise WorkerError("launch_identity_mismatch")
         if sys.implementation.name != "cpython" or sys.version_info[:3] != (3, 13, 15):
             raise WorkerError("interpreter_version_mismatch")
-        if sys.platform != "darwin" or os.uname().machine != "arm64":
-            raise WorkerError("target_platform_mismatch")
+        _verify_target_platform()
         import fcntl  # noqa: PLC0415
 
-        raw: object = fcntl.fcntl(RUNTIME_FD, fcntl.F_GETPATH, b"\0" * 1024)
+        path_command: object = getattr(fcntl, "F_GETPATH", None)
+        if not isinstance(path_command, int):
+            raise WorkerError("runtime_descriptor_path_unavailable")
+        raw: object = fcntl.fcntl(RUNTIME_FD, path_command, b"\0" * 1024)
         if not isinstance(raw, bytes):
             raise WorkerError("runtime_descriptor_path")
         root = Path(raw.split(b"\0", 1)[0].decode("utf-8"))
