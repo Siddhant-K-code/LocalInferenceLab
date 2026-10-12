@@ -109,6 +109,8 @@ before consumption, extend exact bindings to the new worker/protocol/interpreter
 parent-observed root objects and nonce/challenge/session, and bind parent-owned action/rejection/
 terminal evidence to that consumed attempt. Audit JSON is not a permit. Physical dispatch and
 offline authenticity verification remain blocked until that integration is reviewed.
+Integration regressions must prove poisoned, foreign, copied, forked and reused ledger handles
+cannot invoke the parent dispatch callback; an unmerged draft ledger is not integration approval.
 
 ## Retention and claim scope
 

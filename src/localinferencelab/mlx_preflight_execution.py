@@ -62,7 +62,7 @@ from localinferencelab.mlx_runtime_target import runtime_target_anchor
 
 # This is a NEW implementation identity, not the old reviewed source/API approval.
 EXPECTED_WORKER_SOURCE_ID = (
-    "sha256:514fb185c6f14b9ae04422b1d88413cdea712168e4ca0e4ac0ff729fd20d46df"
+    "sha256:f1ed6f00fe49ce99478672bc2232222dbe7fe20d32c1f6fbd059335d01534821"
 )
 BLOCKERS = (
     "durable_consumption_implementation_not_independently_reviewed_and_integrated",

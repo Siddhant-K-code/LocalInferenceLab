@@ -170,7 +170,12 @@ def _file_digest(descriptor: int, maximum: int) -> str:
             raise WorkerError("file_bound")
         digest.update(block)
     after = os.fstat(descriptor)
-    if before != after or offset != before.st_size:
+    stable_fields = ("st_dev", "st_ino", "st_mode", "st_size", "st_mtime_ns", "st_ctime_ns")
+    if (
+        tuple(getattr(before, name) for name in stable_fields)
+        != tuple(getattr(after, name) for name in stable_fields)
+        or offset != before.st_size
+    ):
         raise WorkerError("file_changed")
     return "sha256:" + digest.hexdigest()
 
@@ -433,12 +438,19 @@ def _worker_main() -> None:
                 "import_files",
             },
         )
-        if (hello["kind"], hello["sequence"], hello["protocol_id"]) != ("hello", 0, PROTOCOL_ID):
+        if (hello["kind"], _integer(hello["sequence"]), hello["protocol_id"]) != (
+            "hello",
+            0,
+            PROTOCOL_ID,
+        ):
             raise WorkerError("hello_mismatch")
         interpreter = _file_digest(INTERPRETER_FD, 128 * MAX_METADATA_BYTES)
         root_identity = _root_identity(RUNTIME_FD)
         if hello["interpreter_sha256"] != interpreter or hello["runtime_root"] != root_identity:
             raise WorkerError("launch_identity_mismatch")
+        worker_identity = _file_digest(0, MAX_METADATA_BYTES)
+        if _sha(hello["worker_program_id"]) != worker_identity:
+            raise WorkerError("worker_source_identity_mismatch")
         if sys.implementation.name != "cpython" or sys.version_info[:3] != (3, 13, 15):
             raise WorkerError("interpreter_version_mismatch")
         _verify_target_platform()
@@ -494,7 +506,7 @@ def _worker_main() -> None:
                 "parent_pid": os.getppid(),
                 "interpreter_sha256": interpreter,
                 "runtime_root": root_identity,
-                "worker_program_id": _sha(hello["worker_program_id"]),
+                "worker_program_id": worker_identity,
             },
         )
 

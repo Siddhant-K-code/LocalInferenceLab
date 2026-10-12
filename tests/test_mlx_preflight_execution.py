@@ -782,3 +782,54 @@ def test_target_platform_check_uses_only_inert_supplied_stubs(
         worker._verify_target_platform()
     monkeypatch.setattr(worker.os, "uname", lambda: SimpleNamespace(machine="arm64"))
     worker._verify_target_platform()
+
+
+@pytest.mark.parametrize("changed", ["atime", "mtime", "ctime", "inode"])
+def test_worker_file_hash_accepts_read_access_time_but_rejects_identity_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    changed: str,
+) -> None:
+    file = tmp_path / "inert-bytes"
+    file.write_bytes(b"inert file hash fixture")
+    expected = digest_bytes(file.read_bytes())
+    descriptor = os.open(file, os.O_RDONLY)
+    original = os.fstat
+    before = original(descriptor)
+    first = SimpleNamespace(
+        **{
+            name: getattr(before, name)
+            for name in (
+                "st_dev",
+                "st_ino",
+                "st_mode",
+                "st_size",
+                "st_mtime_ns",
+                "st_ctime_ns",
+                "st_atime_ns",
+            )
+        }
+    )
+    after = SimpleNamespace(**vars(first))
+    field = {
+        "atime": "st_atime_ns",
+        "mtime": "st_mtime_ns",
+        "ctime": "st_ctime_ns",
+        "inode": "st_ino",
+    }[changed]
+    setattr(after, field, getattr(after, field) + 1)
+    metadata = iter((first, after))
+
+    def fake_stat(fd: int) -> object:
+        return next(metadata) if fd == descriptor else original(fd)
+
+    try:
+        with monkeypatch.context() as scoped:
+            scoped.setattr(worker.os, "fstat", fake_stat)
+            if changed == "atime":
+                assert worker._file_digest(descriptor, 100) == expected
+            else:
+                with pytest.raises(worker.WorkerError, match="file_changed"):
+                    worker._file_digest(descriptor, 100)
+    finally:
+        os.close(descriptor)
