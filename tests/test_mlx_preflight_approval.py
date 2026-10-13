@@ -661,9 +661,79 @@ def test_public_payload_integer_bound_and_unrelated_exception_are_narrow(
         raise ValueError("unrelated programming failure")
 
     monkeypatch.setattr(policy_module, "_approval_integer", unrelated)
-    with pytest.raises(ValueError, match="unrelated programming failure") as caught:
-        verify_approval_payload_bytes(b'{"x":1}')
-    assert not isinstance(caught.value, ContractError)
+    for api in (verify_approval_payload_bytes, verify_trusted_lab_request_bytes):
+        with pytest.raises(ValueError, match="unrelated programming failure") as caught:
+            api(b'{"x":1}')
+        assert not isinstance(caught.value, ContractError)
+
+
+@pytest.mark.parametrize("depth", [0, 1, 32, 999, 1500])
+@pytest.mark.parametrize("kind", ["request", "payload"])
+def test_public_byte_apis_refuse_normal_and_deep_invalid_objects(depth: int, kind: str) -> None:
+    api = verify_trusted_lab_request_bytes if kind == "request" else verify_approval_payload_bytes
+    data = b'{"x":' + b"[" * depth + b"0" + b"]" * depth + b"}"
+    assert len(data) < legacy.MAX_REQUEST_BYTES
+    with pytest.raises(ContractError):
+        api(data)
+    valid = canonical_json(_request()) if kind == "request" else approval_payload_bytes(_request())
+    assert api(valid)
+
+
+@pytest.mark.parametrize("kind", ["request", "payload"])
+@pytest.mark.parametrize("stage", ["value_validation", "canonical_validation"])
+def test_recursive_validation_boundary_is_narrow(
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    stage: str,
+) -> None:
+    api = verify_trusted_lab_request_bytes if kind == "request" else verify_approval_payload_bytes
+    data = canonical_json(_request()) if kind == "request" else approval_payload_bytes(_request())
+    symbol = "validate_json_value" if stage == "value_validation" else "canonical_json"
+
+    def recursion(*_args: object, **_kwargs: object) -> NoReturn:
+        raise RecursionError("private recursive validation detail")
+
+    monkeypatch.setattr(policy_module, symbol, recursion)
+    with pytest.raises(ContractError, match="nesting bound") as caught:
+        api(data)
+    assert "private recursive" not in str(caught.value)
+
+    def unrelated(*_args: object, **_kwargs: object) -> NoReturn:
+        raise ValueError("unrelated validation programming failure")
+
+    monkeypatch.setattr(policy_module, symbol, unrelated)
+    with pytest.raises(ValueError, match="unrelated validation programming failure") as uncaught:
+        api(data)
+    assert not isinstance(uncaught.value, ContractError)
+
+
+@pytest.mark.parametrize("depth", [999, 1500])
+@pytest.mark.parametrize("filename", ["trust.json", "signed-request.json"])
+def test_deep_validation_retains_exact_closed_refusal(
+    retained: tuple[Path, Path, Path, str],
+    depth: int,
+    filename: str,
+) -> None:
+    data = b'{"x":' + b"[" * depth + b"0" + b"]" * depth + b"}"
+    root = retained[0] if filename == "trust.json" else retained[1]
+    _write(root / filename, data)
+    report = _refuse(retained)
+    assert report["disposition"] == "custody_or_contract_refused"
+    assert report["tool_process_exposure"] == "not_started"
+    assert report["signature_verification"] == "unavailable_not_invoked"
+    bundles = list(retained[2].iterdir())
+    assert len(bundles) == 1
+    _, files = read_closed_bundle(bundles[0])
+    assert files[f"private/{filename}"] == data
+    assert files["report.json"] == canonical_json(report)
+    for field in (
+        "runtime_authorized",
+        "consumable",
+        "physical_launch_enabled",
+        "accepted_physical_evidence",
+        "ledger_permit_created",
+    ):
+        assert report[field] is False
 
 
 @pytest.mark.parametrize("when", ["tool", "retention"])

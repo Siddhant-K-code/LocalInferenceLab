@@ -31,3 +31,5 @@ rehashed subsets cannot preserve the old signature.
 The source-bound vectors were refreshed after independent review corrections to owned OS
 child-status custody, object ancestry and bounded parsing. That unavoidable refresh used only
 the same pinned published non-secret regression key, not a generated or user-controlled key.
+The public-request recursive-validation correction likewise requires only a source-bound vector
+refresh with that same fixture; it does not change the signed policy's trust scope or authority.

@@ -57,13 +57,13 @@ def _load_approval_json(data: bytes) -> JsonValue:
             parse_float=_reject_float,
             parse_constant=_reject_constant,
         )
+        return validate_json_value(value)
     except UnicodeDecodeError:
         raise ContractError("approval JSON must be UTF-8") from None
     except json.JSONDecodeError:
         raise ContractError("approval JSON malformed") from None
     except RecursionError:
         raise ContractError("approval JSON nesting bound") from None
-    return validate_json_value(value)
 
 
 def verification_mechanism_spec() -> dict[str, JsonValue]:
@@ -188,10 +188,13 @@ def verify_trusted_lab_request_bytes(data: bytes) -> dict[str, JsonValue]:
     """Validate exact v2 candidate bindings; no v1.0 migration or policy selection."""
     if type(data) is not bytes or not 0 < len(data) <= MAX_REQUEST_BYTES:
         raise ContractError("trusted lab request byte bound")
-    value = _load_approval_json(data)
-    if canonical_json(value) != data:
-        raise ContractError("trusted lab request must use canonical JSON bytes")
-    return _verify(value, trusted_lab_request_spec(), schema_version=SCHEMA_VERSION)
+    try:
+        value = _load_approval_json(data)
+        if canonical_json(value) != data:
+            raise ContractError("trusted lab request must use canonical JSON bytes")
+        return _verify(value, trusted_lab_request_spec(), schema_version=SCHEMA_VERSION)
+    except RecursionError:
+        raise ContractError("trusted lab request nesting bound") from None
 
 
 def approval_payload_bytes(request: JsonValue) -> bytes:

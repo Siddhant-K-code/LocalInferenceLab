@@ -128,6 +128,9 @@ canonical duplicate/float/constant/value validators. This narrow bounded-input p
 integer-digit-limit payloads (including either retained trust or signed-request file), preserving
 their exact available bytes; it does not catch arbitrary ValueError/programming failures globally
 or change the repository's shared/historical JSON parser.
+The narrow recursion guard also covers recursive canonical/value validation, including the
+public v2 request-byte API. Deep bounded-byte inputs refuse with ContractError; no raw
+RecursionError escapes that API, and unrelated ValueError/programming failures still propagate.
 Verification followed by custody drift/expiry retains a subsequent refusal referring to the
 prior observation ID; the earlier record describes only its observed interval, never ongoing
 authority. Failure to retain either outcome raises `ApprovalRetentionError`, with no
