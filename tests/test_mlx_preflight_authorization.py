@@ -219,7 +219,7 @@ def test_coherent_request_rehash_cannot_bypass_pins_types_or_scope(
     target[path[-1]] = replacement
     _rehash(proposal)
     with pytest.raises(ContractError):
-        prepare_authorization_acquisition(proposal)
+        verify_authorization_request_structure(proposal)
 
 
 @pytest.mark.parametrize("kind", ["duplicate", "wrong_version", "metadata", "unsorted", "untyped"])
