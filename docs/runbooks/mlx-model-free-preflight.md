@@ -137,6 +137,23 @@ inert launch, malformed frames, crashes/signals/deadlines, source drift and expi
 failure, nonrefund/reuse refusal, poisoned/foreign/copied/forked handles and copied journal objects.
 No production opener, authority, native worker or physical acceptance gate is enabled.
 
+The parent adapter claims a process-bound, globally locked, identity-keyed terminal dispatch state
+**before** checking roots, bindings or the ledger. Every call on that live ledger instance uses
+the same state, not a caller-created wrapper's local flag. Success or refusal cannot release it.
+Restoring a rejected directory mode or original journal inode cannot resurrect the same parent
+attempt; concurrent/queued calls and copied attempt wrappers refuse before collection. Forks
+refuse before consulting an inherited lock; reopened/foreign ledger handles cannot own the
+original permit. Pre-callback failures retain a private terminal refusal audit under the exact
+bound custody pin, explicitly saying validated consumption callback evidence was unavailable.
+Unavailable custody raises rather than silently pretending that evidence was retained.
+
+This is application-origin enforcement in the trusted parent, not a sandbox against hostile
+Python. The unchanged ledger's raw synthetic callback API is not revoked by the parent guard;
+revoking that separate raw token would require a separately reviewed public ledger retirement
+API. It cannot reopen this parent adapter's terminal attempt, authorize production dispatch,
+or produce physical evidence. No private ledger-field mutation, retry-to-burn, refund or remint
+is used.
+
 ## Retention and claim scope
 
 Wire frames are at most 16,384 payload bytes; the parent stores at most 32 captures. Oversized

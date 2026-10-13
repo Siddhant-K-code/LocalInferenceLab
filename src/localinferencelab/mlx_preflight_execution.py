@@ -5,7 +5,10 @@ from __future__ import annotations
 import fcntl
 import os
 import socket
+import stat
+import threading
 import time
+import weakref
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -101,6 +104,11 @@ _IDENTITY_FIELDS = {
 }
 _STANDARD_FDS = 2
 _REPRESENTATION_BOUND = 256
+_SYNTHETIC_DISPATCH_PID = os.getpid()
+_SYNTHETIC_DISPATCH_LOCK = threading.Lock()
+_SYNTHETIC_DISPATCHED: weakref.WeakKeyDictionary[SyntheticAuthorizationLedger, str] = (
+    weakref.WeakKeyDictionary()
+)
 
 
 def require_hello(value: dict[str, JsonValue]) -> None:
@@ -565,6 +573,60 @@ class Acquisition:
         }
 
 
+def _claim_synthetic_dispatch(ledger: SyntheticAuthorizationLedger) -> str:
+    if os.getpid() != _SYNTHETIC_DISPATCH_PID:
+        raise AcquisitionError("synthetic_parent_dispatch_fork")
+    with _SYNTHETIC_DISPATCH_LOCK:
+        if ledger in _SYNTHETIC_DISPATCHED:
+            raise AcquisitionError("synthetic_parent_dispatch_terminal")
+        dispatch_id = digest_bytes(os.urandom(32))
+        _SYNTHETIC_DISPATCHED[ledger] = dispatch_id
+        return dispatch_id
+
+
+def _retain_synthetic_dispatch_refusal(
+    launch: _PreparedLaunch,
+    attempt: SyntheticParentAttempt,
+    bindings: ParentBindings,
+    dispatch_id: str,
+) -> None:
+    metadata = os.fstat(launch.custody_descriptor)
+    pin = {
+        "device": metadata.st_dev,
+        "inode": metadata.st_ino,
+        "owner": metadata.st_uid,
+        "mode": stat.S_IMODE(metadata.st_mode),
+    }
+    if not stat.S_ISDIR(metadata.st_mode) or canonical_json(pin) != canonical_json(
+        bindings.roots[0].to_dict()
+    ):
+        raise AcquisitionError("synthetic_dispatch_refusal_custody_unavailable")
+    hello = attempt.hello()
+    require_hello(hello)
+    record: dict[str, JsonValue] = {
+        "record_type": "mlx_preflight_synthetic_terminal_dispatch_refusal",
+        "schema_version": "1.0",
+        "evidence_scope": "synthetic_non_promotable",
+        "session_id": hello["session_id"],
+        "parent_dispatch_id": dispatch_id,
+        "context_id": digest_bytes(attempt.context_bytes),
+        "parent_bindings_id": canonical_identity(bindings.to_dict()),
+        "authorization_id": _object(bindings.to_dict()["authorization"])["authorization_id"],
+        "parent_dispatch_state": "terminal_refused_before_callback",
+        "callback_invoked": False,
+        "durable_consumption_audit": "unavailable_without_validated_ledger_callback",
+        "action_attempts_and_completions": "unknown_no_native_nonaction_claim",
+        "permit_scope": "parent_adapter_only_not_raw_ledger_revocation",
+        "retry_refund_or_remint": False,
+        "accepted_physical_evidence": False,
+        "promotable": False,
+    }
+    record["record_id"] = canonical_identity(record)
+    name = ".mlx-preflight-dispatch-refused-" + dispatch_id[7:] + ".json"
+    _write_exclusive_at(launch.custody_descriptor, name, canonical_json(record))
+    os.fsync(launch.custody_descriptor)
+
+
 def dispatch_synthetic_attempt(
     launch: _PreparedLaunch,
     attempt: SyntheticParentAttempt,
@@ -575,16 +637,27 @@ def dispatch_synthetic_attempt(
     """Use only a live merged-ledger synthetic permit; no callback or native-gate bypass."""
     if type(ledger) is not SyntheticAuthorizationLedger:
         raise AcquisitionError("synthetic_ledger_origin")
-    expected = parent_bindings_for_attempt(_object(bindings.to_dict()["authorization"]), attempt)
-    if canonical_json(expected.to_dict()) != canonical_json(bindings.to_dict()):
-        raise AcquisitionError("synthetic_attempt_parent_bindings")
+    dispatch_id = _claim_synthetic_dispatch(ledger)
+    callback_invoked = False
 
     def collect(consumption: dict[str, JsonValue]) -> Acquisition:
+        nonlocal callback_invoked
+        callback_invoked = True
         revalidate_synthetic_attempt(attempt, launch)
         record = synthetic_attempt_record(attempt, bindings, consumption)
         return _collect_owned_session(launch, synthetic_attempt=attempt, synthetic_record=record)
 
-    return ledger.dispatch_synthetic_once(permit, bindings, collect)
+    try:
+        expected = parent_bindings_for_attempt(
+            _object(bindings.to_dict()["authorization"]), attempt
+        )
+        if canonical_json(expected.to_dict()) != canonical_json(bindings.to_dict()):
+            raise AcquisitionError("synthetic_attempt_parent_bindings")
+        return ledger.dispatch_synthetic_once(permit, bindings, collect)
+    except (ContractError, OSError):
+        if not callback_invoked:
+            _retain_synthetic_dispatch_refusal(launch, attempt, bindings, dispatch_id)
+        raise
 
 
 def consume_synthetic_attempt(

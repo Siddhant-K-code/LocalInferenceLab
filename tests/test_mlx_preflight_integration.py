@@ -3,9 +3,11 @@
 # ruff: noqa: SLF001
 from __future__ import annotations
 
+import concurrent.futures
 import copy
 import errno
 import os
+import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -260,7 +262,7 @@ def test_consumed_permit_retired_before_failed_callback_and_live_drift(
         parent.dispatch_synthetic_attempt(
             integrated.launch, integrated.attempt, integrated.ledger, integrated.bindings, permit
         )
-    with pytest.raises(ContractError, match="already dispatched"):
+    with pytest.raises(ContractError, match="dispatch_terminal"):
         parent.dispatch_synthetic_attempt(
             integrated.launch, integrated.attempt, integrated.ledger, integrated.bindings, permit
         )
@@ -309,7 +311,7 @@ def test_post_consumption_source_drift_burns_permit_without_collection_or_refund
             integrated.launch, integrated.attempt, integrated.ledger, integrated.bindings, permit
         )
     integrated.launch.worker_bytes = original
-    with pytest.raises(ContractError, match="already dispatched"):
+    with pytest.raises(ContractError, match="dispatch_terminal"):
         parent.dispatch_synthetic_attempt(
             integrated.launch, integrated.attempt, integrated.ledger, integrated.bindings, permit
         )
@@ -378,12 +380,123 @@ def test_late_synthetic_expiry_never_collects_or_refunds(
         parent.dispatch_synthetic_attempt(
             integrated.launch, integrated.attempt, integrated.ledger, integrated.bindings, permit
         )
-    with pytest.raises(ContractError, match="already dispatched"):
+    with pytest.raises(ContractError, match="dispatch_terminal"):
         parent.dispatch_synthetic_attempt(
             integrated.launch, integrated.attempt, integrated.ledger, integrated.bindings, permit
         )
     assert called == []
     _assert_consumed_no_refund(integrated)
+
+
+def _assert_terminal_refusal_audit(integrated: IntegratedFixture) -> None:
+    records = list((integrated.root / "custody").glob(".mlx-preflight-dispatch-refused-*.json"))
+    assert records
+    for path in records:
+        record = _object(load_json_bytes(path.read_bytes()))
+        assert record["session_id"] == integrated.attempt.hello()["session_id"]
+        assert record["context_id"] == digest_bytes(integrated.attempt.context_bytes)
+        assert record["parent_bindings_id"] == canonical_identity(integrated.bindings.to_dict())
+        assert record["parent_dispatch_state"] == "terminal_refused_before_callback"
+        assert record["callback_invoked"] is False
+        assert record["accepted_physical_evidence"] is False and record["promotable"] is False
+        assert (
+            record["durable_consumption_audit"] == "unavailable_without_validated_ledger_callback"
+        )
+        assert str(integrated.root).encode() not in path.read_bytes()
+
+
+@pytest.mark.parametrize("changed", ["runtime_container_mode", "journal_inode"])
+def test_integrity_refusal_restoration_same_issued_permit_and_new_wrapper_never_dispatch(
+    integrated: IntegratedFixture, monkeypatch: pytest.MonkeyPatch, changed: str
+) -> None:
+    permit = integrated.ledger.consume_once(integrated.authorization, integrated.bindings)
+    before = integrated.journal.read_bytes()
+    container = integrated.root / "private-runtime"
+    saved = integrated.root / "custody" / "original-pinned-journal"
+    if changed == "runtime_container_mode":
+        container.chmod(0o755)
+    else:
+        integrated.journal.rename(saved)
+        integrated.journal.write_bytes(before)
+        integrated.journal.chmod(0o600)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        parent, "_collect_owned_session", lambda *_args, **_kwargs: calls.append("bad")
+    )
+    with pytest.raises(ContractError):
+        parent.dispatch_synthetic_attempt(
+            integrated.launch, integrated.attempt, integrated.ledger, integrated.bindings, permit
+        )
+    if changed == "runtime_container_mode":
+        container.chmod(0o700)
+    else:
+        integrated.journal.unlink()
+        saved.rename(integrated.journal)
+    assert integrated.journal.read_bytes() == before
+    _assert_consumed_no_refund(integrated)
+    for attempt in (integrated.attempt, copy.copy(integrated.attempt)):
+        with pytest.raises(AcquisitionError, match="dispatch_terminal"):
+            parent.dispatch_synthetic_attempt(
+                integrated.launch, attempt, integrated.ledger, integrated.bindings, permit
+            )
+    with pytest.raises(ContractError, match="foreign"):
+        parent.dispatch_synthetic_attempt(
+            integrated.launch, integrated.attempt, integrated.reopen(), integrated.bindings, permit
+        )
+    assert calls == []
+    _assert_terminal_refusal_audit(integrated)
+
+
+def test_observed_integrity_failure_restoration_and_queued_dispatch_never_collect(
+    integrated: IntegratedFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    permit = integrated.ledger.consume_once(integrated.authorization, integrated.bindings)
+    container = integrated.root / "private-runtime"
+    container.chmod(0o755)
+    failure_seen, restored = threading.Event(), threading.Event()
+    original = parent.parent_bindings_for_attempt
+
+    def paused_after_observed_failure(
+        authorization: JsonValue, attempt: attempts.SyntheticParentAttempt
+    ) -> ParentBindings:
+        try:
+            return original(authorization, attempt)
+        except ContractError:
+            failure_seen.set()
+            assert restored.wait(5)
+            raise
+
+    monkeypatch.setattr(parent, "parent_bindings_for_attempt", paused_after_observed_failure)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        parent, "_collect_owned_session", lambda *_args, **_kwargs: calls.append("bad")
+    )
+
+    def dispatch() -> str:
+        try:
+            parent.dispatch_synthetic_attempt(
+                integrated.launch,
+                integrated.attempt,
+                integrated.ledger,
+                integrated.bindings,
+                permit,
+            )
+        except ContractError:
+            return "refused"
+        return "incorrectly_dispatched"
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(dispatch)
+        assert failure_seen.wait(5)
+        queued = executor.submit(dispatch)
+        assert queued.result(timeout=5) == "refused"
+        container.chmod(0o700)
+        restored.set()
+        assert first.result(timeout=5) == "refused"
+    monkeypatch.setattr(parent, "parent_bindings_for_attempt", original)
+    assert dispatch() == "refused" and calls == []
+    _assert_consumed_no_refund(integrated)
+    _assert_terminal_refusal_audit(integrated)
 
 
 def test_completed_bundle_replay_never_touches_or_consumes_ledger(
