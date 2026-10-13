@@ -22,23 +22,23 @@ All unconfined baseline controls succeeded. The aggregate remains
 Descriptor hygiene covers 3..255; supplied stdin/stdout/stderr are not absent.
 Environment/descriptor hygiene is not inherited-resource revocation.
 
-| Check (required) | Control | Candidate | Assessment |
-|---|---|---|---|
-| Allowed read (allow) | Succeeded; byte A | Succeeded; byte A | MATCHED |
-| Allowed write (allow) | Succeeded | Succeeded | MATCHED |
-| Outside-list read (deny) | Succeeded; byte A | Denied (errno 1, EPERM) | MATCHED |
-| Outside-list write (deny) | Succeeded | Denied (errno 1, EPERM) | MATCHED |
-| Prefix-sibling read (deny) | Succeeded; byte A | Denied (errno 1, EPERM) | MATCHED |
-| Symlink read (deny) | Succeeded; byte A | Denied (errno 1, EPERM) | MATCHED |
-| Symlink write (deny) | Succeeded | Denied (errno 1, EPERM) | MATCHED |
-| Socket creation (deny) | Succeeded | Succeeded | UNMET |
-| Loopback connection (deny) | Succeeded | Denied (errno 1, EPERM) | MATCHED |
-| Fork (deny) | Succeeded | Denied (errno 1, EPERM) | MATCHED |
-| Other executable (deny) | Succeeded | Denied (errno 1, EPERM) | MATCHED |
-| Self-exec (deny) | Succeeded | SIGABRT; no result | UNKNOWN |
-| Descriptor hygiene (allow) | Succeeded | Succeeded | MATCHED |
-| Environment hygiene (allow) | Succeeded | Succeeded | MATCHED |
-| Replacement read (deny) | Succeeded; byte B | Succeeded; byte B | UNMET |
+| Check (required) | Candidate result |
+|---|---|
+| Allowed read (allow) | **MATCHED**<br>Succeeded; byte A |
+| Allowed write (allow) | **MATCHED**<br>Succeeded |
+| Outside-list read (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Outside-list write (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Prefix-sibling read (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Symlink read (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Symlink write (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Socket creation (deny) | **UNMET**<br>Succeeded |
+| Loopback connection (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Fork (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Other executable (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Self-exec (deny) | **UNKNOWN**<br>SIGABRT; no result |
+| Descriptor hygiene (allow) | **MATCHED**<br>Succeeded |
+| Environment hygiene (allow) | **MATCHED**<br>Succeeded |
+| Replacement read (deny) | **UNMET**<br>Succeeded; byte B |
 
 Connection denial is not socket-creation denial. Reading replacement byte B from a changed
 fixture inode is not object pinning, concurrent race exclusion, or executable lifetime custody.
@@ -50,23 +50,23 @@ Self-exec's signal is UNKNOWN, never a proven denial.
 the candidate aborted without output. The remaining checks were never launched.
 This is not proof that macOS cannot enforce controls and not proof of startup confinement.
 
-| Check (required) | Candidate | Assessment |
-|---|---|---|
-| Allowed read (allow) | SIGABRT; no result | UNKNOWN |
-| Allowed write (allow) | Not launched | UNTESTED |
-| Outside-list read (deny) | Not launched | UNTESTED |
-| Outside-list write (deny) | Not launched | UNTESTED |
-| Prefix-sibling read (deny) | Not launched | UNTESTED |
-| Symlink read (deny) | Not launched | UNTESTED |
-| Symlink write (deny) | Not launched | UNTESTED |
-| Socket creation (deny) | Not launched | UNTESTED |
-| Loopback connection (deny) | Not launched | UNTESTED |
-| Fork (deny) | Not launched | UNTESTED |
-| Other executable (deny) | Not launched | UNTESTED |
-| Self-exec (deny) | Not launched | UNTESTED |
-| Descriptor hygiene (allow) | Not launched | UNTESTED |
-| Environment hygiene (allow) | Not launched | UNTESTED |
-| Replacement read (deny) | Not launched | UNTESTED |
+| Check (required) | Candidate result |
+|---|---|
+| Allowed read (allow) | **UNKNOWN**<br>SIGABRT; no result |
+| Allowed write (allow) | **UNTESTED**<br>Not launched |
+| Outside-list read (deny) | **UNTESTED**<br>Not launched |
+| Outside-list write (deny) | **UNTESTED**<br>Not launched |
+| Prefix-sibling read (deny) | **UNTESTED**<br>Not launched |
+| Symlink read (deny) | **UNTESTED**<br>Not launched |
+| Symlink write (deny) | **UNTESTED**<br>Not launched |
+| Socket creation (deny) | **UNTESTED**<br>Not launched |
+| Loopback connection (deny) | **UNTESTED**<br>Not launched |
+| Fork (deny) | **UNTESTED**<br>Not launched |
+| Other executable (deny) | **UNTESTED**<br>Not launched |
+| Self-exec (deny) | **UNTESTED**<br>Not launched |
+| Descriptor hygiene (allow) | **UNTESTED**<br>Not launched |
+| Environment hygiene (allow) | **UNTESTED**<br>Not launched |
+| Replacement read (deny) | **UNTESTED**<br>Not launched |
 
 ## Scope and provenance
 

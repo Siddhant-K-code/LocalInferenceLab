@@ -7,23 +7,21 @@
   <img src="native-evidence-card.svg" width="1200" alt="After-startup C/libc helper, not an MLX benchmark: 12 matched / 2 unmet / 1 unknown. The same allowed path reads a new object; socket creation succeeds. Pre-exec calibration is unknown with 14 later checks untested. Startup confinement is unproven, the runtime gate is ungranted, and MLX determinism is NOT MEASURED.">
 </picture>
 
-Before measuring local AI determinism, I wanted to understand what a narrow macOS policy
-actually constrained. The useful finding was smaller than a GPU result: an allowed filename
-stayed the same while the object behind it changed.
+Before measuring local AI determinism, I tested a narrow macOS policy.
+An allowed filename stayed the same while its underlying object changed.
 
 ## ELI5: the address stayed; the parcel changed
 
-Imagine a guard who checks one locker address. Someone replaces the parcel inside.
-The address still matches; the parcel does not.
+Imagine a guard checking a locker address, not the parcel inside. Replace the parcel:
+the address still matches.
 
 The initial allowed read returned byte **A**.
 The parent atomically replaced that owned fixture pathname with a different inode containing
 byte **B**. Under the unchanged path policy, the native helper read **B**.
-An inode identifies a filesystem object. Observing an inode does not make it an enforced pin.
+An inode identifies an object; observing it does not enforce a pin.
 
-This controlled replacement is not a hostile-parent attack or concurrent race test.
-"Allow this path" and "read these exact bytes for the entire process lifetime" are different
-requirements; this observation does not characterize every pathname policy.
+This is not a hostile-parent attack or race test. "Allow this path" and "read these exact bytes
+for the entire process lifetime" differ; other pathname policies may behave differently.
 
 ## What actually ran
 
@@ -32,8 +30,8 @@ on Darwin 27.0.0 arm64. **Synthetic fixture** means deliberately chosen input by
 **Retained native outcome** means actual helper results and parent-observed failures,
 not invented success fixtures.
 
-The pre-exec candidate used a deny-default Seatbelt profile. Its allowed-read control
-succeeded, but the candidate exited on SIGABRT with empty output. That left
+The pre-exec deny-default Seatbelt candidate aborted without output; its allowed-read control
+succeeded. That left
 **1 unknown calibration and
 14 later checks untested**. It is not proof that macOS
 cannot enforce controls.
@@ -46,23 +44,23 @@ It measures an already-running helper, not startup confinement or actual MLX enf
 All baseline controls succeeded. "Matched" includes intended allowances, not just denied
 actions. The aggregate remains `refused`.
 
-| Check (required) | Candidate | Assessment |
-|---|---|---|
-| Allowed read (allow) | Succeeded; byte A | MATCHED |
-| Allowed write (allow) | Succeeded | MATCHED |
-| Outside-list read (deny) | Denied (errno 1, EPERM) | MATCHED |
-| Outside-list write (deny) | Denied (errno 1, EPERM) | MATCHED |
-| Prefix-sibling read (deny) | Denied (errno 1, EPERM) | MATCHED |
-| Symlink read (deny) | Denied (errno 1, EPERM) | MATCHED |
-| Symlink write (deny) | Denied (errno 1, EPERM) | MATCHED |
-| Socket creation (deny) | Succeeded | UNMET |
-| Loopback connection (deny) | Denied (errno 1, EPERM) | MATCHED |
-| Fork (deny) | Denied (errno 1, EPERM) | MATCHED |
-| Other executable (deny) | Denied (errno 1, EPERM) | MATCHED |
-| Self-exec (deny) | SIGABRT; no result | UNKNOWN |
-| Descriptor hygiene (allow) | Succeeded | MATCHED |
-| Environment hygiene (allow) | Succeeded | MATCHED |
-| Replacement read (deny) | Succeeded; byte B | UNMET |
+| Check (required) | Candidate result |
+|---|---|
+| Allowed read (allow) | **MATCHED**<br>Succeeded; byte A |
+| Allowed write (allow) | **MATCHED**<br>Succeeded |
+| Outside-list read (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Outside-list write (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Prefix-sibling read (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Symlink read (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Symlink write (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Socket creation (deny) | **UNMET**<br>Succeeded |
+| Loopback connection (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Fork (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Other executable (deny) | **MATCHED**<br>Denied (errno 1, EPERM) |
+| Self-exec (deny) | **UNKNOWN**<br>SIGABRT; no result |
+| Descriptor hygiene (allow) | **MATCHED**<br>Succeeded |
+| Environment hygiene (allow) | **MATCHED**<br>Succeeded |
+| Replacement read (deny) | **UNMET**<br>Succeeded; byte B |
 
 **Socket creation succeeded; loopback connection was denied.** `connect()` is not `socket()`.
 Self-exec's SIGABRT leaves effects unknown, not proven denied.
@@ -74,8 +72,8 @@ Empty environment/closed extra descriptors are parent hygiene, not resource revo
 Reuse this requirements checklist: paths versus objects, acquisition versus connection,
 completed denials versus crashes. Keep the negative and unknown rows.
 
-The exporter checks original receipt bytes and identities, reuses canonical/native validators,
-and derives counts, tables and visuals together. Caller-rehashed mutations cannot publish.
+The exporter checks pinned bytes/identities, reuses canonical/native validators, and derives
+counts/tables/visuals together. Caller-rehashed mutations cannot publish.
 Regenerate without MLX:
 
 ```bash
@@ -86,7 +84,7 @@ PYTHONPATH=src python3 -m localinferencelab.native_evidence_card \
   --output-dir /tmp/localinferencelab-native-card
 ```
 
-Use a fresh output directory. Outputs: `native-evidence-card.json`, `native-evidence-card.md`,
+Fresh-directory outputs: `native-evidence-card.json`, `native-evidence-card.md`,
 desktop/mobile `native-evidence-card*.svg`, and this article.
 Installed wheel: omit `PYTHONPATH=src`,
 use its Python, and supply explicit original receipt paths; they are not bundled.
@@ -116,12 +114,12 @@ Host observations do not amend the frozen runtime target. No permission is added
 
 Copy each draft without its numbering. No post has been sent.
 
-1. A path is not a pin. My retained macOS C/libc helper read byte B from a new inode at the same allowed pathname. A path allowlist did not pin the object. After-startup diagnostic only; MLX determinism is not measured.
+1. A path is not a pin. My after-startup macOS C/libc probe read byte B from a new inode at the same allowed pathname. Not an MLX determinism result.
 
-2. Actual native-helper results: 12 matched / 2 unmet / 1 unknown. Matched includes allowed reads/writes and hygiene, not just denials. After-startup policy, not startup confinement. Not an MLX benchmark.
+2. Actual native-helper results: 12 matched / 2 unmet / 1 unknown. Matched includes allowed actions and hygiene, not just denials. After-startup policy, not startup confinement or an MLX benchmark.
 
-3. Blocked connect() is not blocked socket(). The retained after-startup helper could create a socket but could not connect to loopback. Test the exact action your requirement names, not a nearby proxy.
+3. Blocked connect() is not blocked socket(). My retained after-startup helper created a socket but could not connect to loopback. Test the exact action, not a proxy.
 
-4. An honest failure panel: pre-exec allowed-read control worked; candidate aborted with no result. 14 later checks were untested. That is not proof macOS cannot enforce controls. No MLX runtime permission is granted.
+4. Pre-exec: allowed-read control worked; candidate aborted with no result. 14 later checks untested. Not proof macOS cannot enforce controls. MLX runtime permission stays absent.
 
-5. Reuse the analysis now: two pinned public receipts -> deterministic JSON, Markdown and SVG, with a Python standard-library command. No native probe or MLX needed. Offline replay checks integrity; it cannot authenticate the original OS acquisition.
+5. Reuse two pinned public receipts: deterministic JSON, Markdown and SVG with standard-library Python. No new probe or MLX. Offline replay checks integrity, not authenticity of the original OS acquisition.

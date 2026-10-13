@@ -187,6 +187,7 @@ def test_all_committed_formats_reproduce_exactly_and_posts_fit() -> None:
     article = first["a-path-is-not-a-pin.md"].decode()
     prose, posts = article.split("## Ready-to-share X drafts\n", 1)
     assert 600 <= len(prose.split()) <= 900
+    assert len(article.split()) <= 900
     drafts = [line.partition(". ")[2] for line in posts.splitlines() if line[:1].isdigit()]
     assert len(drafts) == 5
     assert all(0 < len(post) <= 280 for post in drafts)
@@ -290,5 +291,8 @@ def test_import_help_and_complete_export_never_observe_or_execute_runtime(
         assert publication.main(_args(tmp_path / "card")) == 0
         assert set(observed_reads) == paths
         assert len(observed_reads) == 2
-        assert not any(name == "mlx" or name.startswith("mlx.") for name in sys.modules)
+        assert not any(
+            name in {"mlx", "mlx_lm"} or name.startswith(("mlx.", "mlx_lm."))
+            for name in sys.modules
+        )
     importlib.reload(publication)

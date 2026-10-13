@@ -214,22 +214,17 @@ def _row(card: dict[str, JsonValue], operation: str) -> dict[str, JsonValue]:
     )
 
 
-def _table(card: dict[str, JsonValue], stage: str, *, baseline: bool = False) -> str:
-    heading = (
-        "| Check (required) | "
-        + ("Control | " if baseline else "")
-        + ("Candidate | Assessment |\n")
-    )
-    divider = "|---|" + ("---|" if baseline else "") + "---|---|\n"
+def _table(card: dict[str, JsonValue], stage: str) -> str:
+    heading = "| Check (required) | Candidate result |\n|---|---|\n"
     lines = []
     for row in _rows(_mapping(card[stage])):
         operation = cast("str", row["operation"])
-        control = f"{_native_text(_mapping(row['baseline']))} | " if baseline else ""
         lines.append(
-            f"| {_CHECKS[operation]} ({row['expectation']}) | {control}"
-            f"{_native_text(_mapping(row['candidate']))} | {str(row['assessment']).upper()} |"
+            f"| {_CHECKS[operation]} ({row['expectation']}) | "
+            f"**{str(row['assessment']).upper()}**<br>"
+            f"{_native_text(_mapping(row['candidate']))} |"
         )
-    return heading + divider + "\n".join(lines)
+    return heading + "\n".join(lines)
 
 
 def _picture(card: dict[str, JsonValue]) -> str:
@@ -315,7 +310,7 @@ All unconfined baseline controls succeeded. The aggregate remains
 Descriptor hygiene covers 3..255; supplied stdin/stdout/stderr are not absent.
 Environment/descriptor hygiene is not inherited-resource revocation.
 
-{_table(card, "after_startup", baseline=True)}
+{_table(card, "after_startup")}
 
 Connection denial is not socket-creation denial. Reading replacement byte B from a changed
 fixture inode is not object pinning, concurrent race exclusion, or executable lifetime custody.
@@ -354,22 +349,19 @@ A separate historical model-free MLX attempt failed; this card does not erase th
 
 def _posts(card: dict[str, JsonValue]) -> list[str]:
     return [
-        "A path is not a pin. My retained macOS C/libc helper read byte B from a new inode "
-        "at the same allowed pathname. A path allowlist did not pin the object. "
-        "After-startup diagnostic only; MLX determinism is not measured.",
+        "A path is not a pin. My after-startup macOS C/libc probe read byte B from a new "
+        "inode at the same allowed pathname. Not an MLX determinism result.",
         f"Actual native-helper results: {_headline(card)}. Matched includes allowed "
-        "reads/writes and hygiene, not just denials. After-startup policy, not startup "
-        "confinement. Not an MLX benchmark.",
-        "Blocked connect() is not blocked socket(). The retained after-startup helper "
-        "could create a socket but could not connect to loopback. Test the exact action "
-        "your requirement names, not a nearby proxy.",
-        f"An honest failure panel: pre-exec allowed-read control worked; candidate "
-        f"aborted with no result. {_count(card, 'pre_exec', 'untested')} later checks were "
-        "untested. That is not proof macOS cannot enforce controls. No MLX runtime "
-        "permission is granted.",
-        "Reuse the analysis now: two pinned public receipts -> deterministic JSON, Markdown "
-        "and SVG, with a Python standard-library command. No native probe or MLX needed. "
-        "Offline replay checks integrity; it cannot authenticate the original OS acquisition.",
+        "actions and hygiene, not just denials. After-startup policy, not startup confinement "
+        "or an MLX benchmark.",
+        "Blocked connect() is not blocked socket(). My retained after-startup helper created "
+        "a socket but could not connect to loopback. Test the exact action, not a proxy.",
+        f"Pre-exec: allowed-read control worked; candidate aborted with no result. "
+        f"{_count(card, 'pre_exec', 'untested')} later checks untested. Not proof macOS cannot "
+        "enforce controls. MLX runtime permission stays absent.",
+        "Reuse two pinned public receipts: deterministic JSON, Markdown and SVG with "
+        "standard-library Python. No new probe or MLX. Offline replay checks integrity, "
+        "not authenticity of the original OS acquisition.",
     ]
 
 
@@ -388,23 +380,21 @@ def _article(card: dict[str, JsonValue]) -> str:
 
 {_picture(card)}
 
-Before measuring local AI determinism, I wanted to understand what a narrow macOS policy
-actually constrained. The useful finding was smaller than a GPU result: an allowed filename
-stayed the same while the object behind it changed.
+Before measuring local AI determinism, I tested a narrow macOS policy.
+An allowed filename stayed the same while its underlying object changed.
 
 ## ELI5: the address stayed; the parcel changed
 
-Imagine a guard who checks one locker address. Someone replaces the parcel inside.
-The address still matches; the parcel does not.
+Imagine a guard checking a locker address, not the parcel inside. Replace the parcel:
+the address still matches.
 
 The initial allowed read returned byte **{byte_a}**.
 The parent atomically replaced that owned fixture pathname with a different inode containing
 byte **{byte_b}**. Under the unchanged path policy, the native helper read **{byte_b}**.
-An inode identifies a filesystem object. Observing an inode does not make it an enforced pin.
+An inode identifies an object; observing it does not enforce a pin.
 
-This controlled replacement is not a hostile-parent attack or concurrent race test.
-"Allow this path" and "read these exact bytes for the entire process lifetime" are different
-requirements; this observation does not characterize every pathname policy.
+This is not a hostile-parent attack or race test. "Allow this path" and "read these exact bytes
+for the entire process lifetime" differ; other pathname policies may behave differently.
 
 ## What actually ran
 
@@ -413,8 +403,8 @@ on Darwin 27.0.0 arm64. **Synthetic fixture** means deliberately chosen input by
 **Retained native outcome** means actual helper results and parent-observed failures,
 not invented success fixtures.
 
-The pre-exec candidate used a deny-default Seatbelt profile. Its allowed-read control
-succeeded, but the candidate exited on SIGABRT with empty output. That left
+The pre-exec deny-default Seatbelt candidate aborted without output; its allowed-read control
+succeeded. That left
 **{_count(card, "pre_exec", "unknown")} unknown calibration and
 {_count(card, "pre_exec", "untested")} later checks untested**. It is not proof that macOS
 cannot enforce controls.
@@ -439,13 +429,13 @@ Empty environment/closed extra descriptors are parent hygiene, not resource revo
 Reuse this requirements checklist: paths versus objects, acquisition versus connection,
 completed denials versus crashes. Keep the negative and unknown rows.
 
-The exporter checks original receipt bytes and identities, reuses canonical/native validators,
-and derives counts, tables and visuals together. Caller-rehashed mutations cannot publish.
+The exporter checks pinned bytes/identities, reuses canonical/native validators, and derives
+counts/tables/visuals together. Caller-rehashed mutations cannot publish.
 Regenerate without MLX:
 
 {_command()}
 
-Use a fresh output directory. Outputs: `native-evidence-card.json`, `native-evidence-card.md`,
+Fresh-directory outputs: `native-evidence-card.json`, `native-evidence-card.md`,
 desktop/mobile `native-evidence-card*.svg`, and this article.
 Installed wheel: omit `PYTHONPATH=src`,
 use its Python, and supply explicit original receipt paths; they are not bundled.
