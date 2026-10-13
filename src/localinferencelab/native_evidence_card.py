@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import os
+import stat
 import sys
 from collections import Counter
+from contextlib import ExitStack
 from html import escape
 from pathlib import Path
 from typing import cast
@@ -617,13 +620,107 @@ def publication_artifacts(pre_exec_bytes: bytes, after_startup_bytes: bytes) -> 
     }
 
 
+def _output_pin(metadata: os.stat_result) -> tuple[int, int, int, int]:
+    return metadata.st_dev, metadata.st_ino, metadata.st_uid, metadata.st_mode
+
+
+def _output_parts(output_dir: Path, root: int) -> tuple[str, ...]:
+    if ".." in output_dir.parts:
+        raise ContractError("publication output path traversal is forbidden")
+    absolute = output_dir.absolute()
+    if absolute.anchor != "/":
+        raise ContractError("publication output requires a POSIX directory path")
+    parts = absolute.parts[1:]
+    # macOS root-owned aliases are rewritten literally, never followed by open().
+    if parts and parts[0] in {"tmp", "var"}:
+        metadata = os.stat(parts[0], dir_fd=root, follow_symlinks=False)
+        if stat.S_ISLNK(metadata.st_mode):
+            target = os.readlink(parts[0], dir_fd=root)
+            if metadata.st_uid != 0 or target not in {
+                f"private/{parts[0]}",
+                f"/private/{parts[0]}",
+            }:
+                raise ContractError("publication output has an unsafe system alias")
+            parts = ("private", parts[0], *parts[1:])
+    return parts
+
+
+def _verify_output_binding(
+    bindings: list[tuple[int, str, int, tuple[int, int, int, int]]],
+) -> None:
+    for parent, name, child, pin in bindings:
+        if (
+            _output_pin(os.stat(name, dir_fd=parent, follow_symlinks=False)) != pin
+            or _output_pin(os.fstat(child)) != pin
+        ):
+            raise ContractError("publication output directory binding changed")
+
+
+def _bind_output_directory(
+    output_dir: Path, stack: ExitStack
+) -> tuple[int, list[tuple[int, str, int, tuple[int, int, int, int]]]]:
+    """Keep output-I/O metadata private; retain every ancestor descriptor and identity."""
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
+    parent = os.open("/", flags)
+    stack.callback(os.close, parent)
+    owner = os.geteuid()
+    parts = _output_parts(output_dir, parent)
+    if not parts:
+        raise ContractError("publication output must be an owned directory below root")
+    bindings = []
+    for index, name in enumerate(parts):
+        try:
+            metadata = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        except FileNotFoundError:
+            os.mkdir(name, 0o700, dir_fd=parent)
+            metadata = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        final = index == len(parts) - 1
+        shared_parent = not final and metadata.st_uid == 0 and bool(metadata.st_mode & stat.S_ISVTX)
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or metadata.st_uid not in ({owner} if final else {0, owner})
+            or (metadata.st_mode & 0o022 and not shared_parent)
+        ):
+            raise ContractError("publication output has an unsafe directory component")
+        child = os.open(name, flags, dir_fd=parent)
+        stack.callback(os.close, child)
+        pin = _output_pin(metadata)
+        if _output_pin(os.fstat(child)) != pin:
+            raise ContractError("publication output directory binding changed")
+        bindings.append((parent, name, child, pin))
+        parent = child
+    _verify_output_binding(bindings)
+    return parent, bindings
+
+
+def _output_exists(directory: int, name: str) -> bool:
+    try:
+        os.stat(name, dir_fd=directory, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    return True
+
+
 def _write_outputs(output_dir: Path, outputs: dict[str, bytes]) -> None:
-    if any((output_dir / name).exists() for name in outputs):
-        raise ContractError("publication output already exists; choose a fresh directory")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    for name, data in outputs.items():
-        with (output_dir / name).open("xb") as output:
-            output.write(data)
+    """Bind the requested directory; races cannot redirect exclusive writes elsewhere."""
+    with ExitStack() as stack:
+        directory, bindings = _bind_output_directory(output_dir, stack)
+        if any(_output_exists(directory, name) for name in outputs):
+            raise ContractError("publication output already exists; choose a fresh directory")
+        for name, data in outputs.items():
+            _verify_output_binding(bindings)
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
+            descriptor = os.open(name, flags, 0o600, dir_fd=directory)
+            try:
+                remaining = memoryview(data)
+                while remaining:
+                    count = os.write(descriptor, remaining)
+                    if count <= 0:
+                        raise ContractError("publication output write made no progress")
+                    remaining = remaining[count:]
+            finally:
+                os.close(descriptor)
+        _verify_output_binding(bindings)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -634,7 +731,10 @@ def main(argv: list[str] | None = None) -> int:
         "--after-startup", type=Path, required=True, help="Original after-startup receipt"
     )
     parser.add_argument(
-        "--output-dir", type=Path, required=True, help="Output directory; never overwrite files"
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Owned output directory; refuse user symlinks and never overwrite files",
     )
     args = parser.parse_args(argv)
     try:

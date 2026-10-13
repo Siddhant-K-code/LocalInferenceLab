@@ -5,8 +5,10 @@ from __future__ import annotations
 import importlib
 import os
 import socket
+import stat
 import subprocess
 import sys
+import tempfile
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -225,6 +227,201 @@ def test_command_writes_only_requested_outputs_and_refuses_overwrite(
     assert captured.out == ""
     assert "output already exists" in captured.err
     assert before == {name: (output / name).read_bytes() for name in FILENAMES}
+
+
+@pytest.mark.parametrize("ancestor", [False, True])
+def test_output_directory_and_ancestor_symlinks_refuse_without_redirected_writes(
+    *, ancestor: bool, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    real = tmp_path / "real"
+    real.mkdir()
+    sentinel = real / "sentinel"
+    sentinel.write_bytes(b"preserve")
+    link = tmp_path / "link"
+    link.symlink_to(real, target_is_directory=True)
+    output = link / "new-subdir" if ancestor else link
+    assert publication.main(_args(output)) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "unsafe directory component" in captured.err
+    assert "/Users/" not in captured.err
+    assert sentinel.read_bytes() == b"preserve"
+    assert sorted(item.name for item in real.iterdir()) == ["sentinel"]
+    assert link.is_symlink()
+
+
+def test_dangling_output_filename_symlink_is_not_overwritten_or_deleted(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output = tmp_path / "card"
+    output.mkdir()
+    sentinel = output / FILENAMES[-1]
+    target = tmp_path / "absent"
+    sentinel.symlink_to(target)
+    assert publication.main(_args(output)) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "output already exists" in captured.err
+    assert sentinel.is_symlink() and not target.exists()
+    assert sorted(item.name for item in output.iterdir()) == [FILENAMES[-1]]
+
+
+@pytest.mark.parametrize("mode", [0o775, 0o777, 0o1777])
+def test_writable_output_directory_refuses_and_preserves_sentinel(
+    mode: int, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output = tmp_path / "card"
+    output.mkdir()
+    sentinel = output / "sentinel"
+    sentinel.write_bytes(b"preserve")
+    output.chmod(mode)
+    assert publication.main(_args(output)) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "unsafe directory component" in captured.err
+    assert sentinel.read_bytes() == b"preserve"
+    assert sorted(item.name for item in output.iterdir()) == ["sentinel"]
+
+
+@pytest.mark.parametrize(("owner", "target"), [(0, "/caller/redirect"), (1, "/private/tmp")])
+def test_system_alias_exception_rejects_nonliteral_target_or_nonroot_owner(
+    owner: int, target: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    actual_stat = os.stat
+
+    def alias_stat(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        *,
+        dir_fd: int | None = None,
+        follow_symlinks: bool = True,
+    ) -> os.stat_result:
+        if path == "tmp" and dir_fd is not None and not follow_symlinks:
+            return os.stat_result((stat.S_IFLNK | 0o777, 1, 1, 1, owner, 0, 0, 0, 0, 0))
+        return actual_stat(path, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
+
+    monkeypatch.setattr(os, "stat", alias_stat)
+    monkeypatch.setattr(os, "readlink", lambda *_args, **_kwargs: target)
+    descriptor = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        with pytest.raises(ContractError, match="unsafe system alias"):
+            publication._output_parts(Path("/tmp/publication"), descriptor)  # noqa: SLF001, S108
+    finally:
+        os.close(descriptor)
+
+
+@pytest.mark.parametrize("timing", ["before_open", "after_open"])
+@pytest.mark.parametrize("replacement", ["symlink", "directory"])
+def test_output_directory_replacement_refuses_and_preserves_both_sentinels(
+    timing: str,
+    replacement: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output, moved, redirected = (tmp_path / name for name in ("card", "moved", "redirected"))
+    output.mkdir()
+    redirected.mkdir()
+    (output / "original-sentinel").write_bytes(b"original")
+    (redirected / "redirected-sentinel").write_bytes(b"redirected")
+    actual_open = os.open
+    replaced = False
+
+    def replace() -> None:
+        output.rename(moved)
+        if replacement == "symlink":
+            output.symlink_to(redirected, target_is_directory=True)
+        else:
+            output.mkdir()
+            (output / "replacement-sentinel").write_bytes(b"replacement")
+
+    def racing_open(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        nonlocal replaced
+        if path == "card" and flags & os.O_DIRECTORY and not replaced:
+            replaced = True
+            if timing == "before_open":
+                replace()
+            descriptor = actual_open(path, flags, mode, dir_fd=dir_fd)
+            if timing == "after_open":
+                replace()
+            return descriptor
+        return actual_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(os, "open", racing_open)
+    assert publication.main(_args(output)) == 2
+    captured = capsys.readouterr()
+    assert replaced and captured.out == "" and "native card" in captured.err
+    assert (moved / "original-sentinel").read_bytes() == b"original"
+    assert (redirected / "redirected-sentinel").read_bytes() == b"redirected"
+    assert sorted(item.name for item in moved.iterdir()) == ["original-sentinel"]
+    assert sorted(item.name for item in redirected.iterdir()) == ["redirected-sentinel"]
+    if replacement == "directory":
+        assert sorted(item.name for item in output.iterdir()) == ["replacement-sentinel"]
+
+
+def test_ancestor_replacement_during_write_cannot_redirect_bound_file_creation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    parent, moved, redirected = (tmp_path / name for name in ("parent", "moved", "redirected"))
+    parent.mkdir()
+    redirected.mkdir()
+    output = parent / "card"
+    output.mkdir()
+    (output / "sentinel").write_bytes(b"original")
+    (redirected / "sentinel").write_bytes(b"redirected")
+    actual_open = os.open
+    replaced = False
+
+    def racing_open(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        nonlocal replaced
+        if path == FILENAMES[0] and flags & os.O_WRONLY and not replaced:
+            replaced = True
+            parent.rename(moved)
+            parent.symlink_to(redirected, target_is_directory=True)
+        return actual_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(os, "open", racing_open)
+    assert publication.main(_args(output)) == 2
+    captured = capsys.readouterr()
+    assert replaced and captured.out == ""
+    assert "directory binding changed" in captured.err
+    assert sorted(item.name for item in redirected.iterdir()) == ["sentinel"]
+    assert (redirected / "sentinel").read_bytes() == b"redirected"
+    bound = moved / "card"
+    assert (bound / "sentinel").read_bytes() == b"original"
+    assert (bound / FILENAMES[0]).read_bytes() == (PUBLISHED / FILENAMES[0]).read_bytes()
+    assert sorted(item.name for item in bound.iterdir()) == [FILENAMES[0], "sentinel"]
+
+
+@pytest.mark.parametrize("location", ["system_tmp", "relative_repo"])
+def test_valid_system_tmp_alias_and_relative_repo_output_reproduce_exact_bytes(
+    location: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with tempfile.TemporaryDirectory(
+        prefix="publication-destination-",
+        dir="/tmp" if location == "system_tmp" else ROOT,  # noqa: S108
+    ) as temporary:
+        directory = Path(temporary)
+        output = directory / "new" / "card"
+        if location == "relative_repo":
+            monkeypatch.chdir(ROOT)
+            output = output.relative_to(ROOT)
+        assert publication.main(_args(output)) == 0
+        assert capsys.readouterr().out == "\n".join(FILENAMES) + "\n"
+        for name in FILENAMES:
+            assert (output / name).read_bytes() == (PUBLISHED / name).read_bytes()
+        assert stat.S_IMODE(output.stat().st_mode) == 0o700
 
 
 @pytest.mark.parametrize("kind", ["missing", "directory", "oversized", "symlink", "mutated"])
