@@ -236,7 +236,7 @@ def require_frame(
     common = expected_frame(kind, sequence, session_id)
     if value.keys() != common.keys() | fields:
         raise AcquisitionError("frame_fields")
-    if isinstance(value["sequence"], bool):
+    if type(value["sequence"]) is not int:
         raise AcquisitionError("frame_order_or_binding")
     if any(value[key] != expected for key, expected in common.items()):
         raise AcquisitionError("frame_order_or_binding")

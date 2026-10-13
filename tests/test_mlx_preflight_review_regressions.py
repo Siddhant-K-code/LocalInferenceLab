@@ -13,7 +13,8 @@ import localinferencelab.mlx_preflight_execution as parent
 import localinferencelab.mlx_preflight_protocol as protocol
 import localinferencelab.mlx_preflight_report as reports
 import localinferencelab.mlx_preflight_worker as worker
-from localinferencelab.canonical import JsonValue, canonical_identity
+from localinferencelab.canonical import JsonValue, canonical_identity, canonical_json
+from localinferencelab.custody import publish_bundle, read_closed_bundle
 from localinferencelab.mlx_preflight_protocol import AcquisitionError, decode_frame, encode_frame
 
 
@@ -266,3 +267,80 @@ def test_distribution_type_probe_cannot_leak_into_hello_identity() -> None:
     _object(distributions[0])["version"] = []
     with pytest.raises(worker.WorkerError, match="hello_distribution_identity"):
         worker.validate_hello(fixture.hello)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "supplied_root_device_boolean",
+        "received_root_device_boolean",
+        "received_pid_boolean",
+        "supplied_pid_boolean",
+        "synchronize_completed_integer",
+        "synchronize_kernel_integer",
+        "received_hello_sequence_boolean",
+    ],
+)
+def test_bool_integer_identity_and_observation_aliases_fail_compile_and_offline_replay(
+    tmp_path: Path, mutation: str
+) -> None:
+    fixture = reports.synthetic_fixture()
+    fixture.identity["pid"] = 1
+    assert fixture.child_wait is not None
+    fixture.child_wait["pid"] = 1
+    identity_frame = decode_frame(fixture.captures[1].wire)
+    identity_frame["pid"] = 1
+    fixture.captures[1].wire = encode_frame(identity_frame)
+    fixture.captures[1].declared_bytes = len(fixture.captures[1].wire) - 4
+    baseline = tmp_path / "baseline"
+    baseline.mkdir()
+    path, _ = reports.compile_acquisition(fixture, baseline)
+    _, files = read_closed_bundle(path)
+    if mutation.startswith("supplied"):
+        if mutation == "supplied_pid_boolean":
+            fixture.identity["pid"] = True
+        else:
+            fixture.identity["runtime_root"] = {
+                **_object(fixture.identity["runtime_root"]),
+                "device": True,
+            }
+    else:
+        index = 0 if mutation.startswith("received_hello") else 1
+        if mutation.startswith("synchronize"):
+            index = 22
+        frame = decode_frame(fixture.captures[index].wire)
+        if mutation == "received_root_device_boolean":
+            _object(frame["runtime_root"])["device"] = True
+        elif mutation == "received_pid_boolean":
+            frame["pid"] = True
+        elif mutation == "received_hello_sequence_boolean":
+            frame["sequence"] = False
+        elif mutation == "synchronize_completed_integer":
+            _object(frame["observation"])["completed"] = 1
+        else:
+            _object(frame["observation"])["kernel_execution_proven"] = 0
+        fixture.captures[index].wire = encode_frame(frame)
+        fixture.captures[index].declared_bytes = len(fixture.captures[index].wire) - 4
+    with pytest.raises(AcquisitionError):
+        reports.compile_acquisition(fixture, tmp_path)
+    changed = {
+        name: data for name, data in files.items() if name not in {"index.json", "receipt.json"}
+    }
+    changed["private/acquisition.json"] = canonical_json(fixture.private_record())
+    republished = publish_bundle(changed, tmp_path, name_prefix="coordinated-typed-mutation")
+    with pytest.raises(AcquisitionError):
+        reports.replay_bundle(republished)
+
+
+@pytest.mark.parametrize("field", ["device", "inode", "mode"])
+@pytest.mark.parametrize("value", [True, False, -1, 1 << 64, [], {}])
+def test_shared_runtime_root_schema_rejects_invalid_scalar_types_and_ranges(
+    field: str, value: JsonValue
+) -> None:
+    fixture = reports.synthetic_fixture()
+    root = {**_object(fixture.identity["runtime_root"]), field: value}
+    fixture.identity["runtime_root"] = root
+    with pytest.raises(AcquisitionError, match="worker_identity_mismatch"):
+        parent.require_identity(fixture.identity, fixture.hello)
+    with pytest.raises(worker.WorkerError):
+        worker.validate_root(root)

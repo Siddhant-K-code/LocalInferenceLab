@@ -133,3 +133,6 @@ delivered across a deadline remains rejected, but absence of an accepted start/t
 attempt/completion unknown, never zero. Offline compilation validates owned child-wait types,
 PID and lifetime bindings and coherent exit/signal state before projecting public evidence.
 The same strict hello validator is used by worker, parent acquisition and offline compilation/replay.
+Supplied and received identities share strict process/root schemas before comparison; Boolean
+values cannot substitute for integer PIDs or root identities. Synchronization completion and
+kernel-proof fields require genuine Boolean values, not equal-valued integers.

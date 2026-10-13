@@ -54,6 +54,7 @@ PROTOCOL: dict[str, object] = {
     "retries": 0,
     "model_free": True,
     "hello_validation": "strict_tokens_roots_distribution_import_and_session_bindings",
+    "identity_validation": "strict_integer_process_root_and_digest_bindings",
 }
 _SAFE_REPR = re.compile(r"[A-Za-z0-9_(), .=:-]{1,256}\Z")
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
@@ -63,6 +64,9 @@ _VERSION = re.compile(r"[A-Za-z0-9.+!_-]{1,128}\Z")
 _MAX_DISTRIBUTIONS = 34
 _MIN_DISTRIBUTIONS = 2
 _IMMUTABLE_ROOT_MODE = 0o555
+_MAX_OBJECT_ID = (1 << 64) - 1
+_MAX_PID = 2_147_483_647
+IDENTITY_FIELDS = {"pid", "parent_pid", "interpreter_sha256", "runtime_root", "worker_program_id"}
 HELLO_FIELDS = {
     "kind",
     "sequence",
@@ -147,6 +151,33 @@ def _token(value: object) -> str:
     return value
 
 
+def validate_root(value: object) -> None:
+    """Validate the immutable runtime object without Boolean/integer coercion."""
+    if not isinstance(value, dict) or value.keys() != {"device", "inode", "mode"}:
+        raise WorkerError("root_fields")
+    for field in ("device", "inode", "mode"):
+        if _integer(value[field]) > _MAX_OBJECT_ID:
+            raise WorkerError("root_range")
+    if value["inode"] == 0 or value["mode"] != _IMMUTABLE_ROOT_MODE:
+        raise WorkerError("root_identity")
+
+
+def validate_identity(value: Mapping[str, object], hello: Mapping[str, object]) -> None:
+    """Check exact process/root scalar types before comparing parent bindings."""
+    if value.keys() != IDENTITY_FIELDS:
+        raise WorkerError("identity_fields")
+    for field in ("pid", "parent_pid"):
+        if not 0 < _integer(value[field]) <= _MAX_PID:
+            raise WorkerError("identity_pid")
+    if value["pid"] == value["parent_pid"]:
+        raise WorkerError("identity_pid")
+    validate_root(value["runtime_root"])
+    for field in ("interpreter_sha256", "worker_program_id"):
+        _sha(value[field])
+    if any(value[field] != hello[field] for field in IDENTITY_FIELDS - {"pid", "parent_pid"}):
+        raise WorkerError("identity_binding")
+
+
 def validate_hello(value: Mapping[str, object]) -> None:
     """Share exact initial-frame semantics across worker, parent and offline replay."""
     if value.keys() != HELLO_FIELDS:
@@ -165,13 +196,7 @@ def validate_hello(value: Mapping[str, object]) -> None:
         raise WorkerError("hello_session_binding")
     _sha(value["interpreter_sha256"])
     _sha(value["worker_program_id"])
-    root = value["runtime_root"]
-    if not isinstance(root, dict) or root.keys() != {"device", "inode", "mode"}:
-        raise WorkerError("hello_root_fields")
-    for field in ("device", "inode", "mode"):
-        _integer(root[field])
-    if root["inode"] == 0 or root["mode"] != _IMMUTABLE_ROOT_MODE:
-        raise WorkerError("hello_root_identity")
+    validate_root(value["runtime_root"])
     distributions = value["distributions"]
     if (
         not isinstance(distributions, list)
@@ -434,6 +459,7 @@ def _serve(
 ) -> None:
     """Execute the fixed loop; tests supply inert operations, never a native adapter."""
     validate_hello(hello)
+    validate_identity(identity, hello)
     deadline = _integer(hello["deadline_ns"])
     session = _sha(hello["session_id"])
     challenge = _token(hello["challenge"])

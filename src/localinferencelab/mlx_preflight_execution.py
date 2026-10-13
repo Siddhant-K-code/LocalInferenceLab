@@ -47,6 +47,7 @@ from localinferencelab.mlx_preflight_protocol import (
 from localinferencelab.mlx_preflight_worker import (
     ACTIONS,
     ENVIRONMENT,
+    IDENTITY_FIELDS,
     INTERPRETER_FD,
     MAX_LIFETIME_NS,
     PROTOCOL_ID,
@@ -55,6 +56,7 @@ from localinferencelab.mlx_preflight_worker import (
     WORKER_FD,
     WorkerError,
     validate_hello,
+    validate_identity,
 )
 from localinferencelab.mlx_qualification_publication import (
     EXPECTED_QUALIFICATION_RECORD_ID,
@@ -64,7 +66,7 @@ from localinferencelab.mlx_runtime_target import runtime_target_anchor
 
 # This is a NEW implementation identity, not the old reviewed source/API approval.
 EXPECTED_WORKER_SOURCE_ID = (
-    "sha256:de881a2334aae009eb077ea0a189908d46fba6d23d1c4943dbd5824b5f9ccbed"
+    "sha256:063f357df20b2b58be6b1b8b68c6321a33fdd15ba169e3c6173838524fee694a"
 )
 BLOCKERS = (
     "durable_consumption_implementation_not_independently_reviewed_and_integrated",
@@ -87,7 +89,6 @@ _IDENTITY_FIELDS = {
 }
 _STANDARD_FDS = 2
 _REPRESENTATION_BOUND = 256
-_MAX_PID = 2_147_483_647
 
 
 def require_hello(value: dict[str, JsonValue]) -> None:
@@ -100,18 +101,10 @@ def require_hello(value: dict[str, JsonValue]) -> None:
 
 def require_identity(value: dict[str, JsonValue], hello: dict[str, JsonValue]) -> None:
     """Validate observed process identities before comparison or public projection."""
-    fields = {"pid", "parent_pid", "interpreter_sha256", "runtime_root", "worker_program_id"}
-    if value.keys() != fields:
-        raise AcquisitionError("worker_identity_mismatch")
-    for name in ("pid", "parent_pid"):
-        pid = value[name]
-        if isinstance(pid, bool) or not isinstance(pid, int) or not 0 < pid <= _MAX_PID:
-            raise AcquisitionError("worker_identity_mismatch")
-    if value["pid"] == value["parent_pid"] or any(
-        value[name] != hello[name]
-        for name in ("interpreter_sha256", "runtime_root", "worker_program_id")
-    ):
-        raise AcquisitionError("worker_identity_mismatch")
+    try:
+        validate_identity(value, hello)
+    except WorkerError as error:
+        raise AcquisitionError("worker_identity_mismatch") from error
 
 
 def _object(value: JsonValue) -> dict[str, JsonValue]:
@@ -242,21 +235,26 @@ class SessionValidator:
         elif action == "metal_is_available":
             if not isinstance(value, bool):
                 raise AcquisitionError("nonboolean_metal")
-        elif value != {
-            "completed": True,
-            "scope": "mlx_default_streams",
-            "kernel_execution_proven": False,
-        }:
-            raise AcquisitionError("synchronization_observation")
+        else:
+            item = _object(value)
+            if (
+                item.keys() != {"completed", "scope", "kernel_execution_proven"}
+                or item["completed"] is not True
+                or item["scope"] != "mlx_default_streams"
+                or item["kernel_execution_proven"] is not False
+            ):
+                raise AcquisitionError("synchronization_observation")
 
     def accept(self, direction: str, value: dict[str, JsonValue]) -> None:
         session = cast("str", self.hello["session_id"])
         if self.stage == "hello":
+            require_hello(value)
             if direction != "parent_to_worker" or value != self.hello:
                 raise AcquisitionError("hello_binding")
             self.stage = "identity"
         elif self.stage == "identity":
             require_frame(value, "identity", self.sequence, session, _IDENTITY_FIELDS)
+            require_identity({field: value[field] for field in IDENTITY_FIELDS}, self.hello)
             expected = expected_frame(
                 "identity",
                 self.sequence,
