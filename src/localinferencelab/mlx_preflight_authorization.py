@@ -242,10 +242,12 @@ def authorization_request_spec() -> dict[str, JsonValue]:
     return spec
 
 
-def _validate_context(value: JsonValue, spec: dict[str, JsonValue]) -> dict[str, JsonValue]:
+def _validate_context(
+    value: JsonValue, spec: dict[str, JsonValue], *, schema_version: str = SCHEMA_VERSION
+) -> dict[str, JsonValue]:
     context = _object(value, _CONTEXT_FIELDS, "context")
     _exact(context["record_type"], "mlx_preflight_prospective_attempt_context", "context.type")
-    _exact(context["schema_version"], SCHEMA_VERSION, "context.version")
+    _exact(context["schema_version"], schema_version, "context.version")
     scope = context["evidence_scope"]
     if type(scope) is not str or scope not in {
         "caller_supplied_unverified",
@@ -397,18 +399,20 @@ def _hello(
     return attempt_id, hello
 
 
-def _verify(value: JsonValue, spec: dict[str, JsonValue]) -> dict[str, JsonValue]:
+def _verify(
+    value: JsonValue, spec: dict[str, JsonValue], *, schema_version: str = SCHEMA_VERSION
+) -> dict[str, JsonValue]:
     request = _object(value, _REQUEST_FIELDS, "authorization request")
     for field, expected in (
         ("record_type", "mlx_preflight_authorization_request"),
-        ("schema_version", SCHEMA_VERSION),
+        ("schema_version", schema_version),
         ("action", ACTION),
         ("decision", "request_independent_review_only"),
         ("spec_id", spec["spec_id"]),
         ("unapproved_prerequisites", spec["unapproved_prerequisites"]),
     ):
         _exact(request[field], expected, field)
-    context = _validate_context(request["context"], spec)
+    context = _validate_context(request["context"], spec, schema_version=schema_version)
     validity = _validity(request["requested_validity"], context)
     attempt_id, hello = _hello(context, validity, spec["spec_id"])
     _exact(request["attempt_id"], attempt_id, "attempt identity")
@@ -420,8 +424,9 @@ def _verify(value: JsonValue, spec: dict[str, JsonValue]) -> dict[str, JsonValue
     return request
 
 
-def verify_authorization_request_bytes(data: bytes) -> dict[str, JsonValue]:
-    """Validate bounded canonical bytes and content bindings, not authenticity or authority."""
+def _verify_bytes(
+    data: bytes, spec: dict[str, JsonValue], *, schema_version: str = SCHEMA_VERSION
+) -> dict[str, JsonValue]:
     if type(data) is not bytes or not 0 < len(data) <= MAX_REQUEST_BYTES:
         raise ContractError("authorization request exceeds canonical byte bound")
     try:
@@ -430,7 +435,12 @@ def verify_authorization_request_bytes(data: bytes) -> dict[str, JsonValue]:
         raise ContractError("authorization request nesting exceeds parser bound") from error
     if canonical_json(value) != data:
         raise ContractError("authorization request must use canonical JSON bytes")
-    return _verify(value, authorization_request_spec())
+    return _verify(value, spec, schema_version=schema_version)
+
+
+def verify_authorization_request_bytes(data: bytes) -> dict[str, JsonValue]:
+    """Validate bounded canonical bytes and content bindings, not authenticity or authority."""
+    return _verify_bytes(data, authorization_request_spec())
 
 
 def verify_authorization_request_structure(value: JsonValue) -> dict[str, JsonValue]:
@@ -442,13 +452,22 @@ def build_authorization_request(
     context: JsonValue, requested_validity: JsonValue
 ) -> dict[str, JsonValue]:
     """Build a proposal from supplied claims without observing roots, time or runtime bytes."""
-    spec = authorization_request_spec()
-    context = _validate_context(context, spec)
+    return _build_request(context, requested_validity, authorization_request_spec())
+
+
+def _build_request(
+    context: JsonValue,
+    requested_validity: JsonValue,
+    spec: dict[str, JsonValue],
+    *,
+    schema_version: str = SCHEMA_VERSION,
+) -> dict[str, JsonValue]:
+    context = _validate_context(context, spec, schema_version=schema_version)
     validity = _validity(requested_validity, context)
     attempt_id, hello = _hello(context, validity, spec["spec_id"])
     request: dict[str, JsonValue] = {
         "record_type": "mlx_preflight_authorization_request",
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": schema_version,
         "action": ACTION,
         "decision": "request_independent_review_only",
         "spec_id": spec["spec_id"],
@@ -459,7 +478,7 @@ def build_authorization_request(
         "hello": hello,
     }
     request["request_id"] = canonical_identity(request)
-    return verify_authorization_request_bytes(canonical_json(request))
+    return _verify_bytes(canonical_json(request), spec, schema_version=schema_version)
 
 
 def _claimed_window(request: dict[str, JsonValue], clock: JsonValue) -> str:
