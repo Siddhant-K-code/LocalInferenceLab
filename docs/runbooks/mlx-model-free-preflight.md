@@ -137,14 +137,21 @@ inert launch, malformed frames, crashes/signals/deadlines, source drift and expi
 failure, nonrefund/reuse refusal, poisoned/foreign/copied/forked handles and copied journal objects.
 No production opener, authority, native worker or physical acceptance gate is enabled.
 
-The parent adapter claims a process-bound, globally locked, identity-keyed terminal dispatch state
-**before** checking roots, bindings or the ledger. Every call on that live ledger instance uses
-the same state, not a caller-created wrapper's local flag. Success or refusal cannot release it.
+Both official acquisition entrypoints, `consume_synthetic_attempt` and
+`dispatch_synthetic_attempt`, enter the **same private driver**. The driver claims a
+process-bound, globally locked, identity-keyed terminal state **before** either route checks
+roots, bindings or the ledger. The normal consume-to-dispatch continuation stays inside that
+driver and claims exactly once; neither public signature exposes an `already_claimed` flag or
+callback. Every call on that live ledger instance uses the same state, not a caller-created
+wrapper's local flag. Success or refusal cannot release it.
 Restoring a rejected directory mode or original journal inode cannot resurrect the same parent
 attempt; concurrent/queued calls and copied attempt wrappers refuse before collection. Forks
 refuse before consulting an inherited lock; reopened/foreign ledger handles cannot own the
 original permit. Pre-callback failures retain a private terminal refusal audit under the exact
-bound custody pin, explicitly saying validated consumption callback evidence was unavailable.
+bound custody pin. Refusal before parent binding validation uses the previously pinned private
+context root only for retention and explicitly marks binding/authorization IDs unavailable;
+it never projects caller-supplied bindings as validated evidence. All pre-callback refusals
+explicitly mark validated consumption callback evidence unavailable.
 Unavailable custody raises rather than silently pretending that evidence was retained.
 
 This is application-origin enforcement in the trusted parent, not a sandbox against hostile
@@ -153,6 +160,13 @@ revoking that separate raw token would require a separately reviewed public ledg
 API. It cannot reopen this parent adapter's terminal attempt, authorize production dispatch,
 or produce physical evidence. No private ledger-field mutation, retry-to-burn, refund or remint
 is used.
+
+Route inventory: those two functions are the only public synthetic acquisition routes. The
+public preparation helper only pins inert inputs and cannot consume/dispatch; offline
+fixture/compiler/replay/report/help commands invoke neither route. Production request and the
+private physical acquisition/spawn/worker entrypoints still unconditionally refuse. Cross-entry
+queued tests cover both initial and queued routes, root/journal restoration tests preserve the
+same actually issued permit, and normal consume-to-dispatch tests assert one common claim.
 
 ## Retention and claim scope
 

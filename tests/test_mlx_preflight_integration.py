@@ -3,6 +3,7 @@
 # ruff: noqa: SLF001
 from __future__ import annotations
 
+import ast
 import concurrent.futures
 import copy
 import errno
@@ -192,7 +193,7 @@ def test_consumed_before_callback_retention_report_and_failure_nonrefund(
         assert acquisition.processes_started == 0
     _assert_consumed_no_refund(integrated)
     _assert_parent_binding(integrated, acquisition, tmp_path)
-    with pytest.raises(ContractError, match="already consumed"):
+    with pytest.raises(ContractError, match="dispatch_terminal"):
         parent.consume_synthetic_attempt(
             integrated.launch, integrated.attempt, integrated.ledger, integrated.authorization
         )
@@ -395,7 +396,11 @@ def _assert_terminal_refusal_audit(integrated: IntegratedFixture) -> None:
         record = _object(load_json_bytes(path.read_bytes()))
         assert record["session_id"] == integrated.attempt.hello()["session_id"]
         assert record["context_id"] == digest_bytes(integrated.attempt.context_bytes)
-        assert record["parent_bindings_id"] == canonical_identity(integrated.bindings.to_dict())
+        if record["parent_bindings_evidence"] == "unavailable_before_parent_validation":
+            assert record["parent_bindings_id"] is None and record["authorization_id"] is None
+        else:
+            assert record["parent_bindings_evidence"] == "parent_validated_before_ledger_callback"
+            assert record["parent_bindings_id"] == canonical_identity(integrated.bindings.to_dict())
         assert record["parent_dispatch_state"] == "terminal_refused_before_callback"
         assert record["callback_invoked"] is False
         assert record["accepted_physical_evidence"] is False and record["promotable"] is False
@@ -447,8 +452,13 @@ def test_integrity_refusal_restoration_same_issued_permit_and_new_wrapper_never_
     _assert_terminal_refusal_audit(integrated)
 
 
-def test_observed_integrity_failure_restoration_and_queued_dispatch_never_collect(
-    integrated: IntegratedFixture, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("first_entry", ["consume", "dispatch"])
+@pytest.mark.parametrize("queued_entry", ["consume", "dispatch"])
+def test_observed_integrity_failure_restoration_and_queued_cross_entry_never_collect(
+    integrated: IntegratedFixture,
+    monkeypatch: pytest.MonkeyPatch,
+    first_entry: str,
+    queued_entry: str,
 ) -> None:
     permit = integrated.ledger.consume_once(integrated.authorization, integrated.bindings)
     container = integrated.root / "private-runtime"
@@ -472,31 +482,151 @@ def test_observed_integrity_failure_restoration_and_queued_dispatch_never_collec
         parent, "_collect_owned_session", lambda *_args, **_kwargs: calls.append("bad")
     )
 
-    def dispatch() -> str:
+    def dispatch(entry: str) -> str:
         try:
-            parent.dispatch_synthetic_attempt(
-                integrated.launch,
-                integrated.attempt,
-                integrated.ledger,
-                integrated.bindings,
-                permit,
-            )
+            if entry == "consume":
+                parent.consume_synthetic_attempt(
+                    integrated.launch,
+                    integrated.attempt,
+                    integrated.ledger,
+                    integrated.authorization,
+                )
+            else:
+                parent.dispatch_synthetic_attempt(
+                    integrated.launch,
+                    integrated.attempt,
+                    integrated.ledger,
+                    integrated.bindings,
+                    permit,
+                )
         except ContractError:
             return "refused"
         return "incorrectly_dispatched"
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        first = executor.submit(dispatch)
+        first = executor.submit(dispatch, first_entry)
         assert failure_seen.wait(5)
-        queued = executor.submit(dispatch)
+        queued = executor.submit(dispatch, queued_entry)
         assert queued.result(timeout=5) == "refused"
         container.chmod(0o700)
         restored.set()
         assert first.result(timeout=5) == "refused"
     monkeypatch.setattr(parent, "parent_bindings_for_attempt", original)
-    assert dispatch() == "refused" and calls == []
+    assert dispatch("consume") == dispatch("dispatch") == "refused" and calls == []
     _assert_consumed_no_refund(integrated)
     _assert_terminal_refusal_audit(integrated)
+
+
+@pytest.mark.parametrize("changed", ["runtime_container_mode", "journal_inode"])
+def test_consume_refusal_restore_same_permit_new_wrappers_and_both_entrypoints_stay_terminal(
+    integrated: IntegratedFixture, monkeypatch: pytest.MonkeyPatch, changed: str
+) -> None:
+    permit = integrated.ledger.consume_once(integrated.authorization, integrated.bindings)
+    before = integrated.journal.read_bytes()
+    container = integrated.root / "private-runtime"
+    saved = integrated.root / "custody" / "original-pinned-journal"
+    if changed == "runtime_container_mode":
+        container.chmod(0o755)
+    else:
+        integrated.journal.rename(saved)
+        integrated.journal.write_bytes(before)
+        integrated.journal.chmod(0o600)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        parent, "_collect_owned_session", lambda *_args, **_kwargs: calls.append("bad")
+    )
+    with pytest.raises(ContractError):
+        parent.consume_synthetic_attempt(
+            integrated.launch, integrated.attempt, integrated.ledger, integrated.authorization
+        )
+    if changed == "runtime_container_mode":
+        container.chmod(0o700)
+    else:
+        integrated.journal.unlink()
+        saved.rename(integrated.journal)
+    for attempt in (integrated.attempt, copy.copy(integrated.attempt)):
+        with pytest.raises(AcquisitionError, match="dispatch_terminal"):
+            parent.dispatch_synthetic_attempt(
+                integrated.launch, attempt, integrated.ledger, integrated.bindings, permit
+            )
+        with pytest.raises(AcquisitionError, match="dispatch_terminal"):
+            parent.consume_synthetic_attempt(
+                integrated.launch, attempt, integrated.ledger, integrated.authorization
+            )
+    assert calls == [] and integrated.journal.read_bytes() == before
+    _assert_consumed_no_refund(integrated)
+    _assert_terminal_refusal_audit(integrated)
+    if changed == "runtime_container_mode":
+        record = _object(
+            load_json_bytes(
+                next(
+                    (integrated.root / "custody").glob(".mlx-preflight-dispatch-refused-*.json")
+                ).read_bytes()
+            )
+        )
+        assert record["parent_bindings_id"] is None and record["authorization_id"] is None
+
+
+def test_normal_consume_internal_dispatch_claims_once_and_same_permit_cannot_retry(
+    integrated: IntegratedFixture, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _install_inert_spawn(monkeypatch)
+    claim = parent._claim_synthetic_dispatch
+    consume = integrated.ledger.consume_once
+    claims: list[str] = []
+    permits: list[ledger_module.SyntheticAttemptPermit] = []
+
+    def tracked_claim(ledger: SyntheticAuthorizationLedger) -> str:
+        claims.append("claim")
+        return claim(ledger)
+
+    def tracked_consume(
+        authorization: JsonValue, bindings: ParentBindings
+    ) -> ledger_module.SyntheticAttemptPermit:
+        permit = consume(authorization, bindings)
+        permits.append(permit)
+        return permit
+
+    monkeypatch.setattr(parent, "_claim_synthetic_dispatch", tracked_claim)
+    monkeypatch.setattr(integrated.ledger, "consume_once", tracked_consume)
+    acquisition = parent.consume_synthetic_attempt(
+        integrated.launch, integrated.attempt, integrated.ledger, integrated.authorization
+    )
+    assert claims == ["claim"] and len(permits) == 1 and acquisition.rejection is None
+    _assert_parent_binding(integrated, acquisition, tmp_path)
+    with pytest.raises(AcquisitionError, match="dispatch_terminal"):
+        parent.dispatch_synthetic_attempt(
+            integrated.launch,
+            integrated.attempt,
+            integrated.ledger,
+            integrated.bindings,
+            permits[0],
+        )
+    _assert_consumed_no_refund(integrated)
+
+
+def test_official_acquisition_routes_share_driver_without_public_bypass_arguments() -> None:
+    source = Path(parent.__file__).read_bytes()
+    tree = ast.parse(source)
+    functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    for name in ("consume_synthetic_attempt", "dispatch_synthetic_attempt"):
+        function = functions[name]
+        assert isinstance(function.body[-1], ast.Return)
+        call = function.body[-1].value
+        assert isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+        assert call.func.id == "_run_synthetic_parent_attempt"
+        assert not any("claimed" in argument.arg for argument in function.args.args)
+        assert not function.args.kwonlyargs and function.args.kwarg is None
+    driver = functions["_run_synthetic_parent_attempt"]
+    calls = [
+        node.value
+        for node in driver.body
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
+    ]
+    assert isinstance(calls[0].func, ast.Name)
+    assert calls[0].func.id == "_claim_synthetic_dispatch"
+    cli = Path(parent.__file__).with_name("cli.py").read_text()
+    assert "consume_synthetic_attempt" not in cli and "dispatch_synthetic_attempt" not in cli
 
 
 def test_completed_bundle_replay_never_touches_or_consumes_ledger(

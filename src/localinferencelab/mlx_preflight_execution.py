@@ -9,6 +9,7 @@ import stat
 import threading
 import time
 import weakref
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -587,7 +588,7 @@ def _claim_synthetic_dispatch(ledger: SyntheticAuthorizationLedger) -> str:
 def _retain_synthetic_dispatch_refusal(
     launch: _PreparedLaunch,
     attempt: SyntheticParentAttempt,
-    bindings: ParentBindings,
+    bindings: ParentBindings | None,
     dispatch_id: str,
 ) -> None:
     metadata = os.fstat(launch.custody_descriptor)
@@ -597,8 +598,17 @@ def _retain_synthetic_dispatch_refusal(
         "owner": metadata.st_uid,
         "mode": stat.S_IMODE(metadata.st_mode),
     }
-    if not stat.S_ISDIR(metadata.st_mode) or canonical_json(pin) != canonical_json(
-        bindings.roots[0].to_dict()
+    if bindings is None:
+        pins = attempt.context().get("root_objects")
+        if not isinstance(pins, list) or not pins:
+            raise AcquisitionError("synthetic_dispatch_refusal_custody_unavailable")
+        expected_pin = _object(pins[0])
+    else:
+        expected_pin = bindings.roots[0].to_dict()
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or metadata.st_uid != os.geteuid()
+        or canonical_json(pin) != canonical_json(expected_pin)
     ):
         raise AcquisitionError("synthetic_dispatch_refusal_custody_unavailable")
     hello = attempt.hello()
@@ -610,8 +620,13 @@ def _retain_synthetic_dispatch_refusal(
         "session_id": hello["session_id"],
         "parent_dispatch_id": dispatch_id,
         "context_id": digest_bytes(attempt.context_bytes),
-        "parent_bindings_id": canonical_identity(bindings.to_dict()),
-        "authorization_id": _object(bindings.to_dict()["authorization"])["authorization_id"],
+        "parent_bindings_id": None if bindings is None else canonical_identity(bindings.to_dict()),
+        "parent_bindings_evidence": "unavailable_before_parent_validation"
+        if bindings is None
+        else "parent_validated_before_ledger_callback",
+        "authorization_id": None
+        if bindings is None
+        else _object(bindings.to_dict()["authorization"])["authorization_id"],
         "parent_dispatch_state": "terminal_refused_before_callback",
         "callback_invoked": False,
         "durable_consumption_audit": "unavailable_without_validated_ledger_callback",
@@ -627,6 +642,42 @@ def _retain_synthetic_dispatch_refusal(
     os.fsync(launch.custody_descriptor)
 
 
+@dataclass(slots=True)
+class _SyntheticDriverEvidence:
+    bindings: ParentBindings | None = None
+    callback_invoked: bool = False
+
+
+def _run_synthetic_parent_attempt(
+    launch: _PreparedLaunch,
+    attempt: SyntheticParentAttempt,
+    ledger: SyntheticAuthorizationLedger,
+    prepare: Callable[[_SyntheticDriverEvidence], SyntheticAttemptPermit],
+) -> Acquisition:
+    if type(ledger) is not SyntheticAuthorizationLedger:
+        raise AcquisitionError("synthetic_ledger_origin")
+    dispatch_id = _claim_synthetic_dispatch(ledger)
+    evidence = _SyntheticDriverEvidence()
+
+    def collect(consumption: dict[str, JsonValue]) -> Acquisition:
+        evidence.callback_invoked = True
+        if evidence.bindings is None:
+            raise AcquisitionError("synthetic_attempt_parent_bindings")
+        revalidate_synthetic_attempt(attempt, launch)
+        record = synthetic_attempt_record(attempt, evidence.bindings, consumption)
+        return _collect_owned_session(launch, synthetic_attempt=attempt, synthetic_record=record)
+
+    try:
+        permit = prepare(evidence)
+        if evidence.bindings is None:
+            raise AcquisitionError("synthetic_attempt_parent_bindings")
+        return ledger.dispatch_synthetic_once(permit, evidence.bindings, collect)
+    except (ContractError, OSError):
+        if not evidence.callback_invoked:
+            _retain_synthetic_dispatch_refusal(launch, attempt, evidence.bindings, dispatch_id)
+        raise
+
+
 def dispatch_synthetic_attempt(
     launch: _PreparedLaunch,
     attempt: SyntheticParentAttempt,
@@ -634,30 +685,18 @@ def dispatch_synthetic_attempt(
     bindings: ParentBindings,
     permit: SyntheticAttemptPermit,
 ) -> Acquisition:
-    """Use only a live merged-ledger synthetic permit; no callback or native-gate bypass."""
-    if type(ledger) is not SyntheticAuthorizationLedger:
-        raise AcquisitionError("synthetic_ledger_origin")
-    dispatch_id = _claim_synthetic_dispatch(ledger)
-    callback_invoked = False
+    """Enter the common terminal driver; no callback or already-claimed bypass argument."""
 
-    def collect(consumption: dict[str, JsonValue]) -> Acquisition:
-        nonlocal callback_invoked
-        callback_invoked = True
-        revalidate_synthetic_attempt(attempt, launch)
-        record = synthetic_attempt_record(attempt, bindings, consumption)
-        return _collect_owned_session(launch, synthetic_attempt=attempt, synthetic_record=record)
-
-    try:
+    def prepare(evidence: _SyntheticDriverEvidence) -> SyntheticAttemptPermit:
         expected = parent_bindings_for_attempt(
             _object(bindings.to_dict()["authorization"]), attempt
         )
         if canonical_json(expected.to_dict()) != canonical_json(bindings.to_dict()):
             raise AcquisitionError("synthetic_attempt_parent_bindings")
-        return ledger.dispatch_synthetic_once(permit, bindings, collect)
-    except (ContractError, OSError):
-        if not callback_invoked:
-            _retain_synthetic_dispatch_refusal(launch, attempt, bindings, dispatch_id)
-        raise
+        evidence.bindings = bindings
+        return permit
+
+    return _run_synthetic_parent_attempt(launch, attempt, ledger, prepare)
 
 
 def consume_synthetic_attempt(
@@ -667,12 +706,14 @@ def consume_synthetic_attempt(
     authorization: JsonValue,
 ) -> Acquisition:
     """Consume durably once, then acquire inert test evidence; never refund or auto-retry."""
-    if type(ledger) is not SyntheticAuthorizationLedger:
-        raise AcquisitionError("synthetic_ledger_origin")
-    bindings = parent_bindings_for_attempt(authorization, attempt)
-    revalidate_synthetic_attempt(attempt, launch)
-    permit = ledger.consume_once(authorization, bindings)
-    return dispatch_synthetic_attempt(launch, attempt, ledger, bindings, permit)
+
+    def prepare(evidence: _SyntheticDriverEvidence) -> SyntheticAttemptPermit:
+        bindings = parent_bindings_for_attempt(authorization, attempt)
+        evidence.bindings = bindings
+        revalidate_synthetic_attempt(attempt, launch)
+        return ledger.consume_once(authorization, bindings)
+
+    return _run_synthetic_parent_attempt(launch, attempt, ledger, prepare)
 
 
 def _acquire_prepared(launch: _PreparedLaunch) -> Acquisition:
