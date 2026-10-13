@@ -35,7 +35,19 @@ from localinferencelab.mlx_manifest import (
     compile_runtime_manifest,
     verify_runtime_manifest,
 )
+from localinferencelab.mlx_preflight_attempt import (
+    SyntheticParentAttempt,
+    consumed_attempt_id,
+    parent_bindings_for_attempt,
+    revalidate_synthetic_attempt,
+    synthetic_attempt_record,
+)
 from localinferencelab.mlx_preflight_custody import custody_bridge_spec_1_1
+from localinferencelab.mlx_preflight_ledger import (
+    ParentBindings,
+    SyntheticAttemptPermit,
+    SyntheticAuthorizationLedger,
+)
 from localinferencelab.mlx_preflight_protocol import (
     AcquisitionError,
     Capture,
@@ -69,7 +81,7 @@ EXPECTED_WORKER_SOURCE_ID = (
     "sha256:063f357df20b2b58be6b1b8b68c6321a33fdd15ba169e3c6173838524fee694a"
 )
 BLOCKERS = (
-    "durable_consumption_implementation_not_independently_reviewed_and_integrated",
+    "schema_1_2_production_ledger_binding_and_dispatch_not_reviewed_and_integrated",
     "reviewed_authorization_authority_unavailable",
     "fresh_explicit_human_runtime_approval_unavailable",
     "independent_trustworthy_current_time_and_host_provenance_unavailable",
@@ -133,6 +145,7 @@ def capability_report() -> dict[str, JsonValue]:
         "worker_operations_implemented": True,
         "parent_transport_and_rejection_retention_implemented": True,
         "offline_compiler_verifier_report_implemented": True,
+        "merged_ledger_synthetic_parent_integration_implemented": True,
         "physical_launch_enabled": False,
         "accepted_physical_evidence": False,
         "schema_1_0_state": "permanently_disabled",
@@ -529,6 +542,7 @@ class Acquisition:
     socketpairs_created: int
     processes_started: int
     worker_source_id: str
+    synthetic_ledger_attempt: dict[str, JsonValue] | None = None
 
     def private_record(self) -> dict[str, JsonValue]:
         return {
@@ -546,8 +560,46 @@ class Acquisition:
             "processes_started": self.processes_started,
             "worker_source_id": self.worker_source_id,
             "authority": "unsigned_not_physical_acceptance_evidence",
-            "consumed_attempt_identity": None,
+            "consumed_attempt_identity": consumed_attempt_id(self.synthetic_ledger_attempt),
+            "synthetic_ledger_attempt": self.synthetic_ledger_attempt,
         }
+
+
+def dispatch_synthetic_attempt(
+    launch: _PreparedLaunch,
+    attempt: SyntheticParentAttempt,
+    ledger: SyntheticAuthorizationLedger,
+    bindings: ParentBindings,
+    permit: SyntheticAttemptPermit,
+) -> Acquisition:
+    """Use only a live merged-ledger synthetic permit; no callback or native-gate bypass."""
+    if type(ledger) is not SyntheticAuthorizationLedger:
+        raise AcquisitionError("synthetic_ledger_origin")
+    expected = parent_bindings_for_attempt(_object(bindings.to_dict()["authorization"]), attempt)
+    if canonical_json(expected.to_dict()) != canonical_json(bindings.to_dict()):
+        raise AcquisitionError("synthetic_attempt_parent_bindings")
+
+    def collect(consumption: dict[str, JsonValue]) -> Acquisition:
+        revalidate_synthetic_attempt(attempt, launch)
+        record = synthetic_attempt_record(attempt, bindings, consumption)
+        return _collect_owned_session(launch, synthetic_attempt=attempt, synthetic_record=record)
+
+    return ledger.dispatch_synthetic_once(permit, bindings, collect)
+
+
+def consume_synthetic_attempt(
+    launch: _PreparedLaunch,
+    attempt: SyntheticParentAttempt,
+    ledger: SyntheticAuthorizationLedger,
+    authorization: JsonValue,
+) -> Acquisition:
+    """Consume durably once, then acquire inert test evidence; never refund or auto-retry."""
+    if type(ledger) is not SyntheticAuthorizationLedger:
+        raise AcquisitionError("synthetic_ledger_origin")
+    bindings = parent_bindings_for_attempt(authorization, attempt)
+    revalidate_synthetic_attempt(attempt, launch)
+    permit = ledger.consume_once(authorization, bindings)
+    return dispatch_synthetic_attempt(launch, attempt, ledger, bindings, permit)
 
 
 def _acquire_prepared(launch: _PreparedLaunch) -> Acquisition:
@@ -556,7 +608,12 @@ def _acquire_prepared(launch: _PreparedLaunch) -> Acquisition:
     return _collect_owned_session(launch)
 
 
-def _collect_owned_session(launch: _PreparedLaunch) -> Acquisition:
+def _collect_owned_session(
+    launch: _PreparedLaunch,
+    *,
+    synthetic_attempt: SyntheticParentAttempt | None = None,
+    synthetic_record: dict[str, JsonValue] | None = None,
+) -> Acquisition:
     """Parent lifetime/framing implementation; tests replace spawn with an inert child."""
     started = time.monotonic_ns()
     deadline = started + MAX_LIFETIME_NS
@@ -574,6 +631,14 @@ def _collect_owned_session(launch: _PreparedLaunch) -> Acquisition:
         worker_program_id=digest_bytes(launch.worker_bytes),
         import_files=launch.import_files,
     )
+    if synthetic_attempt is not None:
+        if synthetic_record is None:
+            raise AcquisitionError("synthetic_attempt_consumption")
+        context = synthetic_attempt.context()
+        started, deadline = cast("int", context["started_ns"]), cast("int", context["deadline_ns"])
+        hello = synthetic_attempt.hello()
+    elif synthetic_record is not None:
+        raise AcquisitionError("synthetic_attempt_context")
     result = Acquisition(
         hello,
         {},
@@ -587,6 +652,7 @@ def _collect_owned_session(launch: _PreparedLaunch) -> Acquisition:
         0,
         0,
         digest_bytes(launch.worker_bytes),
+        synthetic_record,
     )
     snapshot_name: str | None = None
     owned_descriptors: list[int] = []
@@ -609,6 +675,11 @@ def _collect_owned_session(launch: _PreparedLaunch) -> Acquisition:
             os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
             dir_fd=launch.custody_descriptor,
         )
+        if synthetic_record is not None:
+            _write_exclusive_at(
+                retention_descriptor, "attempt.json", canonical_json(synthetic_record)
+            )
+            os.fsync(retention_descriptor)
         retention_index = 0
         last_capture_bytes: bytes | None = None
 
@@ -625,6 +696,10 @@ def _collect_owned_session(launch: _PreparedLaunch) -> Acquisition:
                     "event": retention_index,
                     "capture": capture.private_record(),
                     "scope": "unsigned_parent_retention_not_authorization",
+                    "consumed_attempt_identity": consumed_attempt_id(synthetic_record),
+                    "synthetic_attempt_id": None
+                    if synthetic_record is None
+                    else synthetic_record["attempt_id"],
                 }
             )
             _write_exclusive_at(retention_descriptor, f"event-{retention_index:03d}.json", content)
@@ -714,11 +789,14 @@ def _collect_owned_session(launch: _PreparedLaunch) -> Acquisition:
             str(error) if isinstance(error, AcquisitionError) else "parent_io_failure"
         )
     finally:
+        endpoints_closed = False
         try:
             for endpoint in endpoints:
                 endpoint.close()
+            endpoints_closed = True
             if child_pid is not None:
                 result.child_wait = _terminate_and_wait(child_pid)
+                child_pid = None
         finally:
             try:
                 for descriptor in owned_descriptors:
@@ -726,10 +804,18 @@ def _collect_owned_session(launch: _PreparedLaunch) -> Acquisition:
                 if snapshot_name is not None:
                     os.unlink(snapshot_name, dir_fd=launch.custody_descriptor)
                     os.fsync(launch.custody_descriptor)
+                result.cleanup_complete = endpoints_closed and child_pid is None
             finally:
                 if retention_descriptor is not None:
-                    os.close(retention_descriptor)
-        result.cleanup_complete = True
+                    try:
+                        _write_exclusive_at(
+                            retention_descriptor,
+                            "terminal.json",
+                            canonical_json(result.private_record()),
+                        )
+                        os.fsync(retention_descriptor)
+                    finally:
+                        os.close(retention_descriptor)
     return result
 
 

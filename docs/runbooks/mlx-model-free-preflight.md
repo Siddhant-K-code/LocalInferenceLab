@@ -99,7 +99,9 @@ imports avoid them. If these guarantees cannot be established for the exact prov
 ## Durable ledger integration contract
 
 The separate ledger workstream owns `mlx_preflight_ledger.py`, its tests and its documentation.
-This implementation neither imports its unmerged code nor creates another ledger.
+The independently reviewed ledger merged in
+`6599c3ac7403f45ac015dc211729057fa0cebc90`. This branch uses that exact component;
+it neither creates another ledger nor changes its owned files.
 
 Settled synthetic API: `consume_once(authorization, ParentBindings) -> SyntheticAttemptPermit`,
 then `dispatch_synthetic_once(permit, ParentBindings, inert_callback)`. Permits are issuer/process/
@@ -109,8 +111,31 @@ before consumption, extend exact bindings to the new worker/protocol/interpreter
 parent-observed root objects and nonce/challenge/session, and bind parent-owned action/rejection/
 terminal evidence to that consumed attempt. Audit JSON is not a permit. Physical dispatch and
 offline authenticity verification remain blocked until that integration is reviewed.
-Integration regressions must prove poisoned, foreign, copied, forked and reused ledger handles
-cannot invoke the parent dispatch callback; an unmerged draft ledger is not integration approval.
+The synthetic-only parent bridge now consumes through the actual merged API and dispatches
+through its live single-use permit checks. It accepts no callback or permission Boolean and
+never bypasses the private native spawn gate. Tests replace the spawn implementation with an
+inert child; without that test stub, even synthetic dispatch refuses native launch.
+
+The ledger's three roots are private `0700` custody/output/runtime-container objects. The
+execution root is the fixed `preflight-runtime` child of that container, independently observed
+and immutable `0555`. These are intentionally different root roles, not caller-substituted
+identities. A canonical synthetic context binds their pins, observed execution-tree digest,
+interpreter/source/protocol, distributions/import inputs, actions and deadline/nonce. Its digest
+is the hello challenge, so the ledger's exact session binding also commits to that full context.
+The schema-1.1 fixture worker/authority anchors remain synthetic; they do not approve schema 1.2.
+Production still needs separately reviewed schema/root/authority/dispatch adaptation.
+
+After durable consumption and permit retirement, the parent reobserves inputs, persists private
+`attempt.json`, capture/rejection events and `terminal.json`, then compiles an audit-bound
+synthetic JSON/Markdown report. The consumption ID is audit data, never launch authority. An
+exception before acquisition/publication does not refund the journal or remint the permit;
+missing terminal evidence is not a zero-action proof. Offline replay validates binding structure,
+never opens/consumes a live ledger, and cannot establish physical authenticity.
+
+Integration regressions cover consumed/fsynced-before-callback ordering, successful and failed
+inert launch, malformed frames, crashes/signals/deadlines, source drift and expiry, publication
+failure, nonrefund/reuse refusal, poisoned/foreign/copied/forked handles and copied journal objects.
+No production opener, authority, native worker or physical acceptance gate is enabled.
 
 ## Retention and claim scope
 

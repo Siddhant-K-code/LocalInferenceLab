@@ -14,6 +14,10 @@ from localinferencelab.canonical import (
     load_json_bytes,
 )
 from localinferencelab.custody import publish_bundle, publish_bundle_at, read_closed_bundle
+from localinferencelab.mlx_preflight_attempt import (
+    consumed_attempt_id,
+    verify_synthetic_attempt_record,
+)
 from localinferencelab.mlx_preflight_execution import (
     BLOCKERS,
     EXPECTED_WORKER_SOURCE_ID,
@@ -198,13 +202,11 @@ def _acquisition(value: JsonValue) -> Acquisition:
         "worker_source_id",
         "authority",
         "consumed_attempt_identity",
+        "synthetic_ledger_attempt",
     }
     if item.keys() != fields or item["schema_version"] != SCHEMA_VERSION:
         raise AcquisitionError("acquisition_fields")
-    if (
-        item["authority"] != "unsigned_not_physical_acceptance_evidence"
-        or item["consumed_attempt_identity"] is not None
-    ):
+    if item["authority"] != "unsigned_not_physical_acceptance_evidence":
         raise AcquisitionError("caller_claims_not_authority")
     if item["worker_source_id"] != EXPECTED_WORKER_SOURCE_ID:
         raise AcquisitionError("worker_source_identity")
@@ -228,6 +230,17 @@ def _acquisition(value: JsonValue) -> Acquisition:
         raise AcquisitionError("hello_worker_identity")
     if hello["deadline_ns"] != item["deadline_ns"]:
         raise AcquisitionError("hello_deadline")
+    synthetic_record = (
+        None
+        if item["synthetic_ledger_attempt"] is None
+        else verify_synthetic_attempt_record(item["synthetic_ledger_attempt"], hello)
+    )
+    if item["consumed_attempt_identity"] != consumed_attempt_id(synthetic_record):
+        raise AcquisitionError("synthetic_attempt_consumption_binding")
+    if synthetic_record is not None:
+        context = _object(synthetic_record["context"])
+        if canonical_json(item["started_ns"]) != canonical_json(context["started_ns"]):
+            raise AcquisitionError("synthetic_attempt_time_binding")
     identity = _object(item["identity"])
     if processes:
         require_identity(identity, hello)
@@ -249,6 +262,7 @@ def _acquisition(value: JsonValue) -> Acquisition:
         sockets,
         processes,
         EXPECTED_WORKER_SOURCE_ID,
+        synthetic_record,
     )
 
 
@@ -308,7 +322,11 @@ def _derive_report(acquisition: Acquisition) -> dict[str, JsonValue]:
         "real_mlx_actions_observed": 0,
         "native_forbidden_actions_proven_absent": False,
         "unretained_events": "unknown_no_nonaction_claim",
-        "consumed_attempt_identity": None,
+        "consumed_attempt_identity": consumed_attempt_id(acquisition.synthetic_ledger_attempt),
+        "synthetic_parent_attempt_id": None
+        if acquisition.synthetic_ledger_attempt is None
+        else acquisition.synthetic_ledger_attempt["attempt_id"],
+        "synthetic_durable_consumptions": 0 if acquisition.synthetic_ledger_attempt is None else 1,
         "physical_acceptance_blockers": list(BLOCKERS),
         "schema_1_0_state": "permanently_disabled",
         "atlas_accepted_physical_records": 0,
@@ -331,6 +349,8 @@ def human_report(value: dict[str, JsonValue]) -> str:
         f"Inert children: {counts['processes_started']}; "
         f"socketpairs: {counts['socketpairs_created']}.",
         f"Cleanup complete: `{value['parent_cleanup_complete']}`.",
+        f"Synthetic durable consumptions: {value['synthetic_durable_consumptions']}; "
+        f"audit identity: `{value['consumed_attempt_identity'] or 'none'}` (not authority).",
         "",
         "| Action | Attempted | Completed | Scope |",
         "|---|---|---|---|",

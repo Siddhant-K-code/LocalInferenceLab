@@ -323,8 +323,10 @@ def test_rejection_private_nonutf8_and_no_secret_in_public_report(tmp_path: Path
     assert reports.replay_bundle(path) == report
 
 
-def _prepared(tmp_path: Path) -> parent._PreparedLaunch:
+def _prepared(tmp_path: Path, *, runtime_container: Path | None = None) -> parent._PreparedLaunch:
     roots = [tmp_path / name for name in ("runtime", "output", "custody")]
+    if runtime_container is not None:
+        roots[0] = runtime_container / "preflight-runtime"
     for root in roots:
         root.mkdir(mode=0o700)
     roots[0].chmod(0o555)
