@@ -7,6 +7,11 @@ model-free worker. `prepare_authorization_acquisition` always raises
 There is no issuer, key generation, positive grant verifier, callback, approval/execute flag,
 production ledger opener or physical acceptance path in this module.
 
+The separate [trusted-code lab v2.0 signed-request evidence adapter](mlx-trusted-lab-signed-approval.md)
+is a new candidate policy, not a reinterpretation of this version's stronger unresolved native
+enforcement requirements. This v1.0 spec/policy/request meaning and always-blocked preparation
+remain unchanged; its signatures cannot be migrated into the new trust scope.
+
 The existing [model-free runbook](../runbooks/mlx-model-free-preflight.md), CLI, worker, parent,
 ledger and historical records are unchanged. Schema 1.0 remains permanently disabled; frozen
 schema-1.1 fixtures do not approve the current worker. The 18 atlas cells remain unobserved,
