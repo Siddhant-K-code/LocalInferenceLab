@@ -104,4 +104,12 @@ UV_NO_NETWORK=1 make validate
 **The next gate is not “run it.”** It is a separately committed and independently reviewed
 authorization authority, one-shot authorization, and worker identity. None exists in this change.
 
+The additive [model-free preflight implementation/runbook](docs/runbooks/mlx-model-free-preflight.md)
+provides schema-1.2 worker source, bounded parent acquisition and private rejection custody, plus
+offline JSON/Markdown reports. Physical launch remains closed before any runtime action; synthetic
+replays cannot become accepted physical evidence. The merged ledger is integrated only with the
+synthetic parent attempt path, retaining exact consumed-attempt/event/report bindings and no-refund
+semantics. Production schema-1.2 ledger/authority integration, fresh approval, exact provisioning
+and OS/native enforcement remain blockers.
+
 Apache-2.0.
