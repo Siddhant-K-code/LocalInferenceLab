@@ -75,6 +75,12 @@ regular, singly linked and bounded (8,192-byte trust/signature bounds). Stable r
 device/inode/owner/mode/link/size/mtime/ctime pins and exact bytes, rechecked before/after
 verification and publication. Replacement, revocation, drift, symlinks, hardlinks, FIFO,
 ownership/mode errors or missing bytes refuse; no replacement identity is learned.
+Non-nesting is checked against stable descriptor-relative `..` ancestor objects, not lexical
+path spelling. Two bounded walks (at most 128 objects each) must agree; directory ancestry is
+retained and rechecked with custody. Case, Unicode-normalization and volume aliases cannot
+hide a nested root, while genuinely distinct objects are not conflated by casefolding.
+Unsafe, unstable or over-bound ancestry refuses; unavailable output custody raises an explicit
+retention failure.
 
 Only absolute `/usr/bin/ssh-keygen -Y verify` is invoked. A no-follow, stable, root-owned,
 non-group/world-writable executable read must match the independently retained tool digest.
@@ -92,6 +98,14 @@ execution to two seconds, followed by bounded exact-child kill/wait handling. Ar
 raw child waits/PIDs, keys and paths are never projected publicly. Rejection is distinct from
 deadline/output/signal/I/O/termination ambiguity; ambiguous exposure is **UNKNOWN**, not zero
 or completed. There is no claim of malicious-tool containment.
+Only an actual exact-child terminal status returned by `os.waitpid` can establish successful
+exit or normal rejection. `Popen.wait`, `Popen.poll`, `returncode` and verifier stdout are never
+status authority: CPython may synthesize zero after ECHILD. Ignored SIGCHLD, another legitimate
+parent reaper, stolen/missing/malformed status or wait errors instead retain UNKNOWN status
+and refuse, even for an otherwise valid signature. Cleanup uses bounded owned-PID status
+observations; a lost status is not permission to kill a potentially recycled PID.
+Private evidence retains the typed actual terminal wait status, or null when unavailable;
+only its fixed disposition/termination projection is public.
 
 ## Time, retention and detached evidence
 
@@ -109,6 +123,11 @@ The private receipt-last bundle retains actual trust, complete payload, signatur
 clock bytes, plus a privacy-safe outcome report. Return values hold detached immutable audit
 bytes and a generated bundle basename, never a permit/ledger/executable object.
 Malformed input/custody failures retain honest available bytes and explicit refusal outcomes.
+The approval-only parser bounds each integer token to 20 digits before conversion, using the
+canonical duplicate/float/constant/value validators. This narrow bounded-input parser refuses
+integer-digit-limit payloads (including either retained trust or signed-request file), preserving
+their exact available bytes; it does not catch arbitrary ValueError/programming failures globally
+or change the repository's shared/historical JSON parser.
 Verification followed by custody drift/expiry retains a subsequent refusal referring to the
 prior observation ID; the earlier record describes only its observed interval, never ongoing
 authority. Failure to retain either outcome raises `ApprovalRetentionError`, with no

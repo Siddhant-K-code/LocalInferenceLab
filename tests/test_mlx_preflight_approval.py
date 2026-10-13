@@ -17,6 +17,7 @@ import pytest
 import test_mlx_preflight_authorization as legacy
 
 import localinferencelab.mlx_preflight_approval as adapter
+import localinferencelab.mlx_preflight_trusted_lab as policy_module
 from localinferencelab.canonical import (
     ContractError,
     JsonValue,
@@ -263,6 +264,110 @@ def test_actual_openssh_positive_retains_full_bytes_without_authority(
             gate()
 
 
+@pytest.mark.parametrize("parent_status", ["normal", "ignored_sigchld", "other_reaper"])
+@pytest.mark.parametrize("signature", ["signed-request.sig", "wrong-namespace.sig"])
+def test_isolated_actual_openssh_requires_owned_os_status(
+    retained: tuple[Path, Path, Path, str],
+    parent_status: str,
+    signature: str,
+) -> None:
+    _write(retained[1] / "signed-request.sig", (_VECTORS / signature).read_bytes())
+    script = """
+import os, signal, sys
+from pathlib import Path
+sys.path.insert(0, str(Path(sys.argv[1]) / "src"))
+sys.path.insert(0, str(Path(sys.argv[1]) / "tests"))
+import test_mlx_preflight_approval as fixture
+from localinferencelab.canonical import canonical_json
+adapter = fixture.adapter
+adapter.time.time_ns = lambda: fixture._WALL + 1_000_000
+adapter.time.monotonic_ns = lambda: fixture._MONOTONIC + 1_000_000
+mode = sys.argv[2]
+if mode == "ignored_sigchld":
+    signal.signal(signal.SIGCHLD, signal.SIG_IGN)
+elif mode == "other_reaper":
+    original = adapter._observe_child_status
+    stolen = []
+    def reap_first(pid):
+        observed_pid, status = os.waitpid(pid, 0)
+        assert observed_pid == pid and os.WIFEXITED(status)
+        stolen.append(status)
+        return original(pid)
+    adapter._observe_child_status = reap_first
+roots = tuple(Path(arg) for arg in sys.argv[3:6])
+try:
+    report = adapter.verify_retained_approval(
+        *roots, retained_trust_id=sys.argv[6]).report()
+except adapter.ApprovalVerificationError as error:
+    report = fixture._object(fixture.load_json_bytes(error.report_bytes))
+if mode == "other_reaper":
+    assert len(stolen) == 1
+assert all(report[field] is False for field in (
+    "runtime_authorized", "consumable", "physical_launch_enabled",
+    "accepted_physical_evidence", "ledger_permit_created"))
+sys.stdout.buffer.write(canonical_json(report))
+"""
+    completed = subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            script,
+            str(Path(__file__).resolve().parents[1]),
+            parent_status,
+            *(str(path) for path in retained[:3]),
+            retained[3],
+        ],
+        check=True,
+        capture_output=True,
+        timeout=15,
+        env={"LC_ALL": "C", "TZ": "UTC"},
+    )
+    report = _object(load_json_bytes(completed.stdout))
+    if parent_status == "normal":
+        expected = "verified" if signature == "signed-request.sig" else "rejected"
+        assert report["signature_verification"] == expected
+        assert report["tool_termination"] == "reaped_exit"
+    else:
+        assert report["signature_verification"] == "unknown_child_status"
+        assert report["tool_termination"] == "unknown"
+        assert report["disposition"] == "signature_not_verified"
+    assert report["tool_process_exposure"] == "started"
+    bundles = [path for path in retained[2].iterdir() if path.is_dir()]
+    assert bundles
+    retained_reports = []
+    for bundle in bundles:
+        _, files = read_closed_bundle(bundle)
+        assert files["private/signed-request.sig"] == (_VECTORS / signature).read_bytes()
+        wait_evidence = _object(load_json_bytes(files["private/owned-tool-status.json"]))
+        if parent_status == "normal":
+            status = wait_evidence["raw_wait_status"]
+            assert type(status) is int and os.WIFEXITED(status)
+            if signature == "signed-request.sig":
+                assert os.WEXITSTATUS(status) == 0
+            else:
+                assert os.WEXITSTATUS(status) != 0
+            assert wait_evidence["terminal_status_available"] is True
+        else:
+            assert wait_evidence["raw_wait_status"] is None
+            assert wait_evidence["terminal_status_available"] is False
+            assert wait_evidence["reported_termination"] == "unknown"
+        retained_reports.append(files["report.json"])
+    assert completed.stdout in retained_reports
+
+
+def test_popen_wait_and_returncode_are_not_status_authority(
+    retained: tuple[Path, Path, Path, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def forbidden_wait(*_args: object, **_kwargs: object) -> NoReturn:
+        raise AssertionError("Popen synthetic ECHILD status must not authorize verification")
+
+    monkeypatch.setattr(subprocess.Popen, "wait", forbidden_wait)
+    monkeypatch.setattr(subprocess.Popen, "poll", forbidden_wait)
+    assert _invoke(retained).report()["signature_verification"] == "verified"
+
+
 @pytest.mark.parametrize(
     "kind",
     ["namespace", "key", "signature", "coherent_changed_request", "coherent_changed_context"],
@@ -424,6 +529,141 @@ def test_same_root_and_output_retention_fail_explicitly(
     with pytest.raises(adapter.ApprovalRetentionError, match="retention_unavailable") as caught:
         _invoke(retained)
     assert "private-path" not in str(caught.value)
+
+
+@pytest.mark.parametrize("alias", ["exact", "case", "unicode", "volume"])
+def test_object_ancestors_reject_alias_hidden_nested_roots(
+    retained: tuple[Path, Path, Path, str],
+    alias: str,
+) -> None:
+    name = "Tr\u00fast" if alias == "unicode" else "Trust"
+    trust = retained[0].with_name(name)
+    retained[0].rename(trust)
+    approval = trust / "Approval"
+    retained[1].rename(approval)
+    supplied_approval = approval
+    if alias == "case":
+        supplied_approval = trust.with_name("tRuSt") / "Approval"
+    elif alias == "unicode":
+        supplied_approval = trust.with_name("Tru\u0301st") / "Approval"
+    elif alias == "volume":
+        supplied_approval = Path("/System/Volumes/Data") / approval.relative_to("/")
+    try:
+        aliases_same_object = supplied_approval.samefile(approval)
+    except FileNotFoundError:
+        aliases_same_object = False
+    if not aliases_same_object:
+        pytest.skip("host filesystem does not expose this case/Unicode/volume alias")
+    assert trust != supplied_approval and trust.stat().st_ino != supplied_approval.stat().st_ino
+    report = _refuse((trust, supplied_approval, retained[2], retained[3]))
+    assert report["disposition"] == "separately_retained_non_nested_roots_required"
+    assert report["tool_process_exposure"] == "not_started"
+    bundles = list(retained[2].iterdir())
+    assert len(bundles) == 1
+    _, files = read_closed_bundle(bundles[0])
+    assert files["report.json"] == canonical_json(report)
+
+
+def test_case_distinct_sibling_objects_are_not_conflated(
+    retained: tuple[Path, Path, Path, str],
+) -> None:
+    trust = retained[0].with_name("Trust")
+    retained[0].rename(trust)
+    approval = trust.with_name("tRuSt")
+    if approval.exists():
+        pytest.skip("case-insensitive host does not support distinct case-only siblings")
+    retained[1].rename(approval)
+    assert not trust.samefile(approval)
+    assert (
+        _invoke((trust, approval, retained[2], retained[3])).report()["signature_verification"]
+        == "verified"
+    )
+
+
+def test_object_ancestry_bound_is_explicit_retention_failure(
+    retained: tuple[Path, Path, Path, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(adapter, "_MAX_ANCESTORS", 1)
+    with pytest.raises(adapter.ApprovalRetentionError, match="retention_unavailable"):
+        _invoke(retained)
+    assert not list(retained[2].iterdir())
+
+
+def test_object_ancestor_replacement_refuses_after_verification(
+    retained: tuple[Path, Path, Path, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parent = retained[0].with_name("TrustParent")
+    parent.mkdir(mode=0o700)
+    trust = parent / "Trust"
+    retained[0].rename(trust)
+    original = adapter._run_openssh
+
+    def move_ancestor(
+        payload: bytes,
+        signature: bytes,
+        config: dict[str, JsonValue],
+        output: adapter._Directory,
+    ) -> adapter._ToolOutcome:
+        result = original(payload, signature, config, output)
+        moved = parent.with_name("MovedParent")
+        parent.rename(moved)
+        parent.mkdir(mode=0o700)
+        (moved / "Trust").rename(trust)
+        return result
+
+    monkeypatch.setattr(adapter, "_run_openssh", move_ancestor)
+    report = _refuse((trust, retained[1], retained[2], retained[3]))
+    assert report["signature_verification"] == "verified"
+    assert report["disposition"] == "retained_directory_replaced_or_changed"
+    assert report["runtime_authorized"] is False
+
+
+@pytest.mark.parametrize("filename", ["trust.json", "signed-request.json"])
+def test_integer_digit_limit_retains_exact_closed_refusal(
+    retained: tuple[Path, Path, Path, str],
+    filename: str,
+) -> None:
+    data = b'{"x":' + b"9" * 4301 + b"}"
+    root = retained[0] if filename == "trust.json" else retained[1]
+    _write(root / filename, data)
+    report = _refuse(retained)
+    assert report["disposition"] == "custody_or_contract_refused"
+    assert report["tool_process_exposure"] == "not_started"
+    assert report["signature_verification"] == "unavailable_not_invoked"
+    for field in (
+        "runtime_authorized",
+        "consumable",
+        "physical_launch_enabled",
+        "accepted_physical_evidence",
+        "ledger_permit_created",
+    ):
+        assert report[field] is False
+    bundles = list(retained[2].iterdir())
+    assert len(bundles) == 1
+    _, files = read_closed_bundle(bundles[0])
+    assert files[f"private/{filename}"] == data
+    assert files["report.json"] == canonical_json(report)
+    assert "integer string conversion" not in canonical_json(report).decode()
+    assert b"9" * 100 not in canonical_json(report)
+
+
+def test_public_payload_integer_bound_and_unrelated_exception_are_narrow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with pytest.raises(ContractError, match="integer exceeds bounded parsing limit"):
+        verify_approval_payload_bytes(b'{"x":' + b"9" * 4301 + b"}")
+    with pytest.raises(ContractError, match="integer exceeds bounded parsing limit"):
+        verify_trusted_lab_request_bytes(b'{"x":' + b"9" * 4301 + b"}")
+
+    def unrelated(_text: str) -> NoReturn:
+        raise ValueError("unrelated programming failure")
+
+    monkeypatch.setattr(policy_module, "_approval_integer", unrelated)
+    with pytest.raises(ValueError, match="unrelated programming failure") as caught:
+        verify_approval_payload_bytes(b'{"x":1}')
+    assert not isinstance(caught.value, ContractError)
 
 
 @pytest.mark.parametrize("when", ["tool", "retention"])

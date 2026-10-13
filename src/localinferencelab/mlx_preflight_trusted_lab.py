@@ -2,21 +2,27 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from localinferencelab.canonical import (
     ContractError,
     JsonValue,
+    _reject_constant,
+    _reject_float,
+    _unique_object,
     canonical_identity,
     canonical_json,
     digest_bytes,
     load_json_bytes,
+    validate_json_value,
 )
 from localinferencelab.mlx_preflight_authorization import (
+    MAX_REQUEST_BYTES,
     _build_request,
     _exact,
     _object,
-    _verify_bytes,
+    _verify,
     authorization_request_spec,
 )
 
@@ -31,6 +37,33 @@ CLOCK_TOLERANCE_NS = 5_000_000
 NON_AUTHORITY_FIXTURE_KEY_ID = (
     "sha256:2f793fa09b9b6e5498d2507d525b25ede98332744f2a6ffcb9d7f671cc24e7ad"
 )
+_MAX_INTEGER_DIGITS = 20
+
+
+def _approval_integer(text: str) -> int:
+    if len(text.removeprefix("-")) > _MAX_INTEGER_DIGITS:
+        raise ContractError("approval JSON integer exceeds bounded parsing limit")
+    return int(text)
+
+
+def _load_approval_json(data: bytes) -> JsonValue:
+    if type(data) is not bytes or not 0 < len(data) <= MAX_PAYLOAD_BYTES:
+        raise ContractError("approval JSON byte bound")
+    try:
+        value: object = json.loads(
+            data.decode("utf-8", errors="strict"),
+            object_pairs_hook=_unique_object,
+            parse_int=_approval_integer,
+            parse_float=_reject_float,
+            parse_constant=_reject_constant,
+        )
+    except UnicodeDecodeError:
+        raise ContractError("approval JSON must be UTF-8") from None
+    except json.JSONDecodeError:
+        raise ContractError("approval JSON malformed") from None
+    except RecursionError:
+        raise ContractError("approval JSON nesting bound") from None
+    return validate_json_value(value)
 
 
 def verification_mechanism_spec() -> dict[str, JsonValue]:
@@ -153,7 +186,12 @@ def build_trusted_lab_request(
 
 def verify_trusted_lab_request_bytes(data: bytes) -> dict[str, JsonValue]:
     """Validate exact v2 candidate bindings; no v1.0 migration or policy selection."""
-    return _verify_bytes(data, trusted_lab_request_spec(), schema_version=SCHEMA_VERSION)
+    if type(data) is not bytes or not 0 < len(data) <= MAX_REQUEST_BYTES:
+        raise ContractError("trusted lab request byte bound")
+    value = _load_approval_json(data)
+    if canonical_json(value) != data:
+        raise ContractError("trusted lab request must use canonical JSON bytes")
+    return _verify(value, trusted_lab_request_spec(), schema_version=SCHEMA_VERSION)
 
 
 def approval_payload_bytes(request: JsonValue) -> bytes:
@@ -179,7 +217,7 @@ def verify_approval_payload_bytes(data: bytes) -> dict[str, JsonValue]:
     if type(data) is not bytes or not 0 < len(data) <= MAX_PAYLOAD_BYTES:
         raise ContractError("signed payload byte bound")
     try:
-        value = load_json_bytes(data)
+        value = _load_approval_json(data)
         payload = _object(
             value,
             {

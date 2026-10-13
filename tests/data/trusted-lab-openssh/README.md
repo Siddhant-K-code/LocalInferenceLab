@@ -28,3 +28,6 @@ Default/offline tests perform only bounded signature **verification** against te
 private fixture copies. Fixed historical times are observed through test-only monkeypatching.
 These fixture files must be updated if the full signed candidate source/spec/policy changes;
 rehashed subsets cannot preserve the old signature.
+The source-bound vectors were refreshed after independent review corrections to owned OS
+child-status custody, object ancestry and bounded parsing. That unavoidable refresh used only
+the same pinned published non-secret regression key, not a generated or user-controlled key.

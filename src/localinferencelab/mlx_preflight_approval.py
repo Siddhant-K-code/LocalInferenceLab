@@ -8,6 +8,7 @@ import contextlib
 import os
 import secrets
 import selectors
+import signal
 import stat
 import subprocess
 import tempfile
@@ -27,6 +28,7 @@ from localinferencelab.canonical import (
 from localinferencelab.custody import publish_bundle_at
 from localinferencelab.mlx_custody import (
     _open_directory_no_follow,
+    _require_trusted_launch_metadata,
     _write_exclusive_at,
 )
 from localinferencelab.mlx_preflight_authorization import _digest, _exact, _integer, _object
@@ -40,6 +42,7 @@ from localinferencelab.mlx_preflight_trusted_lab import (
     SCHEMA_VERSION,
     SYSTEM_TOOL,
     TOOL_TIMEOUT_SECONDS,
+    _load_approval_json,
     trusted_lab_request_spec,
     verification_mechanism_spec,
     verify_approval_payload_bytes,
@@ -55,6 +58,8 @@ _MAX_PRINCIPAL_LENGTH = 64
 _MAX_PUBLIC_KEY_LENGTH = 256
 _KEY_PARTS = 2
 _ED25519_WIRE_LENGTH = 51
+_MAX_ANCESTORS = 128
+_MAX_WAIT_STATUS = 65_535
 _TRUST_FIELDS = {
     "record_type",
     "schema_version",
@@ -124,16 +129,57 @@ def _file_pin(metadata: os.stat_result) -> tuple[int, ...]:
     )
 
 
+def _ancestor_walk(descriptor: int) -> tuple[tuple[int, ...], ...]:
+    current = os.dup(descriptor)
+    pins: list[tuple[int, ...]] = []
+    try:
+        for _step in range(_MAX_ANCESTORS):
+            metadata = os.fstat(current)
+            _require_trusted_launch_metadata(metadata, "retained object ancestor")
+            pin = _directory_pin(metadata)
+            if not stat.S_ISDIR(metadata.st_mode) or pin[:2] in {item[:2] for item in pins}:
+                raise _Refusal("retained_object_ancestry_invalid")
+            pins.append(pin)
+            parent = os.open(
+                "..",
+                os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_DIRECTORY | os.O_NONBLOCK,
+                dir_fd=current,
+            )
+            os.close(current)
+            current = parent
+            parent_pin = _directory_pin(os.fstat(current))
+            if parent_pin[:2] == pin[:2]:
+                if parent_pin != pin:
+                    raise _Refusal("retained_object_ancestry_changed")
+                return tuple(pins)
+        raise _Refusal("retained_object_ancestry_bound")
+    finally:
+        os.close(current)
+
+
+def _stable_ancestors(descriptor: int) -> tuple[tuple[int, ...], ...]:
+    pins = _ancestor_walk(descriptor)
+    if _ancestor_walk(descriptor) != pins:
+        raise _Refusal("retained_object_ancestry_changed")
+    return pins
+
+
 @dataclass(frozen=True, slots=True)
 class _Directory:
     path: Path
     descriptor: int
     pin: tuple[int, ...]
+    ancestors: tuple[tuple[int, ...], ...]
     system: bool = False
 
     def recheck(self) -> None:
         with _directory(self.path, system=self.system) as observed:
-            if self.pin != observed.pin or self.pin != _directory_pin(os.fstat(self.descriptor)):
+            if (
+                self.pin != observed.pin
+                or self.pin != _directory_pin(os.fstat(self.descriptor))
+                or self.ancestors != observed.ancestors
+                or self.ancestors != _stable_ancestors(self.descriptor)
+            ):
                 raise _Refusal("retained_directory_replaced_or_changed")
 
 
@@ -156,7 +202,9 @@ def _directory(path: Path, *, system: bool = False) -> Iterator[_Directory]:
             )
         ):
             raise _Refusal("retained_directory_owner_or_mode")
-        yield _Directory(path, descriptor, _directory_pin(metadata), system)
+        yield _Directory(
+            path, descriptor, _directory_pin(metadata), _stable_ancestors(descriptor), system
+        )
     finally:
         os.close(descriptor)
 
@@ -215,7 +263,7 @@ def _file(directory: _Directory, name: str, maximum: int) -> Iterator[_File]:
 
 
 def _trust(data: bytes, expected_id: str, request: dict[str, JsonValue]) -> dict[str, JsonValue]:
-    value = load_json_bytes(data)
+    value = _load_approval_json(data)
     trust = _object(value, _TRUST_FIELDS, "retained trust")
     if canonical_json(trust) != data:
         raise _Refusal("retained_trust_noncanonical")
@@ -341,6 +389,44 @@ class _ToolOutcome:
     process_exposure: str = "not_started"
     termination: str = "not_started"
     output_size: int = 0
+    raw_wait_status: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ChildStatus:
+    state: str
+    raw_status: int | None = None
+
+
+def _observe_child_status(child_pid: int) -> _ChildStatus:
+    try:
+        observed_pid, status = os.waitpid(child_pid, os.WNOHANG)
+    except InterruptedError:
+        return _ChildStatus("pending")
+    except OSError:
+        return _ChildStatus("unavailable")
+    if type(observed_pid) is not int or type(status) is not int:
+        return _ChildStatus("unavailable")
+    if observed_pid == 0 and status == 0:
+        return _ChildStatus("pending")
+    if (
+        observed_pid != child_pid
+        or not 0 <= status <= _MAX_WAIT_STATUS
+        or not (os.WIFEXITED(status) or os.WIFSIGNALED(status))
+    ):
+        return _ChildStatus("unavailable")
+    return _ChildStatus("observed", status)
+
+
+def _wait_owned_status(child_pid: int, deadline: float) -> _ChildStatus:
+    while True:
+        observed = _observe_child_status(child_pid)
+        if observed.state != "pending":
+            return observed
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return observed
+        time.sleep(min(remaining, 0.005))
 
 
 def _run_openssh(
@@ -384,6 +470,7 @@ def _run_openssh(
                     result.process_exposure,
                     result.termination,
                     result.output_size,
+                    result.raw_wait_status,
                 )
             return result
 
@@ -406,6 +493,7 @@ def _bounded_tool(argv: list[str], payload: bytes, cwd: Path) -> _ToolOutcome:
         return _ToolOutcome(status="unavailable_spawn")
     total = 0
     status = "unknown_deadline"
+    owned_status = _ChildStatus("pending")
     try:
         if child.stdin is None or child.stdout is None or child.stderr is None:
             raise _Refusal("verification_pipe_unavailable")  # noqa: TRY301
@@ -445,11 +533,9 @@ def _bounded_tool(argv: list[str], payload: bytes, cwd: Path) -> _ToolOutcome:
                 if total > MAX_TOOL_OUTPUT_BYTES:
                     break
             else:
-                try:
-                    code = child.wait(timeout=max(0.001, deadline - time.monotonic()))
-                except subprocess.TimeoutExpired:
-                    code = None
-                if type(code) is int and time.monotonic() < deadline:
+                owned_status = _wait_owned_status(child.pid, deadline)
+                if owned_status.raw_status is not None and time.monotonic() < deadline:
+                    code = os.waitstatus_to_exitcode(owned_status.raw_status)
                     status = (
                         "verified"
                         if code == 0 and offset == len(payload)
@@ -457,37 +543,41 @@ def _bounded_tool(argv: list[str], payload: bytes, cwd: Path) -> _ToolOutcome:
                         if code < 0
                         else "rejected"
                     )
-                elif code is not None and type(code) is not int:
-                    status = "unknown_wait_type"
+                elif owned_status.state == "unavailable":
+                    status = "unknown_child_status"
     except (OSError, _Refusal):
         status = "unknown_io_failure"
     finally:
-        if child.poll() is None:
+        if owned_status.state == "pending":
+            owned_status = _observe_child_status(child.pid)
+        if owned_status.state == "pending":
             try:
-                child.kill()
+                os.kill(child.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
             except OSError:
                 status = "unknown_termination"
-        try:
-            child.wait(timeout=0.5)
-        except (subprocess.TimeoutExpired, OSError):
-            status = "unknown_termination"
+            owned_status = _wait_owned_status(child.pid, time.monotonic() + 0.5)
+        if owned_status.raw_status is not None:
+            child.returncode = os.waitstatus_to_exitcode(owned_status.raw_status)
         for cleanup_stream in (child.stdin, child.stdout, child.stderr):
             if cleanup_stream is not None:
                 try:
                     cleanup_stream.close()
                 except OSError:
                     status = "unknown_io_failure"
-    code = child.returncode
-    if type(code) is not int:
+    if owned_status.state == "unavailable":
+        status = "unknown_child_status"
+    elif owned_status.raw_status is None:
         status = "unknown_termination"
-    elif status == "verified" and code != 0:
-        status = "unknown_wait_disagreement"
     termination = (
-        "unknown" if type(code) is not int else "reaped_signal" if code < 0 else "reaped_exit"
+        "unknown"
+        if owned_status.raw_status is None
+        else "reaped_signal"
+        if os.WIFSIGNALED(owned_status.raw_status)
+        else "reaped_exit"
     )
-    return _ToolOutcome(status, "started", termination, total)
+    return _ToolOutcome(status, "started", termination, total, owned_status.raw_status)
 
 
 def _report(
@@ -608,7 +698,7 @@ def verify_retained_approval(
             approval_directory = stack.enter_context(_directory(approval_root))
             roots = (trust_directory, approval_directory, output)
             if len({root.pin[:2] for root in roots}) != len(roots) or any(
-                left.path == right.path or left.path in right.path.parents
+                left.pin[:2] in {pin[:2] for pin in right.ancestors[1:]}
                 for left in roots
                 for right in roots
                 if left is not right
@@ -660,6 +750,15 @@ def verify_retained_approval(
         except (OSError, ContractError, RecursionError):
             code = "custody_or_contract_refused"
         files["observed-clock.json"] = _clock_bytes(clock)
+        files["owned-tool-status.json"] = canonical_json(
+            {
+                "status_custody": "actual_exact_child_OS_waitpid_only",
+                "terminal_status_available": tool.raw_wait_status is not None,
+                "raw_wait_status": tool.raw_wait_status,
+                "reported_termination": tool.termination,
+                "popen_returncode_is_status_authority": False,
+            }
+        )
         report = _report(code, tool, clock, files, request, spec)
         prior_report_id = report["report_id"]
         bundle = _retain(output, files, report)
