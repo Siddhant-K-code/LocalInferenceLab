@@ -142,11 +142,86 @@ def test_rehashed_top_level_mutations_refuse(field: str, value: JsonValue) -> No
         contract.verify_report(report)
 
 
-@pytest.mark.parametrize("value", [True, False, 1.0, -1, 2**63])
+@pytest.mark.parametrize("value", [True, False, -1, 2**63])
 def test_integer_aliases_and_out_of_range_host_values_refuse(value: object) -> None:
     report = _report()
     _object(report["host"])["parent_pid"] = cast("JsonValue", value)
-    with pytest.raises(ContractError):
+    _rehash(report)
+    with pytest.raises(ContractError, match=r"^native evidence integer$"):
+        contract.verify_report(report)
+
+
+def test_float_host_pid_refuses_canonical_rehash() -> None:
+    report = _report()
+    _object(report["host"])["parent_pid"] = cast("JsonValue", 1.0)
+    with pytest.raises(ContractError, match="floating-point values are forbidden"):
+        _rehash(report)
+
+
+@pytest.mark.parametrize("span", [0, 100, 3099])
+def test_rehashed_serial_capture_sum_must_fit_host_span(span: int) -> None:
+    report = _report()
+    host = _object(report["host"])
+    host["finished_ns"] = cast("int", host["started_ns"]) + span
+    _rehash(report)
+    with pytest.raises(ContractError, match=r"^native serial capture durations exceed host span$"):
+        contract.verify_report(report)
+
+
+def test_exact_serial_duration_sum_and_reused_child_pid_remain_valid() -> None:
+    report = _report()
+    host = _object(report["host"])
+    host["finished_ns"] = cast("int", host["started_ns"]) + 3100
+    rows = cast("list[dict[str, JsonValue]]", report["observations"])
+    for row in rows:
+        for direction in ("baseline", "candidate"):
+            _object(row[direction])["pid"] = 124
+    _object(report["compilation"])["pid"] = 124
+    _rehash(report)
+    assert contract.verify_report(report)["disposition"] == "enforced"
+
+
+@pytest.mark.parametrize("direction", ["compilation", "baseline", "candidate"])
+def test_rehashed_spawned_pid_cannot_equal_live_parent(direction: str) -> None:
+    report = _report()
+    capture = (
+        _object(report["compilation"])
+        if direction == "compilation"
+        else _object(cast("list[dict[str, JsonValue]]", report["observations"])[0][direction])
+    )
+    capture["pid"] = _object(report["host"])["parent_pid"]
+    _rehash(report)
+    with pytest.raises(ContractError, match=r"^native child pid equals parent pid$"):
+        contract.verify_report(report)
+
+
+@pytest.mark.parametrize("terminal", ["deadline", "output_limit"])
+@pytest.mark.parametrize("code", [None, 0, -9])
+def test_rehashed_unknown_terminal_requires_reaped_wait_code(
+    terminal: str,
+    code: int | None,
+) -> None:
+    report = _report()
+    row = cast("list[dict[str, JsonValue]]", report["observations"])[0]
+    candidate = _object(row["candidate"])
+    candidate["terminal"], candidate["returncode"] = terminal, code
+    row["disposition"] = report["disposition"] = "unknown"
+    _rehash(report)
+    if code is None:
+        with pytest.raises(ContractError, match=r"^native reaped child wait code missing$"):
+            contract.verify_report(report)
+    else:
+        assert contract.verify_report(report)["disposition"] == "unknown"
+
+
+def test_exposed_compilation_requires_host_even_without_probe_launch() -> None:
+    report = contract.build_report(
+        identities=harness.source_identities(), reason="unsupported_host"
+    )
+    report["compilation"] = Capture("may_have_run", "exit_error", 100, 1, pid=124).to_dict()
+    report["reason"] = "compilation_failed"
+    _rehash(report)
+    with pytest.raises(ContractError, match=r"^native captures lack host lifetime$"):
         contract.verify_report(report)
 
 
@@ -574,11 +649,12 @@ def test_separate_post_startup_receipt_and_immutable_pre_exec_failure() -> None:
     )
     assert after["startup_confinement_proven"] is False and after["runtime_authority"] is False
     record = _object(after["test_record"])
-    assert _object(record["identities"]) == harness._variant_identities("after_startup") | {
-        key: value
-        for key, value in _object(record["identities"]).items()
-        if key not in {"implementation_id", "probe_source_id", "profile_template_id"}
-    }
+    identities = _object(record["identities"])
+    assert identities["implementation_id"] == (
+        "sha256:af459854fedf83746e1317cf4e0643dba92ebb5e489baa6d23fe49e6be454e6a"
+    )
+    for field in ("probe_source_id", "profile_template_id"):
+        assert identities[field] == harness._variant_identities("after_startup")[field]
     states = {
         row["operation"]: row["disposition"]
         for row in cast("list[dict[str, JsonValue]]", record["observations"])
@@ -586,6 +662,37 @@ def test_separate_post_startup_receipt_and_immutable_pre_exec_failure() -> None:
     assert states["socket_loopback"] == states["read_replacement"] == "refused"
     assert states["exec_self"] == "unknown"
     assert states["read_denied"] == states["connect_loopback"] == states["fork"] == "enforced"
+
+
+@pytest.mark.parametrize(
+    ("name", "serial_ns", "span_ns"),
+    [
+        ("native-confinement-darwin-27.0.0-arm64-v1.json", 601_133_042, 602_767_584),
+        ("native-confinement-after-startup-darwin-27.0.0-arm64-v1.json", 684_274_919, 687_192_458),
+    ],
+)
+def test_preserved_receipts_have_producer_consistent_serial_lifetimes(
+    name: str,
+    serial_ns: int,
+    span_ns: int,
+) -> None:
+    raw = (Path(__file__).parents[1] / "docs/evidence" / name).read_bytes()
+    report = (
+        _object(diagnostic.replay_bytes(raw)["test_record"])
+        if "after-startup" in name
+        else contract.replay_bytes(raw)
+    )
+    captures = [_object(report["compilation"])]
+    for row in cast("list[dict[str, JsonValue]]", report["observations"]):
+        captures.extend((_object(row["baseline"]), _object(row["candidate"])))
+    host = _object(report["host"])
+    assert sum(cast("int", capture["elapsed_ns"]) for capture in captures) == serial_ns
+    assert cast("int", host["finished_ns"]) - cast("int", host["started_ns"]) == span_ns
+    assert serial_ns <= span_ns
+    for capture in captures:
+        if capture["pid"] is not None:
+            assert capture["pid"] != host["parent_pid"]
+            assert type(capture["returncode"]) is int
 
 
 @pytest.mark.parametrize(

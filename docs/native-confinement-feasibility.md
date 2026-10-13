@@ -106,6 +106,15 @@ a successful syscall result**: native attempt/completion/effects remain UNKNOWN.
 signal/crash, malformed/duplicate native result, or stderr does not become a zero-action proof.
 Unread bytes and actions outside the helper's measured syscall set remain unknown.
 
+The compiler and every baseline/candidate command run serially. Their combined `elapsed_ns`
+must fit within the recorded host start/finish span, including captures rejected for deadline
+or output limits; exposed captures require that host interval. A spawned child PID cannot
+equal the still-live parent PID. There is deliberately no global child-PID uniqueness claim
+across serial commands: the OS may reuse a reaped PID. Every spawned terminal capture must
+retain a reaped exit/signal `returncode`, including `deadline` and `output_limit`; only
+`not_run` and `spawn_failed` have no child wait code. A wait code does not convert rejected
+effects into accepted completion or authenticate host/process provenance.
+
 Per-operation dispositions have deliberately narrow semantics:
 
 | State | Meaning |
@@ -149,16 +158,23 @@ profile was tried. The final candidate retains the executable-mapping grant but 
 ineffective broad sysctl grant. Its measured startup is unavailable, exposed native effects
 are unknown, and subsequent checks are untested. This is a concrete blocker, not readiness.
 
-The retained [final observation](evidence/native-confinement-darwin-27.0.0-arm64-v1.json)
+The retained [historical acquired observation](evidence/native-confinement-darwin-27.0.0-arm64-v1.json)
 replays offline. Its allowed-read baseline returned the known fixture byte; the candidate's
 parent-observed PID exited on signal 6 with no stdout/stderr. All fourteen subsequent operations
-were not launched. The full measured interval was 602,767,584 ns. Record identity:
+were not launched. Its serial capture sum is 601,133,042 ns, within the full measured interval
+of 602,767,584 ns. Historical acquired record identity:
 `sha256:94c12b835ac785f86a3b166837b67a5f7cf5a8457ce4ad4aa34f62afc7f873da`.
-Implementation identity:
+**Historical acquired pre-exec producer identity** (before diagnostic wiring):
 `sha256:e53764779e3a61e239b1b4bbfd090ec89833ab0e062da3b5663640e146554b6b`.
+The pre-correction shipped pre-exec source identity at commit `12c5674` was
+`sha256:6bc75bf49671afb38a8c8a445911d6d44234ffe8dda78ccfdaa4a88e17bfcf6b`.
+**Current corrected pre-exec source identity**, derived offline from the shipped sources:
+`sha256:fa780e3e6a4cfd74abee4870ff63387f0e09865e2f182c3e6bab5489a7c1b3c4`.
 Profile-template identity:
 `sha256:65efe2ffd8c867fc5e31dbd9bda3d9095922bbf1f18f58f6675034b09fd43aa1`.
-These are review candidate identities, not trusted or production-approved identities.
+The historical receipt has NOT been rewritten or reacquired with either newer source. Source
+identity drift is disclosed, not presented as new OS evidence. None of these identities is
+trusted or production-approved.
 
 ### Distinct after-startup diagnostic
 
@@ -190,7 +206,8 @@ genuine `runtime_authority=false`, a nested schema-1.0 `test_record`, and an out
 the startup/non-authority limits.
 
 The [retained separate diagnostic](evidence/native-confinement-after-startup-darwin-27.0.0-arm64-v1.json)
-completed in 687,192,458 ns on the same observed host. Its twelve matching observations include
+has a serial capture sum of 684,274,919 ns within a 687,192,458 ns host span. Its twelve
+matching observations include
 allowed read/write and descriptor/environment hygiene, plus EPERM for denied file read/write,
 prefix siblings, symlinks, loopback connect, fork and the other controlled executable. **Socket
 creation succeeded**, and the permitted read pathname accepted the replacement inode/byte B:
@@ -203,8 +220,13 @@ Outer diagnostic identity:
 `sha256:be031b62bc65c7fe68e937e78a85f288d9ea871003aec3c4ce4a802ce0f29312`.
 Nested observation identity:
 `sha256:c308e83165b662d98d6d471e5d9d2640b3a3b68db6719855a06a1a96389af892`.
-Diagnostic implementation identity:
+**Historical acquired diagnostic producer identity** (also the pre-correction source):
 `sha256:af459854fedf83746e1317cf4e0643dba92ebb5e489baa6d23fe49e6be454e6a`.
+**Current corrected diagnostic source identity**, derived offline:
+`sha256:0507fd616e9383cf3a132c426b345b1dbd2a52a80d97cbaccd327ffb245aa7ed`.
+The contract-only source correction changes both aggregate implementation identities, but
+neither the profile nor C sources. The diagnostic receipt remains immutable historical
+acquisition; there has been **no new native acquisition** with the corrected source.
 Both receipts remain non-authority, and the historical exact runtime target/qualification is
 unchanged; current Darwin 27 observations do not establish exact-target compatibility.
 

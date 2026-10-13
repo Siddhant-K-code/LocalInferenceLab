@@ -185,6 +185,8 @@ def parse_capture(value: JsonValue, timeout_ns: int) -> Capture:
         raise ContractError("native exposure missing")
     if terminal not in {"not_run", "spawn_failed"} and pid is None:
         raise ContractError("native owned child pid missing")
+    if terminal not in {"not_run", "spawn_failed"} and code is None:
+        raise ContractError("native reaped child wait code missing")
     if terminal == "spawn_failed" and (pid is not None or code is not None or any(streams)):
         raise ContractError("native spawn failure evidence")
     if terminal == "complete" and (code != 0 or elapsed > timeout_ns):
@@ -398,6 +400,7 @@ def verify_report(value: JsonValue) -> dict[str, JsonValue]:
         if cast("dict[str, JsonValue]", pins["root"])["mode"] != PRIVATE_ROOT_MODE:
             raise ContractError("native fixture root not private")
     compilation = parse_capture(item["compilation"], COMPILE_TIMEOUT_NS)
+    captures = [compilation]
     rows = item["observations"]
     if type(rows) is not list or len(rows) != len(PROBES):
         raise ContractError("native observation count")
@@ -409,6 +412,7 @@ def verify_report(value: JsonValue) -> dict[str, JsonValue]:
             raise ContractError("native operation order or expectation")
         baseline = parse_capture(r["baseline"], COMMAND_TIMEOUT_NS)
         candidate = parse_capture(r["candidate"], COMMAND_TIMEOUT_NS)
+        captures.extend((baseline, candidate))
         state = assess(operation, expectation, baseline, candidate)
         if _text(r["disposition"]) != state or state not in DISPOSITIONS:
             raise ContractError("native disposition projection")
@@ -424,6 +428,16 @@ def verify_report(value: JsonValue) -> dict[str, JsonValue]:
         raise ContractError("native exposed observations lack preparation")
     if exposed and cast("dict[str, JsonValue]", host)["system"] != "Darwin":
         raise ContractError("native exposed host is not Darwin")
+    if any(capture.exposure != "not_started" for capture in captures):
+        if host is None:
+            raise ContractError("native captures lack host lifetime")
+        h = cast("dict[str, JsonValue]", host)
+        if sum(capture.elapsed_ns for capture in captures) > (
+            cast("int", h["finished_ns"]) - cast("int", h["started_ns"])
+        ):
+            raise ContractError("native serial capture durations exceed host span")
+        if any(capture.pid == h["parent_pid"] for capture in captures if capture.pid is not None):
+            raise ContractError("native child pid equals parent pid")
     replacement_row = _object(
         rows[-1], {"operation", "expectation", "baseline", "candidate", "disposition"}
     )
