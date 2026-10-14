@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-labelledby="title desc" viewBox="0 0 1200 900">
+  <title id="title">A path is not a pin: retained native evidence</title>
+  <desc id="desc">After-startup C/libc helper, not an MLX benchmark: 12 matched / 2 unmet / 1 unknown. The same allowed path reads a new object; socket creation succeeds. Pre-exec calibration is unknown with 14 later checks untested. Startup confinement is unproven, the runtime gate is ungranted, and MLX determinism is NOT MEASURED.</desc>
+  <!-- Read-mode extension of the incumbent dark research diagrams.
+       One stable path, two objects; observed effects precede scope limits.
+       No startup, MLX, authority or numerical-performance claim. -->
+  <rect width="1200" height="900" fill="#07111f"/>
+  <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+    <text x="48" y="74" fill="#f8fbff"
+          font-size="56" font-weight="700">A path is not a pin.</text>
+    <text x="48" y="140" fill="#8cf4ff" font-size="48" font-weight="700">12 matched / 2 unmet / 1 unknown</text>
+    <text x="48" y="195" fill="#f8fbff"
+          font-size="32" font-weight="700">AFTER-STARTUP NATIVE HELPER</text>
+    <text x="48" y="240" fill="#ffd477" font-size="36" font-weight="700">NOT AN MLX BENCHMARK</text>
+    <text x="1152" y="195" text-anchor="end" fill="#c2cee3"
+          font-size="26">C/libc, controlled fixtures</text>
+    <text x="1152" y="235" text-anchor="end" fill="#c2cee3"
+          font-size="26">Darwin 27.0.0 arm64</text>
+    <path d="M48 272H1152" stroke="#263754" stroke-width="2"/>
+    <rect x="48" y="306" width="600" height="68" rx="12"
+          fill="#12233b" stroke="#6ee7f5" stroke-width="2"/>
+    <text x="348" y="351" text-anchor="middle" fill="#f8fbff"
+          font-size="32" font-weight="700">One unchanged allowed path</text>
+    <path d="M195 374V410M501 374V410" stroke="#6ee7f5" stroke-width="3"/>
+    <path d="M110 412H280V540H110Z" fill="#12233b" stroke="#6ee7f5"
+          stroke-width="3" stroke-dasharray="8 6"/>
+    <path d="M416 412H586V540H416Z" fill="#113c49" stroke="#6ee7f5" stroke-width="3"/>
+    <text x="195" y="452" text-anchor="middle" fill="#c2cee3" font-size="26">Old inode</text>
+    <text x="195" y="515" text-anchor="middle" fill="#f8fbff"
+          font-size="60" font-weight="700">A</text>
+    <text x="501" y="452" text-anchor="middle" fill="#8cf4ff" font-size="26">New inode</text>
+    <text x="501" y="515" text-anchor="middle" fill="#f8fbff"
+          font-size="60" font-weight="700">B</text>
+    <path d="M306 479H390M375 464L392 479L375 494" fill="none" stroke="#ffd477" stroke-width="4"/>
+    <text x="48" y="589" fill="#f8fbff"
+          font-size="32" font-weight="700">Replacement byte B was read.</text>
+    <text x="48" y="630" fill="#c2cee3" font-size="28">Path allowlist is not an object pin.</text>
+    <text x="706" y="347" fill="#ffd477"
+          font-size="28" font-weight="700">UNMET: replacement read allowed</text>
+    <text x="706" y="403" fill="#ffd477"
+          font-size="28" font-weight="700">UNMET: socket creation succeeded</text>
+    <text x="706" y="448" fill="#c2cee3" font-size="26">Connection denied, not creation.</text>
+    <text x="706" y="507" fill="#c2cee3" font-size="28">UNKNOWN: self-exec</text>
+    <text x="706" y="548" fill="#c2cee3" font-size="26">SIGABRT, no accepted result.</text>
+    <text x="706" y="615" fill="#c2cee3" font-size="26">Matches include allowed actions</text>
+    <text x="706" y="650" fill="#c2cee3" font-size="26">and hygiene, not just denials.</text>
+    <rect x="48" y="682" width="1104" height="92" rx="14"
+          fill="#251e22" stroke="#f2bd57" stroke-width="2"/>
+    <text x="70" y="718" fill="#ffd477"
+          font-size="28" font-weight="700"
+          >SEPARATE PRE-EXEC FAILURE: UNKNOWN / 14 later UNTESTED</text>
+    <text x="70" y="756" fill="#f8fbff"
+          font-size="26"
+          >Allowed-read control succeeded. Candidate: SIGABRT, no result. Startup unproven.</text>
+    <text x="48" y="827" fill="#ffadb6"
+          font-size="36" font-weight="700">MLX determinism: NOT MEASURED</text>
+    <text x="48" y="873" fill="#c2cee3"
+          font-size="26"
+          >Runtime permission: NOT GRANTED. Offline replay is not acquisition proof.</text>
+  </g>
+</svg>

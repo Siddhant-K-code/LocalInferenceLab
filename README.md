@@ -65,6 +65,7 @@ binds bytes; it does not create authority.
 
 ## Inspect the Evidence
 
+- [A path is not a pin](docs/research/native-evidence/a-path-is-not-a-pin.md) — actual after-startup C/libc helper results: allowed paths are not object pins; startup confinement is unproven and MLX determinism is not measured
 - [Architecture](docs/architecture.md) — what exists, what can act, and what stays process-free
 - [Protocol](docs/protocol.md) — which records, gates, counters, and ledgers define trust
 - [Direct MLX contract](docs/mlx-direct-runner-contract.md) — the private-worker boundary and its explicit blockers
